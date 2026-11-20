@@ -125,7 +125,10 @@ namespace Datum
   //! @endcode
   //!
   //! Every element and attribute is optional except the paths of the histograms. A canvas without columns and rows is
-  //! divided for the number of its Graph elements; a graph takes the next cell, or the one given by cell="k". An item
+  //! divided for the number of its Graph elements; a graph takes the next cell, or the one given by cell="k". The
+  //! columns and rows given are fitted to what is there, so that everything is shown and no cell is left empty: a
+  //! window or a canvas keeps the number of columns given (fewer if it holds fewer canvases or graphs) and gets the
+  //! rows that hold them; a canvas whose graphs give their cells keeps its grid, grown to hold them. An item
   //! takes the default style of its place in the graph, changed by its attributes and children. Histogram (or Data)
   //! items are data points of the inputs (histograms, profiles, points), found by their paths; Function items are
   //! functions of the registry of the Math library (a class, e.g. Normal, Exponential, Polynomial, or a registered

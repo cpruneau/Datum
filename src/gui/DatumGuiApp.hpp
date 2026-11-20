@@ -70,6 +70,9 @@ namespace Datum
   void setCatalog(const Catalog & catalog) { _catalog = catalog; }
   //! @brief Show every window of the plot file (View > All Windows). @param v flag
   void setAllWindows(bool v) { _allWindows = v; }
+  //! @brief Show every window of the plot file in a window of its own, the main window keeping the tree and the
+  //! browser (when windows can leave the main window, Preferences: each is a window of the desktop). @param v choice
+  void setDetachedWindows(bool v) { _detachedWindows = v; configuration().gui.detachedWindows = v; }
   //! @brief Files replacing the inputs of the first plot file opened, in order (PlotHistos plots.xml data.datum).
   //! @param files files
   void setInputFiles(const std::vector<String> & files) { _inputFiles = files; }
@@ -127,6 +130,7 @@ namespace Datum
   bool _showStyle = false;   //!< the elements of style are shown in the tree
   bool _showInspector = true;   //!< the inspector is shown below the tree
   bool _allWindows = false;   //!< every window of the plot file shown
+  bool _detachedWindows = true;    //!< every window of the plot file in a window of its own (none in the main window)
   bool _showHelp = false;   //!< the help window is shown
   bool _treeFocused = false;   //!< the Plot Tree has the keyboard focus
   bool _grouping = false;   //!< changes made while a widget is active are one step of undo
@@ -142,6 +146,7 @@ namespace Datum
   unsigned long _drawnVersion = ~0ul;   //!< version of the document drawn (or recorded from the canvases)
   int _drawnWindow = -1;   //!< window drawn in the main window
   bool _drawnAll = false;   //!< all the windows drawn
+  bool _drawnDetached = false;   //!< the windows drawn detached
   std::set<std::string> _missing;   //!< input files not found (reported once)
   long _frame = 0;   //!< frames drawn
   //! Shared selection: last seen on the canvases and in the tree
@@ -187,6 +192,37 @@ namespace Datum
   //! A new name asked for: the plot file shown (1), a window (2) or a canvas (3) of it
   struct RenameRequest { int kind = 0; int tab = -1; GRAPHICS::PlotDocument::Path path; std::string text; bool opened = false; };
   RenameRequest _rename;   //!< new name asked for, if any
+  //!
+  //! @brief Open the Regroup dialog: histograms and functions chosen by a pattern of their names moved into common
+  //! graphs (GRAPHICS::PlotDocument::regroup()), after a preview. @param scope element searched (a window, canvas or
+  //! graph; empty: the whole plot file) @param onlyScope search only there by default
+  //!
+  void requestRegroup(const GRAPHICS::PlotDocument::Path & scope, bool onlyScope);
+  //! @brief Draw the Regroup dialog, if open.
+  void renderRegroupDialog();
+  //! State of the Regroup dialog (the pattern and options are kept from one use to the next)
+  struct RegroupDialog
+  {
+    bool requested = false;   //!< the dialog opens at the next frame
+    int tab = -1;             //!< identifier of the tab of the plot file
+    GRAPHICS::PlotDocument::Path scope;   //!< window, canvas or graph that may limit the search
+    bool onlyScope = false;   //!< search only in scope
+    std::string pattern;      //!< pattern
+    std::string canvasName;   //!< name of the new canvases ("": from the pattern)
+    std::string graphTitle;   //!< title of the new graphs
+    bool regularExpression = false;   //!< the pattern is a regular expression
+    bool caseSensitive = true;   //!< upper and lower case differ
+    bool labelItems = true;   //!< items without a label get one
+    bool removeEmpty = true;  //!< graphs and canvases left empty are removed
+    int itemsPerGraph = 0;    //!< largest number of items per graph (0: no limit)
+    int graphsPerCanvas = 0;  //!< largest number of graphs per canvas (0: no limit)
+    int canvasesPerWindow = 0;   //!< largest number of new canvases per window (0: all in the window of the first item)
+    bool previewed = false;   //!< a preview is shown
+    std::string previewKey;   //!< options and document version of the preview
+    GRAPHICS::PlotDocument::RegroupPlan plan;   //!< the preview
+    std::string message;      //!< why the last OK did nothing
+  };
+  RegroupDialog _regroup;   //!< the Regroup dialog
   const MATH::DataPoints * rebinSourceOf(const MATH::DataPoints * data, std::vector<unsigned int> & factors) const override;
   //! @brief Open the plot files of the command line, or a new one; dock the tree; connect the browsers.
   void onStartup() override;

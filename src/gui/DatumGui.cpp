@@ -271,6 +271,23 @@ namespace Datum
   if (_currentPane >= nPanes()) _currentPane = 0;
   }
 
+  void DatumGui::setPaneGrid(int nColumns, int n)
+  {
+  n = n < 1 ? 1 : (n > 36 ? 36 : n);
+  nColumns = std::min(nColumns < 1 ? 1 : (nColumns > 6 ? 6 : nColumns), n);
+  int rows = (n + nColumns - 1)/nColumns;
+  auto nMain = [this]() { int m = 0; for (const auto & p : _panes) if (p->host() < 0) m++; return m; };
+  if (n == nMain() && _gridColumns == nColumns && _columns == nColumns && _rows == rows) return;
+  while (nMain() > n)
+    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() < 0) { _panes.erase(_panes.begin() + k); break; }
+  while (nMain() < n) newPane();
+  _gridColumns = nColumns;
+  _columns = nColumns;
+  _rows = rows;
+  _layoutRequested = true;
+  if (_currentPane >= nPanes()) _currentPane = 0;
+  }
+
   CanvasPane & DatumGui::addPane()
   {
   std::string beside = _panes.empty() ? std::string() : std::string(currentPane().windowId());
@@ -301,10 +318,17 @@ namespace Datum
   w.label = title.str() + "###DatumPaneWindow" + std::to_string(k);
   columns = std::max(1, columns);
   rows = std::max(1, rows);
-  if (w.columns != columns || w.rows != rows) { w.columns = columns; w.rows = rows; w.layoutPending = true; }
   bool shown = false;
   for (const auto & p : _panes) if (p->host() == k) shown = true;
-  if (!shown) { w.width = std::max(200, width); w.height = std::max(150, height); w.placed = false; }
+  if (w.columns != columns || w.rows != rows)
+    {
+    // a window on screen whose canvases changed (e.g. one moved out): resized to keep the size of its panes
+    if (shown && w.placed && w.resizeColumns == 0) { w.resizeColumns = w.columns; w.resizeRows = w.rows; }
+    w.columns = columns;
+    w.rows = rows;
+    w.layoutPending = true;
+    }
+  if (!shown) { w.width = std::max(200, width); w.height = std::max(150, height); w.placed = false; w.resizeColumns = w.resizeRows = 0; }
   }
 
   void DatumGui::setPaneWindowPaneCount(int k, int n)
@@ -402,6 +426,21 @@ namespace Datum
       ImGui::SetNextWindowPos(position, ImGuiCond_Always);
       ImGui::SetNextWindowSize(ImVec2(float(window.width), float(window.height)), ImGuiCond_Always);
       window.placed = true;
+      window.resizeColumns = window.resizeRows = 0;
+      }
+    else if (window.resizeColumns > 0)
+      {
+      // its grid changed: the panes keep their size, the window shrinks (or grows, within its monitor)
+      float bar = ImGui::GetFrameHeight();
+      float width = float(window.width)*float(window.columns)/float(window.resizeColumns);
+      float height = bar + std::max(50.0f, float(window.height) - bar)*float(window.rows)/float(window.resizeRows);
+      ImVec2 limit(main->Size.x, main->Size.y);
+      ImGuiPlatformIO & platform = ImGui::GetPlatformIO();
+      for (const ImGuiPlatformMonitor & m : platform.Monitors) limit = ImVec2(std::max(limit.x, m.WorkSize.x), std::max(limit.y, m.WorkSize.y));
+      if (width > float(window.width)) width = std::min(width, std::max(float(window.width), limit.x));
+      if (height > float(window.height)) height = std::min(height, std::max(float(window.height), limit.y));
+      ImGui::SetNextWindowSize(ImVec2(std::max(200.0f, width), std::max(150.0f, height)), ImGuiCond_Always);
+      window.resizeColumns = window.resizeRows = 0;
       }
     ImGuiWindowClass windowClass;
     windowClass.ViewportFlagsOverrideSet = ImGuiViewportFlags_NoAutoMerge;

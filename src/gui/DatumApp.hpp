@@ -37,7 +37,7 @@ namespace Datum
   //!
   //! @code
   //!   <DatumGui version="1">
-  //!     <Window title="Datum" width="1400" height="900" theme="light" fontSize="15" viewports="true"/>
+  //!     <Window title="Datum" width="1400" height="900" theme="light" fontSize="15" viewports="true" detachedWindows="true"/>
   //!     <Canvases columns="1" rows="1" toolbars="true"/>          <!-- n x m canvas panes -->
   //!     <Graphs columns="1" rows="1" legend="true" logX="false" logY="false" mode="add" keepShapes="true"
   //!             colorPalette="default" markerPalette="default" shadingPalette="viridis"/>  <!-- per new canvas -->

@@ -558,7 +558,9 @@ namespace Datum
     window.rows    = int(w->attributeInt("rows", 0));
     if (window.columns < 1 && window.rows < 1) { window.columns = int(std::ceil(std::sqrt(double(n)))); }
     if (window.columns < 1) window.columns = (n + window.rows - 1)/window.rows;
-    if (window.rows < 1)    window.rows = (n + window.columns - 1)/window.columns;
+    // as many columns as given (fewer if fewer canvases), the rows that hold the canvases: all shown, no empty cell
+    window.columns = std::min(window.columns, n);
+    window.rows = (n + window.columns - 1)/window.columns;
     for (const XmlElement * c : canvases)
       {
       CanvasSpec canvas;
@@ -732,11 +734,29 @@ namespace Datum
   std::vector<const XmlElement *> graphs = e.children("Graph");
   int columns = int(e.attributeInt("columns", 0)), rows = int(e.attributeInt("rows", 0));
   int n = std::max(1, int(graphs.size()));
+  // cells needed: one per graph, or up to the last cell given
+  bool cellsGiven = false;
+  int needed = 0, following = 0;
+  for (const XmlElement * g : graphs)
+    {
+    int k = g->hasAttribute("cell") ? int(g->attributeInt("cell")) : following;
+    if (g->hasAttribute("cell")) cellsGiven = true;
+    following = k + 1;
+    needed = std::max(needed, k + 1);
+    }
+  needed = std::max(needed, 1);
   if (columns < 1 && rows < 1) canvas.divideFor(n);
   else
     {
     if (columns < 1) columns = (n + rows - 1)/rows;
-    if (rows < 1)    rows = (n + columns - 1)/columns;
+    if (cellsGiven)
+      rows = std::max(std::max(rows, 1), (needed + columns - 1)/columns);   // cells placed by the file: grown to hold them
+    else
+      {
+      // graphs in order: as many columns as given (fewer if fewer graphs), the rows that hold them (no empty row)
+      columns = std::min(columns, n);
+      rows = (n + columns - 1)/columns;
+      }
     canvas.divide(columns, rows);
     }
   for (int k=0; k<canvas.nGraphs(); k++) { canvas.graph(k).clearItems(); canvas.graph(k).clearShapes(); }

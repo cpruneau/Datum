@@ -660,8 +660,17 @@ namespace Datum
   if (path.empty() || !element(path)) return false;
   record();
   element(parent(path))->removeChild(unsigned(path.back()));
+  fitGridAt(parent(path));
   changed();
   return true;
+  }
+
+  void PlotDocument::fitGridAt(const Path & path)
+  {
+  XmlElement * e = element(path);
+  if (!e) return;
+  if (e->isNamed("Window")) fitGrid(*e, int(e->children("Canvas").size()));
+  else if (e->isNamed("Canvas")) fitGrid(*e, int(e->children("Graph").size()));
   }
 
   PlotDocument::Path PlotDocument::duplicate(const Path & path)
@@ -692,6 +701,7 @@ namespace Datum
         if (c->hasAttribute("file")) c->setAttribute("file", name + String(".pdf"));
         }
       }
+  fitGridAt(parent(path));
   changed();
   return p;
   }
@@ -735,9 +745,11 @@ namespace Datum
       && destination[parentFrom.size()] > from.back())
     destination[parentFrom.size()]--;
   if (destination == parentFrom && index > from.back()) index--;
+  if (!(destination == parentFrom)) fitGridAt(parentFrom);   // the element left: fewer cells
   XmlElement * d = element(destination);
   if (!d) { changed(); return Path(); }
   d->insertChild(unsigned(std::min(index, int(d->nChildren()))), moved);
+  if (!(destination == parentFrom)) fitGridAt(destination);  // the element that received: more cells if needed
   changed();
   ok = true;
   Path result = destination;
@@ -785,6 +797,7 @@ namespace Datum
     }
   record();
   element(destination)->insertChild(unsigned(index), e);
+  fitGridAt(destination);
   changed();
   ok = true;
   destination.push_back(index);
