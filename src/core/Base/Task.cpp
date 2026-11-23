@@ -580,6 +580,7 @@ namespace Datum
   document.root().setAttribute("version",1);
   document.root().setAttribute("type","template");
   XmlElement & element = document.root().addChild(createXmlElement());
+  if (hasWeightedPtHatBinning()) element.setAttribute("ptHatBinning","true");   // RunDatum offers the pT-hat bins
   defineOwnXmlElement(element);
   return document;
   }

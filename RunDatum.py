@@ -164,13 +164,16 @@ class Param:
 class TaskConfig:
     """A task of the workflow: name (unique), class, report level, parameters, subtasks (used on load/save only)."""
 
-    def __init__(self, name, cls, severity="INFO", params=None, known=True):
+    def __init__(self, name, cls, severity="INFO", params=None, known=True, pthat_binning=False):
         self.name = name
         self.cls = cls
         self.severity = severity or "INFO"
         self.params = params or []
         self.children = []
         self.known = known       # False if the class is not among the templates (not in the current build)
+        # True for the generators that produce events in pT-hat bins weighted by their cross sections (attribute
+        # ptHatBinning of the template, see Datum::Task::hasWeightedPtHatBinning()): the sub-samples offer pT-hat bins
+        self.pthat_binning = pthat_binning
 
     def clone(self):
         c = copy.deepcopy(self)
@@ -244,6 +247,10 @@ def read_parameters(element, prefix=""):
     return params
 
 
+#: Classes producing events in pT-hat bins, for the templates written before the attribute ptHatBinning
+PTHAT_BINNING_BEFORE = ("PythiaEventGenerator",)
+
+
 def load_templates(directory=TEMPLATES_DIR):
     """Templates of the task classes: {class name: TaskConfig with the default parameters}."""
     templates = {}
@@ -256,8 +263,11 @@ def load_templates(directory=TEMPLATES_DIR):
             cls = normalize_class(element.get("class"))
             if not cls:
                 continue
+            binning = element.get("ptHatBinning")
+            binning = (binning.strip().lower() in ("1", "true", "yes", "on") if binning is not None
+                       else short_class_name(cls) in PTHAT_BINNING_BEFORE)
             templates[cls] = TaskConfig(short_class_name(cls), cls, (element.get("severity") or "INFO").upper(),
-                                        read_parameters(element))
+                                        read_parameters(element), pthat_binning=binning)
             break
     return templates
 
@@ -1703,6 +1713,10 @@ def run_gui(initial_file=None, hook=None):
         # ------------------------------------------------------------------------------------------- sub-samples
         def present_stages(self):
             return [s for s in STAGES if self.stage_tasks(s)]
+
+        def pthat_models(self):
+            """The generators of event processing that produce events in pT-hat bins (the bins are offered only then)."""
+            return subsamples.pthat_generators(self.stage_tasks(EVENTS))
 
         def subsamples_changed(self, dirty=True):
             self.subsample_bar.update_stages()

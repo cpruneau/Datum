@@ -41,6 +41,21 @@ class ParticleType;
 //!  - Tag: a tag appended to the names of the files Herwig writes (its .log and .out files, in the current directory).
 //! Processes integrated by Matchbox need their grids first ("Herwig build" and "Herwig integrate" on the command line).
 //!
+//! Production in pT-hat bins (see Task::hasWeightedPtHatBinning()): PTHAT_MIN and PTHAT_MAX (GeV/c; negative: not set)
+//! restrict the transverse momentum of the outgoing partons of the hard process (ThePEG::SimpleKTCut
+//! /Herwig/Cuts/JetKtCut:MinKT and :MaxKT, the analogue of PYTHIA's PhaseSpace:pTHatMin/Max for 2 -> 2 processes; the
+//! cut on the mass of the hard process /Herwig/Cuts/QCDCuts:MHatMin is lowered to 2 PTHAT_MIN, which it cannot
+//! exceed, so that it does not bias the lowest bin). The input file must generate a hard process (e.g. MEQCD2to2), not
+//! minimum bias (MEMinBias, which ignores these cuts). With an input file, the cuts are applied before Herwig
+//! integrates the process: the task writes \<name\>_pthat.in in the current directory (the input file with the cuts
+//! before its saverun command, saving \<run\>_pthat.run) and reads it ("Herwig read", the directory of the input file
+//! added to the directories read from). With a run file only, the cuts are added to the setup commands (Herwig run -x)
+//! and a warning is given: the run file was integrated with its own cuts. At the end of the run, the cross section
+//! Herwig estimates (EventGenerator::integratedXSec(), in mb), its uncertainty, the events generated and the range are
+//! saved in the folder of the task (DATUM_SIGMA_GEN, DATUM_SIGMA_ERR, DATUM_N_ACCEPTED, DATUM_PTHAT_MIN,
+//! DATUM_PTHAT_MAX): SubSampleStatCalculator adds the bins with the weights sigma/N. The events must be unweighted
+//! (Herwig's default): weighted events are reported.
+//!
 //! Each event: the final-state particles (ThePEG::Event::getFinalState()), photons and neutrinos included unless
 //! SavePhotons or SaveNeutrinos is false, whose PDG codes are in the particle database (the others are skipped and
 //! reported by finalize()), with their momentum (GeV) and production vertex (mm, as for PYTHIA); a particle is added if
@@ -76,8 +91,15 @@ public:
   virtual void initialize();
   //! @brief Generate one event and add its final-state particles to the current event.
   virtual void execute();
-  //! @brief Report the cross section and the particles skipped, and finalize the generator.
+  //! @brief Report the cross section and the particles skipped, and finalize the generator (the cross section of the
+  //! run is kept for saveHistograms()).
   virtual void finalize();
+  //! @brief Save the cross section of the run (in mb, its uncertainty, the events generated, the pT-hat range) in the
+  //! folder of the task. @param top folder of the job
+  virtual void saveHistograms(Folder & top);
+  //! @brief Herwig produces events in pT-hat bins (PTHAT_MIN, PTHAT_MAX, see Task::hasWeightedPtHatBinning()).
+  //! @return true
+  bool hasWeightedPtHatBinning() const override { return true; }
 
 protected:
 
@@ -92,6 +114,11 @@ protected:
   bool saveNeutrinos;                         //!< whether neutrinos are saved
   long nWeighted;                             //!< events whose weight is not 1
   long nFailed;                               //!< events Herwig could not generate
+  long nAccepted;                             //!< events generated and copied into the Datum event
+  double ptHatMin;                            //!< pT-hat range of the run (GeV/c; negative: not set)
+  double ptHatMax;
+  double sigmaGen;                            //!< cross section of the run (mb; negative until the end of the run)
+  double sigmaErr;                            //!< its uncertainty (mb)
 };
 
 }

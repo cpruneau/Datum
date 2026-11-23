@@ -330,6 +330,47 @@ class TestProductionDirectory(unittest.TestCase):
             self.assertEqual(read[RunDatum.EVENTS].get("INPUT_PATH", ""), "")
 
 
+class TestPtHatModels(unittest.TestCase):
+    """pT-hat bins only with a generator producing events in pT-hat bins (template attribute ptHatBinning)."""
+
+    def test_template_attribute(self):
+        with tempfile.TemporaryDirectory() as d:
+            for cls, attribute in (("HerwigEventGenerator", ' ptHatBinning="true"'), ("BasicEventGen", ""),
+                                   ("PythiaEventGenerator", "")):      # Pythia: a template before the attribute
+                with open(os.path.join(d, cls + ".xml"), "w") as f:
+                    f.write('<Datum type="template"><TASK name="%s" class="Datum::%s"%s/></Datum>' % (cls, cls, attribute))
+            t = RunDatum.load_templates(d)
+        self.assertEqual([t["Datum::" + c].pthat_binning for c in ("HerwigEventGenerator", "BasicEventGen",
+                                                                   "PythiaEventGenerator")], [True, False, True])
+        self.assertTrue(t["Datum::HerwigEventGenerator"].clone().pthat_binning)
+
+    def test_herwig(self):
+        """A Herwig generator in pT-hat bins: its keys set per job; minimum bias refused."""
+        stages, lib, jobs = workflow()
+        gen = next(t for t in S._tasks_of(stages[RunDatum.EVENTS]) if t.cls == "Datum::BasicEventGen")
+        s = S.SubSampleSettings()
+        s.count, s.mode, s.ptHatEdges = 2, S.JACKKNIFE_STAGES, "10 20 40"
+        self.assertTrue(any("no generator producing events in pT-hat bins" in e
+                            for e in S.check_settings(s, RunDatum, stages)))
+        P = type(gen.params[0])
+        herwig = RunDatum.TaskConfig("Herwig", "Datum::HerwigEventGenerator", pthat_binning=True,
+                                     params=[P("InputFile", "string", "none"), P("RunFile", "string", "LHC.run"),
+                                             P("PTHAT_MIN", "double", "-1"), P("PTHAT_MAX", "double", "-1")])
+        herwig.filters = dict(getattr(gen, "filters", {}) or {})
+        parent = next(t for t in S._tasks_of(stages[RunDatum.EVENTS]) if gen in t.children)
+        parent.children[parent.children.index(gen)] = herwig
+        self.assertEqual(S.check_settings(s, RunDatum, stages), [])
+        with tempfile.TemporaryDirectory() as d:
+            mb = os.path.join(d, "MB.in")
+            with open(mb, "w") as f:
+                f.write("insert /Herwig/MatrixElements/SubProcess:MatrixElements[0] MEMinBias\nsaverun MB EventGenerator\n")
+            herwig.param("InputFile").value = mb
+            self.assertTrue(any("MEMinBias" in e for e in S.check_settings(s, RunDatum, stages)))
+            herwig.param("InputFile").value = "none"
+            S.pthat_tasks(stages[RunDatum.EVENTS], s, 1)
+            self.assertEqual((float(herwig.param("PTHAT_MIN").value), float(herwig.param("PTHAT_MAX").value)), (20, 40))
+
+
 class TestBar(unittest.TestCase):
     """The sub-sample bar: three lines (where; sub-samples and pT-hat; Slurm)."""
 
@@ -363,6 +404,13 @@ class TestBar(unittest.TestCase):
         self.assertEqual(s.where, S.SLURM)
         self.assertEqual(str(bar.submit.cget("state")), "normal")
         self.assertEqual(bar.slurm_label.cget("text"), "me@login:/scratch/me")
+        self.assertEqual(str(bar.pthat_entry.cget("state")), "normal")      # App without pthat_models: offered
+        App.pthat_models = lambda self: []
+        bar.update_stages()
+        self.assertEqual(str(bar.pthat_entry.cget("state")), "disabled")    # no generator in pT-hat bins
+        App.pthat_models = lambda self: ["Pythia"]
+        bar.update_stages()
+        self.assertEqual(str(bar.pthat_entry.cget("state")), "normal")
         bar.vars["pthat"].set("5 10 20")
         self.assertEqual(s.ptHatEdges, "5 10 20")
         root.destroy()
