@@ -256,14 +256,28 @@ void testDataPointsVector()
   {
   DataPointsVector u;
   u.addPoint(DataPoint2D(1.0,0.0,2.0,0.1,0.2));
+  u.setTitle("");
   BinaryWriter w;
   u.encodeBinary(w);
-  std::string payload = w.buffer().substr(0,w.buffer().size()-1);   // without the common systematic flag
+  std::string payload = w.buffer().substr(0,w.buffer().size()-2);   // without the common systematic flag and the empty title
   BinaryReader r(payload.data(),payload.size());
   DataPointsVector old;
   old.setCommonSyst(0.5);
   old.decodeBinary(r,"",3);
   CHECK(r.remaining()==0 && old.size()==1 && near(old.sysErrorAt(0),0.2));
+  }
+  // version 5: the title kept; the name is that of the entry
+  {
+  DataPointsVector u;
+  u.addPoint(DataPoint2D(1.0,0.0,2.0,0.1,0.2));
+  u.setName("ratio");
+  u.setTitle("R (pp/PbPb)");
+  BinaryWriter w;
+  u.encodeBinary(w);
+  BinaryReader r(w.buffer().data(),w.buffer().size());
+  DataPointsVector back;
+  back.decodeBinary(r,"entry",DataPointsVector::binaryVersion());
+  CHECK(r.remaining()==0 && back.title()==String("R (pp/PbPb)") && back.name()==String("entry") && back.size()==1);
   }
 }
 

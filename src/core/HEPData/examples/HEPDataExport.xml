@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A job writing histograms of a Datum file as a HEPData submission (task Datum::HEPDataExporter, see HEPDataExporter.hpp),
+  run after the jobs that make the file:
+    bin/Datum HEPDataExporter <directory of this file>/ HEPDataExport.xml <histogram directory>/
+  Relative paths are in the histogram directory. Here: the pT spectra of charged pions written by ParticleSingleAnalyzer,
+  as two tables listed one by one, in strict mode (for hepdata.net), with an archive.
+  Without TABLE groups (TABLE:N 0), every histogram, set of points and function of the files whose path matches OBJECTS
+  is written. Set PREVIEW_ONLY true to see the submission planned without writing it.
+-->
+<Datum version="1">
+  <TASK name="HEPDataExporter" class="Datum::HEPDataExporter" severity="INFO">
+    <GROUP name="HISTOGRAM">
+      <GROUP name="IMPORT">
+        <PARAMETER name="PATH" type="string">NONE</PARAMETER>
+        <PARAMETER name="FILE_NAME" type="string">ParticleSingle.datum</PARAMETER>
+      </GROUP>
+    </GROUP>
+    <GROUP name="HEPDATA">
+      <GROUP name="EXPORT">
+        <PARAMETER name="PATH" type="string">HEPData</PARAMETER>
+        <PARAMETER name="ARCHIVE" type="string">HEPData.tar.gz</PARAMETER>
+      </GROUP>
+    </GROUP>
+    <PARAMETER name="MODE" type="string">STRICT</PARAMETER>
+    <PARAMETER name="DIGITS" type="int">4</PARAMETER>
+    <GROUP name="TABLES">
+      <PARAMETER name="OBSERVABLES" type="string">DN/DPT</PARAMETER>
+      <PARAMETER name="REACTIONS" type="string">P P --> PI X</PARAMETER>
+      <PARAMETER name="CMENERGIES" type="string">13700</PARAMETER>
+      <PARAMETER name="QUALIFIERS" type="string">SQRT(S) = 13.7 [TEV]; GENERATOR = PYTHIA 8</PARAMETER>
+    </GROUP>
+    <GROUP name="PUBLICATION">
+      <PARAMETER name="COLLABORATION" type="string">Datum test</PARAMETER>
+      <PARAMETER name="TITLE" type="string">Pion spectra from a Pythia run</PARAMETER>
+    </GROUP>
+    <PARAMETER name="COMMENT" type="string">Spectra of charged pions, 100 events.</PARAMETER>
+    <GROUP name="TABLE">
+      <PARAMETER name="N" type="int">2</PARAMETER>
+    </GROUP>
+    <GROUP name="TABLE_1">
+      <PARAMETER name="PATH" type="string">ParticleSingleAnalyzer/ALL_PiP/n1_pt</PARAMETER>
+      <PARAMETER name="NAME" type="string">Figure 1a</PARAMETER>
+      <PARAMETER name="DESCRIPTION" type="string">Transverse momentum spectrum of positive pions.</PARAMETER>
+      <PARAMETER name="LOCATION" type="string">Figure 1 (left)</PARAMETER>
+      <PARAMETER name="REACTIONS" type="string">P P --> PI+ X</PARAMETER>
+    </GROUP>
+    <GROUP name="TABLE_2">
+      <PARAMETER name="PATH" type="string">ParticleSingleAnalyzer/ALL_PiM/n1_pt</PARAMETER>
+      <PARAMETER name="NAME" type="string">Figure 1b</PARAMETER>
+      <PARAMETER name="DESCRIPTION" type="string">Transverse momentum spectrum of negative pions.</PARAMETER>
+      <PARAMETER name="LOCATION" type="string">Figure 1 (right)</PARAMETER>
+      <PARAMETER name="REACTIONS" type="string">P P --> PI- X</PARAMETER>
+    </GROUP>
+    <GROUP name="JOB">
+      <PARAMETER name="OUTPUT_FILE" type="string">NONE</PARAMETER>
+    </GROUP>
+  </TASK>
+</Datum>

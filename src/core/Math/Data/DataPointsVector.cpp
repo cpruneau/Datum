@@ -400,9 +400,10 @@ namespace Datum
     }
   _fits.encodeBinary(w);   // format version 3: fits attached
   encodeCommonSyst(w);     // format version 4: common systematic (and points of rank > 2 with both systematic sides)
+  w.writeString(title());  // format version 5: title
   }
 
-  void DataPointsVector::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int version)
+  void DataPointsVector::decodeBinary(BinaryReader & r, const String & name, unsigned int version)
   {
   uint64_t n = r.readVarUInt();
   if (n > r.remaining()) throw Exception("More points than data","DataPointsVector::decodeBinary()");
@@ -447,7 +448,10 @@ namespace Datum
     }
   if (version>=3) _fits.decodeBinary(r);
   if (version>=4) decodeCommonSyst(r);
+  String title = version>=5 ? r.readString() : String();
   adopt(_dataPoints,points);
+  if (!name.isNull()) setName(name);   // the name of the entry (records of DataPointsVector store none)
+  if (version>=5) setTitle(title);
   }
 
   void DataPointsVector::writeBinary(std::ostream & out) const                     { writeBinaryObject(out,*this); }

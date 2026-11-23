@@ -338,14 +338,14 @@ namespace Datum
   //! (DataPoint2D for rank 1, DataPoint3D for rank 2, DataPointND for rank 3 and more). Version 3 adds the fits
   //! attached (see FitList::encodeBinary()). Version 4 adds the common systematic uncertainty (DataPoints::encodeCommonSyst())
   //! and writes points of rank 3 and more with upper and lower systematic uncertainties (DataPointND version 2; the
-  //! encodings of DataPoint2D and DataPoint3D mark a lower side that differs from the upper one). Versions 1 (rank 1 only),
-  //! 2 and 3 are still read.
+  //! encodings of DataPoint2D and DataPoint3D mark a lower side that differs from the upper one). Version 5 adds the
+  //! title (the name is that of the entry, given to decodeBinary()). Versions 1 (rank 1 only), 2, 3 and 4 are still read.
   //! @{
 
   //! @brief Tag of DataPointsVector records in binary files. @return "DTMD"
   static const char * binaryTag() { return "DTMD"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 4; }
+  static unsigned int binaryVersion() { return 5; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Write the binary payload after the name (used by writeBinary()). @param w writer

@@ -661,19 +661,21 @@ std::vector<HEPDataExportPlan::Item> HEPDataExportPlan::itemsOf(const Folder & f
     item.source = source;
     item.path = path;
     item.owner = owner;
+    std::size_t slash = path.str().rfind('/');
+    String leaf = slash==std::string::npos ? path : String(path.str().substr(slash+1));   // the name shown in the browser
     if (const DataPoints * p = folder.get<DataPoints>(path))
       {
       bool empty = true;                                          // no value and no uncertainty anywhere
       for (unsigned int k=0; k<p->size() && empty; k++) empty = p->valueAt(k)==0.0 && p->statErrorAt(k)==0.0 && p->sysErrorAt(k)==0.0;
       if (empty) continue;
       item.points = p;
-      item.tableName = p->name().isNull() ? path : p->name();
+      item.tableName = leaf;
       }
     else if (const ParameterizedFunction * f = folder.get<ParameterizedFunction>(path))
       {
       if (f->rank()!=1) continue;
       item.function = f;
-      item.tableName = f->name().isNull() ? path : f->name();
+      item.tableName = leaf;
       }
     else continue;
     items.push_back(item);

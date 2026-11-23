@@ -55,6 +55,9 @@ int main()
 #else
   CHECK(registered.size() >= 32);                                   // without the two Glauber tasks
 #endif
+#ifdef DATUM_WITH_HEPDATA
+  CHECK(registered.count("Datum::HEPDataExporter") == 1);
+#endif
   for (const char * name : { "Datum::Task", "Datum::BasicEventGen", "Datum::EventIterator", "Datum::FilterCreator",
                              "Datum::ParticleSingleAnalyzer", "Datum::PtPtAnalyzer" })
     CHECK(registered.count(name) == 1);

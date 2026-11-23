@@ -202,7 +202,8 @@ public:
   //!
   //! @brief The objects of a folder that can be exported: histograms and sets of points (with fits) of one or more
   //! variables (not those whose values and uncertainties are all zero), functions of one variable. @param folder folder @param source name of the file shown
-  //! @param owner keeps the folder alive (optional) @return items, all included, with their table names
+  //! @param owner keeps the folder alive (optional) @return items, all included, each table named after the entry of its
+  //! object in the folder
   //!
   static std::vector<Item> itemsOf(const Folder & folder, const String & source, std::shared_ptr<const void> owner=nullptr);
   //! @brief Parse qualifiers "NAME = value [units]; ...". @param text text @return qualifiers (malformed parts skipped)
