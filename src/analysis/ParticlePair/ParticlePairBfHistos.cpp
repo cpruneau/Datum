@@ -8,7 +8,7 @@
  *
  * *********************************************************************/
 #include <cmath>
-#include "ParticlePairBFHistos.hpp"
+#include "ParticlePairBfHistos.hpp"
 #include "Exceptions.hpp"
 
 namespace Datum

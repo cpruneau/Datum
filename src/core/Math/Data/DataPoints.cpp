@@ -2,6 +2,7 @@
 #include "MathExceptions.hpp"
 #include "Histogram.hpp"
 #include "Profile.hpp"
+#include "BinaryIO.hpp"
 #include <cmath>
 #include <cstdio>
 #include <limits>
@@ -144,6 +145,54 @@ namespace Datum
   double DataPoints::valueAt(unsigned int index) const     { return point(index).y(); }
   double DataPoints::statErrorAt(unsigned int index) const { return point(index).yStatError(); }
   double DataPoints::sysErrorAt(unsigned int index) const  { return point(index).ySysError(); }
+  double DataPoints::sysErrorPlusAt(unsigned int index) const  { return sysErrorAt(index); }
+  double DataPoints::sysErrorMinusAt(unsigned int index) const { return sysErrorAt(index); }
+
+  void DataPoints::setCommonSyst(double plus, double minus)
+  {
+  if (plus<0)  throw MathException("Common systematic uncertainty: plus<0",__FUNCTION__);
+  if (minus<0) throw MathException("Common systematic uncertainty: minus<0",__FUNCTION__);
+  _commonSystPlus  = plus;
+  _commonSystMinus = minus;
+  }
+
+  void DataPoints::setCommonSystOf(const DataPoints & a, const DataPoints & b, bool swapSecond)
+  {
+  double bPlus  = swapSecond ? b._commonSystMinus : b._commonSystPlus;
+  double bMinus = swapSecond ? b._commonSystPlus  : b._commonSystMinus;
+  double plus   = std::sqrt(a._commonSystPlus*a._commonSystPlus   + bPlus*bPlus);
+  double minus  = std::sqrt(a._commonSystMinus*a._commonSystMinus + bMinus*bMinus);
+  _commonSystPlus  = plus;
+  _commonSystMinus = minus;
+  }
+
+  void DataPoints::encodeCommonSyst(BinaryWriter & w) const
+  {
+  if (!hasCommonSyst())
+    w.writeUInt8(0);
+  else if (!hasAsymmetricCommonSyst())
+    {
+    w.writeUInt8(1);
+    w.writeFloat64(_commonSystPlus);
+    }
+  else
+    {
+    w.writeUInt8(2);
+    w.writeFloat64(_commonSystPlus);
+    w.writeFloat64(_commonSystMinus);
+    }
+  }
+
+  void DataPoints::decodeCommonSyst(BinaryReader & r)
+  {
+  uint8_t flag = r.readUInt8();
+  if (flag>2) throw Exception("Invalid common systematic uncertainty flag","DataPoints::decodeCommonSyst()");
+  double plus  = flag>=1 ? r.readFloat64() : 0.0;
+  double minus = flag==2 ? r.readFloat64() : plus;
+  if (!(plus>=0) || !(minus>=0)) throw Exception("Invalid common systematic uncertainty","DataPoints::decodeCommonSyst()");
+  _commonSystPlus  = plus;
+  _commonSystMinus = minus;
+  }
 
 
   namespace
@@ -219,7 +268,11 @@ namespace Datum
     }
   cells.push_back(numberText(valueAt(k)));
   cells.push_back(numberText(statErrorAt(k)));
-  cells.push_back(numberText(sysErrorAt(k)));
+  double plus = sysErrorPlusAt(k), minus = sysErrorMinusAt(k);
+  if (plus==minus)
+    cells.push_back(numberText(plus));
+  else
+    cells.push_back(String(("+" + std::string(numberText(plus).c_str()) + " -" + std::string(numberText(minus).c_str())).c_str()));
   return cells;
   }
 

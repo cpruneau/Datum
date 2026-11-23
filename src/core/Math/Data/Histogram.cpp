@@ -66,6 +66,18 @@ namespace Datum
   resizeBins();
   }
 
+  Histogram::Histogram(const String & name, const String & title, const std::vector<double> & edges)
+  :
+  DataPoints(name,title,"Histogram"),
+  Partition(),
+  _entries(),
+  _avgValues(),
+  _avgUncertainties()
+  {
+  addDimension(edges,"x");
+  resizeBins();
+  }
+
   Histogram::Histogram(const String & name, const String & title,
                        unsigned int n0, double minimum_0, double maximum_0,
                        unsigned int n1, double minimum_1, double maximum_1)
@@ -160,6 +172,8 @@ namespace Datum
   _entries       = h._entries;
   _avgValues        = h._avgValues;
   _avgUncertainties = h._avgUncertainties;
+  _commonSystPlus   = h._commonSystPlus;
+  _commonSystMinus  = h._commonSystMinus;
   }
 
   void Histogram::checkCompatible(const Histogram & h, const char * source) const
@@ -301,6 +315,7 @@ namespace Datum
     _avgValues[k]        *= coefficient;
     _avgUncertainties[k] *= absCoefficient;
     }
+  if (coefficient<0) setCommonSyst(_commonSystMinus,_commonSystPlus);   // relative: the sides swap
   }
 
   // add a constant to every bin value; empty bins become bins with one entry
@@ -326,6 +341,7 @@ namespace Datum
     double uncertainty = statErrorSum(valueUncertainty(k),coefficient*h.valueUncertainty(k));
     setValue(k,entries,sum,uncertainty);
     }
+  setCommonSystOf(*this,h,coefficient<0);
   }
 
   // this = this * (coefficient*h)
@@ -342,6 +358,7 @@ namespace Datum
     double e2 = std::fabs(coefficient)*h.valueUncertainty(k);
     setValue(k,1,v1*v2,statErrorProduct(v1,e1,v2,e2));
     }
+  setCommonSystOf(*this,h,coefficient<0);
   }
 
   // this = this / (coefficient*h); bins where the divisor vanishes are set empty
@@ -358,6 +375,7 @@ namespace Datum
     double e2 = std::fabs(coefficient)*h.valueUncertainty(k);
     setValue(k,1,v1/v2,statErrorRatio(v1,e1,v2,e2));
     }
+  setCommonSystOf(*this,h,coefficient>=0);   // the divisor enters with a negative derivative: its sides swap
   }
 
   // replace every bin value by its inverse; empty or zero bins are set empty
@@ -372,6 +390,7 @@ namespace Datum
     double invUncertainty = valueUncertainty(k)*inv*inv;
     setValue(k,1,inv,invUncertainty);   // entry count is no longer meaningful
     }
+  setCommonSyst(_commonSystMinus,_commonSystPlus);   // d(1/v)/dv < 0: the sides swap
   }
 
   void Histogram::setAsSumOf(const Histogram & h1, const Histogram & h2,
@@ -580,7 +599,7 @@ namespace Datum
   unsigned int f, l;
   resolveRange(0,first,last,f,l,__FUNCTION__);
   Partition partition;
-  partition.addDimension(l-f+1, binLowEdge(f,0), binHighEdge(l,0), dimensionTitle(0));
+  partition.addDimension(*this,0,f,l);
   Histogram extracted(partition);
   extracted.setPrecision(precision());
   extracted.setName(name());
@@ -604,8 +623,8 @@ namespace Datum
   resolveRange(0,first0,last0,f0,l0,__FUNCTION__);
   resolveRange(1,first1,last1,f1,l1,__FUNCTION__);
   Partition partition;
-  partition.addDimension(l0-f0+1, binLowEdge(f0,0), binHighEdge(l0,0), dimensionTitle(0));
-  partition.addDimension(l1-f1+1, binLowEdge(f1,1), binHighEdge(l1,1), dimensionTitle(1));
+  partition.addDimension(*this,0,f0,l0);
+  partition.addDimension(*this,1,f1,l1);
   Histogram extracted(partition);
   extracted.setPrecision(precision());
   extracted.setName(name());
@@ -634,9 +653,9 @@ namespace Datum
   resolveRange(1,first1,last1,f1,l1,__FUNCTION__);
   resolveRange(2,first2,last2,f2,l2,__FUNCTION__);
   Partition partition;
-  partition.addDimension(l0-f0+1, binLowEdge(f0,0), binHighEdge(l0,0), dimensionTitle(0));
-  partition.addDimension(l1-f1+1, binLowEdge(f1,1), binHighEdge(l1,1), dimensionTitle(1));
-  partition.addDimension(l2-f2+1, binLowEdge(f2,2), binHighEdge(l2,2), dimensionTitle(2));
+  partition.addDimension(*this,0,f0,l0);
+  partition.addDimension(*this,1,f1,l1);
+  partition.addDimension(*this,2,f2,l2);
   Histogram extracted(partition);
   extracted.setPrecision(precision());
   extracted.setName(name());
@@ -764,6 +783,17 @@ namespace Datum
     if (n==0) throw Exception("Rebinning factor 0",__FUNCTION__);
     unsigned int m = nBins(a);
     unsigned int nNew = m/n + (m%n ? 1 : 0);
+    if (!isRegular(a))
+      {
+      // variable bins: the edges of the merged bins; the last one ends at the last edge (no scaling, see rebin())
+      std::vector<double> edges;
+      for (unsigned int i=0; i<m; i+=n) edges.push_back(binLowEdge(i,a));
+      edges.push_back(binHighEdge(m-1,a));
+      partition.addDimension(edges,dimensionTitle(a));
+      if (n==1)
+        for (const auto & label : binLabels(a)) partition.setBinLabel(label.first,label.second,a);
+      continue;
+      }
     double low = Partition::minimum(a), high = Partition::maximum(a);
     double width = (high-low)/double(m);
     double newHigh = (m%n) ? low + double(nNew)*double(n)*width : high;   // the same edge when n divides m
@@ -801,6 +831,7 @@ namespace Datum
   result.setPrecision(precision());
   result.setName(name());
   result.setTitle(title());
+  result.setCommonSyst(_commonSystPlus,_commonSystMinus);
   unsigned int nTarget = partition.nBinsTotal();
   std::vector<long>   entries(nTarget,0);
   std::vector<double> values(nTarget,0.0), errors2(nTarget,0.0);
@@ -825,7 +856,7 @@ namespace Datum
       unsigned int nNew = partition.nBins(a), i = rest%nNew;
       rest /= nNew;
       unsigned int r = nBins(a)%factors[a];
-      if (r!=0 && i==nNew-1) scale *= double(factors[a])/double(r);
+      if (r!=0 && i==nNew-1 && isRegular(a)) scale *= double(factors[a])/double(r);   // variable bins: not extended
       }
     result.setValue(t,entries[t],scale*values[t],scale*std::sqrt(errors2[t]));
     }
@@ -897,9 +928,9 @@ namespace Datum
   double sum = 0.0;
   for (unsigned int k=0; k<_entries.size(); k++) sum += value(k);
   if (binSumOnly) return sum;
-  double w = 1.0;
-  for (unsigned int dim=0; dim<rank(); dim++) w *= binWidth(0,dim); // needs to be updated for variable widths
-  return sum*w;
+  sum = 0.0;
+  for (unsigned int k=0; k<_entries.size(); k++) sum += value(k)*binVolume(k);
+  return sum;
   }
 
   double Histogram::integral(unsigned int first, unsigned int last, bool binSumOnly) const
@@ -908,9 +939,8 @@ namespace Datum
   unsigned int f, l;
   resolveRange(0,first,last,f,l,__FUNCTION__);
   double sum = 0.0;
-  for (unsigned int k=f; k<=l; k++) sum += value(k);
-  if (binSumOnly) return sum;
-  return sum*binWidth(0,0); // needs to be updated for variable widths
+  for (unsigned int k=f; k<=l; k++) sum += binSumOnly ? value(k) : value(k)*binWidth(k,0);
+  return sum;
   }
 
   double Histogram::integral(unsigned int first0, unsigned int last0,
@@ -924,9 +954,8 @@ namespace Datum
   double sum = 0.0;
   for (unsigned int k0=f0; k0<=l0; k0++)
     for (unsigned int k1=f1; k1<=l1; k1++)
-      sum += value(binIndex(k0,k1));
-  if (binSumOnly) return sum;
-  return sum*binWidth(0,0)*binWidth(0,1); // needs to be updated for variable widths
+      sum += binSumOnly ? value(binIndex(k0,k1)) : value(binIndex(k0,k1))*binWidth(k0,0)*binWidth(k1,1);
+  return sum;
   }
 
   double Histogram::integral(unsigned int first0, unsigned int last0,
@@ -943,9 +972,8 @@ namespace Datum
   for (unsigned int k0=f0; k0<=l0; k0++)
     for (unsigned int k1=f1; k1<=l1; k1++)
       for (unsigned int k2=f2; k2<=l2; k2++)
-        sum += value(binIndex(k0,k1,k2));
-  if (binSumOnly) return sum;
-  return sum*binWidth(0,0)*binWidth(0,1)*binWidth(0,2); // needs to be updated for variable widths
+        sum += binSumOnly ? value(binIndex(k0,k1,k2)) : value(binIndex(k0,k1,k2))*binWidth(k0,0)*binWidth(k1,1)*binWidth(k2,2);
+  return sum;
   }
 
   //////////////////////////////////////////////////////////////////////////
@@ -1159,6 +1187,40 @@ namespace Datum
   return 0.0;           // a histogram has no systematic uncertainty
   }
 
+  double Histogram::binSystPlusAtGlobal(unsigned int /*k*/) const
+  {
+  throw MathException("A Histogram has no systematic uncertainties per bin: use a HistogramSyst",__FUNCTION__);
+  }
+
+  double Histogram::binSystMinusAtGlobal(unsigned int /*k*/) const
+  {
+  throw MathException("A Histogram has no systematic uncertainties per bin: use a HistogramSyst",__FUNCTION__);
+  }
+
+  void Histogram::setBinSystAtGlobal(unsigned int /*k*/, double /*plus*/, double /*minus*/)
+  {
+  throw MathException("A Histogram has no systematic uncertainties per bin: use a HistogramSyst",__FUNCTION__);
+  }
+
+  double Histogram::binSystPlusAt(unsigned int i) const                                   { return binSystPlusAtGlobal(binIndex(i,true)); }
+  double Histogram::binSystPlusAt(unsigned int i0, unsigned int i1) const                 { return binSystPlusAtGlobal(binIndex(i0,i1,true)); }
+  double Histogram::binSystPlusAt(unsigned int i0, unsigned int i1, unsigned int i2) const{ return binSystPlusAtGlobal(binIndex(i0,i1,i2,true)); }
+  double Histogram::binSystPlusAt(const std::vector<unsigned int> & indices) const        { return binSystPlusAtGlobal(binIndex(indices,true)); }
+  double Histogram::binSystMinusAt(unsigned int i) const                                   { return binSystMinusAtGlobal(binIndex(i,true)); }
+  double Histogram::binSystMinusAt(unsigned int i0, unsigned int i1) const                 { return binSystMinusAtGlobal(binIndex(i0,i1,true)); }
+  double Histogram::binSystMinusAt(unsigned int i0, unsigned int i1, unsigned int i2) const{ return binSystMinusAtGlobal(binIndex(i0,i1,i2,true)); }
+  double Histogram::binSystMinusAt(const std::vector<unsigned int> & indices) const        { return binSystMinusAtGlobal(binIndex(indices,true)); }
+  double Histogram::binSystAt(unsigned int i) const                                   { return binSystAtGlobal(binIndex(i,true)); }
+  double Histogram::binSystAt(unsigned int i0, unsigned int i1) const                 { return binSystAtGlobal(binIndex(i0,i1,true)); }
+  double Histogram::binSystAt(unsigned int i0, unsigned int i1, unsigned int i2) const{ return binSystAtGlobal(binIndex(i0,i1,i2,true)); }
+  double Histogram::binSystAt(const std::vector<unsigned int> & indices) const        { return binSystAtGlobal(binIndex(indices,true)); }
+  void Histogram::setBinSystAt(unsigned int i, double plus, double minus)                  { setBinSystAtGlobal(binIndex(i,true),plus,minus); }
+  void Histogram::setBinSystAt(unsigned int i0, unsigned int i1, double plus, double minus){ setBinSystAtGlobal(binIndex(i0,i1,true),plus,minus); }
+  void Histogram::setBinSystAt(unsigned int i0, unsigned int i1, unsigned int i2, double plus, double minus)
+  { setBinSystAtGlobal(binIndex(i0,i1,i2,true),plus,minus); }
+  void Histogram::setBinSystAt(const std::vector<unsigned int> & indices, double plus, double minus)
+  { setBinSystAtGlobal(binIndex(indices,true),plus,minus); }
+
   DataPoint2D Histogram::point(unsigned int index) const
   {
   if (rank()!=1) throw MathException("Data points are only defined for a histogram of rank 1",__FUNCTION__);
@@ -1336,6 +1398,17 @@ namespace Datum
     for (const auto & label : _binLabels[d]) { w.writeVarUInt(label.first); w.writeString(label.second); }
     }
   _fits.encodeBinary(w);   // format version 4: fits attached
+  encodeCommonSyst(w);     // format version 5: common systematic uncertainty
+  // format version 6: the axes with variable bins: their number, then for each its index and its nBins+1 edges
+  unsigned int nVariable = 0;
+  for (unsigned int a=0; a<rank(); a++) if (!isRegular(a)) nVariable++;
+  w.writeVarUInt(nVariable);
+  for (unsigned int a=0; a<rank(); a++)
+    {
+    if (isRegular(a)) continue;
+    w.writeVarUInt(a);
+    for (double e : _edges[a]) w.writeFloat64(e);
+    }
   }
 
   void Histogram::decodeBinary(BinaryReader & r, const String & histogramName, unsigned int version)
@@ -1395,6 +1468,21 @@ namespace Datum
       }
     }
   if (version>=4) _fits.decodeBinary(r);
+  if (version>=5) decodeCommonSyst(r); else clearCommonSyst();
+  if (version>=6)
+    {
+    uint64_t nVariable = r.readVarUInt();
+    if (nVariable>rank) throw Exception("More axes with variable bins than axes","Histogram::decodeBinary()");
+    for (uint64_t i=0; i<nVariable; i++)
+      {
+      uint64_t a = r.readVarUInt();
+      if (a>=rank) throw Exception("Invalid axis of variable bins","Histogram::decodeBinary()");
+      std::vector<double> edges(nBins((unsigned int) a)+1);
+      for (double & e : edges) e = r.readFloat64();
+      try { setBinEdges((unsigned int) a,edges); }
+      catch (const Exception & e) { throw Exception(String("Invalid bin edges: ")+e.what(),"Histogram::decodeBinary()"); }
+      }
+    }
   }
 
   void Histogram::writeBinary(std::ostream & out) const                                      { writeBinaryObject(out,*this); }

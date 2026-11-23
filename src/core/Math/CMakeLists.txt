@@ -102,6 +102,7 @@ Data/DataPointsVector.cpp
 Data/Histogram.cpp
 Data/Partition.cpp
 Data/Profile.cpp
+Data/HistogramSyst.cpp
 Data/Table2D.cpp
 # Search
 Search/AnnealingSearch.cpp
@@ -211,6 +212,15 @@ add_test(NAME FunctionStorage COMMAND TestFunctionStorage)
 add_executable(TestRebin Data/tests/TestRebin.cpp)
 target_link_libraries(TestRebin Math Base)
 add_test(NAME Rebin COMMAND TestRebin)
+add_executable(TestDataPointSyst Data/tests/TestDataPointSyst.cpp)
+target_link_libraries(TestDataPointSyst Math Base)
+add_test(NAME DataPointSyst COMMAND TestDataPointSyst)
+add_executable(TestVariableBins Data/tests/TestVariableBins.cpp)
+target_link_libraries(TestVariableBins Math Base)
+add_test(NAME VariableBins COMMAND TestVariableBins)
+add_executable(TestHistogramSyst Data/tests/TestHistogramSyst.cpp)
+target_link_libraries(TestHistogramSyst Math Base)
+add_test(NAME HistogramSyst COMMAND TestHistogramSyst)
 add_executable(TestInterpolation Interpolation/tests/TestInterpolation.cpp)
 target_link_libraries(TestInterpolation Math Base)
 add_test(NAME Interpolation COMMAND TestInterpolation)

@@ -6,6 +6,7 @@ lib
 bin*
 lib*
 !src/**/Binary*
+!external/yaml-cpp/**/binary.*
 DOC
 DOC/*
 build

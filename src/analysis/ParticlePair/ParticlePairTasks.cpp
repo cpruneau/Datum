@@ -10,7 +10,7 @@
 //! @file ParticlePairTasks.cpp
 //! @brief Task classes of the ParticlePair library, registered for Task::instantiateTask() (see TaskRegistration.hpp).
 #include "ParticlePairAnalyzer.hpp"
-#include "ParticlePairBFHistos.hpp"
+#include "ParticlePairBfHistos.hpp"
 #include "TaskRegistration.hpp"
 
 DATUM_REFLECTION(ParticlePairTasks)

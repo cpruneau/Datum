@@ -123,8 +123,9 @@ namespace Datum
   //! @{
   //! @brief Write this point. @param w writer
   void encodeBinary(BinaryWriter & w) const;
-  //! @brief Read this point. @param r reader @throws Exception if the data is invalid
-  void decodeBinary(BinaryReader & r);
+  //! @brief Read this point. @param r reader @param version format version of the point (1: one systematic uncertainty;
+  //! 2: upper and lower ones) @throws Exception if the data is invalid
+  void decodeBinary(BinaryReader & r, unsigned int version=binaryVersion());
   //! @}
 
   //! @name Binary files (independent of ROOT)
@@ -134,7 +135,7 @@ namespace Datum
   //! @brief Tag of DataPointND records in binary files. @return "DTMN"
   static const char * binaryTag() { return "DTMN"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 1; }
+  static unsigned int binaryVersion() { return 2; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Rebuild this object from a binary payload. @param r reader @param name stored name @param version format version

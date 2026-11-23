@@ -106,10 +106,14 @@ namespace Datum
   float y() const { return _value; }
   //! @brief Statistical uncertainty on y. @return yStatError
   float yStatError() const { return _stat; }
-  //! @brief Systematic uncertainty on y. @return ySysError
-  float ySysError() const { return _syst; }
+  //! @brief Systematic uncertainty on y: the larger of the upper and lower ones (see DataPoint::syst()). @return ySysError
+  float ySysError() const { return syst(); }
   //! @brief Systematic uncertainty on y (same as ySysError()). @return ySysError
-  float ySystError() const { return _syst; }
+  float ySystError() const { return syst(); }
+  //! @brief Upper systematic uncertainty on y. @return systPlus()
+  float ySysErrorPlus() const { return _systPlus; }
+  //! @brief Lower systematic uncertainty on y. @return systMinus()
+  float ySysErrorMinus() const { return _systMinus; }
   //! @brief Total uncertainty on y, statistical and systematic added in quadrature. @return sqrt(yStatError^2 + ySysError^2)
   float yError() const { return error(); }
   //! @brief Statistical covariance between x and y. @return cov(x,y)
@@ -296,7 +300,7 @@ namespace Datum
   //! @brief Tag of DataPoint2D records in binary files. @return "DTMP"
   static const char * binaryTag() { return "DTMP"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 1; }
+  static unsigned int binaryVersion() { return 2; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Rebuild this object from a binary payload (used by readBinary()). @param r reader @param name stored name @param version format version

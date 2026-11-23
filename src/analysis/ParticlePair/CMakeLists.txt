@@ -12,7 +12,7 @@ add_library(ParticlePair SHARED
 ParticlePairTasks.cpp
 ParticlePairAnalyzer.cpp
 ParticlePairHistos.cpp
-ParticlePairBFHistos.cpp)
+ParticlePairBfHistos.cpp)
 
 target_link_libraries(ParticlePair Base   Particles ParticleSingle ${EXTRA_LIBS} )
 target_include_directories(ParticlePair  PUBLIC Base Particles ParticleSingle ParticlePair ${EXTRA_INCLUDES} )

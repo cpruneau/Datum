@@ -12,11 +12,14 @@ namespace Datum
   {
 
   //!
-  //! @brief Regular (fixed bin width) partition of a space of rank 1, 2, 3, ...
+  //! @brief Partition of a space of rank 1, 2, 3, ... into bins: regular (fixed bin width) or variable bins per axis.
   //!
   //! A partition is built by adding dimensions (axes) one at a time with addDimension().
-  //! Each axis k is divided into nBins(k) bins of equal width spanning [minimum(k), maximum(k)).
-  //! The lower edge of an axis is included in its first bin; the upper edge is excluded.
+  //! A regular axis k is divided into nBins(k) bins of equal width spanning [minimum(k), maximum(k)) (limits stored
+  //! as float); an axis with variable bins is given by its nBins(k)+1 increasing edges (stored as double, see
+  //! addDimension(const std::vector<double>&, String) and isRegular()). The functions below (binWidth(),
+  //! binLowEdge(), binCenter(), binIndex(), ...) apply to both kinds.
+  //! The lower edge of a bin is included in it; the upper edge is excluded.
   //!
   //! Bins are addressed either by per-axis indices (i0, i1, i2, ...) or by a single
   //! global (flat) bin index computed as
@@ -45,7 +48,8 @@ namespace Datum
   std::vector<unsigned int> _nBins;   //!< Number of bins of each axis
   std::vector<float> _minima;         //!< Lower edge of each axis
   std::vector<float> _maxima;         //!< Upper edge of each axis
-  std::vector<float> _widths;         //!< Bin width of each axis
+  std::vector<float> _widths;         //!< Bin width of each axis (regular axes; the average width otherwise)
+  std::vector<std::vector<double>> _edges; //!< Edges of the bins of each axis with variable bins (empty: regular axis)
   std::vector<String> _titles;        //!< Title of each axis
   std::vector<std::map<unsigned int,String>> _binLabels; //!< Optional labels of the bins of each axis (bin index -> label)
 
@@ -94,6 +98,39 @@ namespace Datum
   void addDimension(unsigned int nBin, float minimum, float maximum, String title);
 
   //!
+  //! @brief Append a new axis with variable bins.
+  //! @param edges the nBins+1 edges of the bins (at least 2, strictly increasing, finite)
+  //! @param title title of the axis
+  //! @throws Exception if the edges are not valid
+  //!
+  void addDimension(const std::vector<double> & edges, String title);
+
+  //!
+  //! @brief Append bins first to last of an axis of another partition (regular or variable), with its title.
+  //! @param partition partition holding the axis @param dimIndex axis of partition
+  //! @param first first bin @param last last bin (inclusive)
+  //! @throws Exception if the range is invalid
+  //!
+  void addDimension(const Partition & partition, unsigned int dimIndex, unsigned int first, unsigned int last);
+
+  //!
+  //! @brief Replace the bins of an existing axis by variable bins with the same number of bins.
+  //! @param dimIndex axis index @param edges the nBins(dimIndex)+1 edges (strictly increasing, finite)
+  //! @throws Exception if the number of edges is not nBins(dimIndex)+1 or the edges are not valid
+  //!
+  void setBinEdges(unsigned int dimIndex, const std::vector<double> & edges);
+
+  //! @brief Whether an axis has bins of equal widths. @param dimIndex axis index @return true for a regular axis
+  bool isRegular(unsigned int dimIndex) const;
+  //! @brief Whether every axis is regular. @return true if no axis has variable bins
+  bool isRegular() const;
+  //! @brief The nBins+1 edges of the bins of an axis (computed for a regular axis). @param dimIndex axis index
+  //! @return edges
+  std::vector<double> binEdges(unsigned int dimIndex=0) const;
+  //! @brief Volume of a bin: the product of its widths along the axes. @param k global bin index @return volume
+  double binVolume(unsigned int k) const;
+
+  //!
   //! @brief Replace this partition by the axes of partition1 followed by the axes of partition2.
   //!
   //! Either argument may be this partition.
@@ -105,7 +142,8 @@ namespace Datum
   //!
   //! @brief Check whether the given partition has the same binning as this partition.
   //! @param rhs partition to compare with
-  //! @param sizeAndLimits if true, the axis limits must also be identical; if false, only the rank and number of bins are compared
+  //! @param sizeAndLimits if true, the axis limits (and the edges of variable bins) must also be identical; if false,
+  //! only the rank and number of bins are compared
   //! @return true if the two partitions are compatible
   //!
   bool compatibleWith(const Partition & rhs, bool sizeAndLimits=1) const;
@@ -239,7 +277,7 @@ namespace Datum
   //!
   //! @brief Width of a bin along the given axis.
   //!
-  //! All bins of an axis currently have the same width, so binIndex is not used.
+  //! For a regular axis all bins have the same width.
   //! @param binIndex bin index along axis dimIndex
   //! @param dimIndex axis index (0 to rank()-1)
   //! @return bin width along axis dimIndex

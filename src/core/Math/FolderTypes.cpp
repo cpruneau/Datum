@@ -14,6 +14,7 @@
 #include "Folder.hpp"
 #include "Histogram.hpp"
 #include "Profile.hpp"
+#include "HistogramSyst.hpp"
 #include "DataPoint2D.hpp"
 #include "DataPointsVector.hpp"
 #include "DataPointColumns.hpp"
@@ -38,6 +39,7 @@ namespace Datum
   {
   Folder::registerType<Histogram>();
   Folder::registerType<Profile>();
+  Folder::registerType<HistogramSyst>();
   Folder::registerType<DataPointsVector>();
   Folder::registerType<DataPointColumns>();
   Folder::registerType<DataPoint2D>();

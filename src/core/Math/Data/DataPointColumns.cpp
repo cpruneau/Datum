@@ -50,7 +50,7 @@ namespace Datum
   DataPointColumns::DataPointColumns(unsigned int rank)
   :
   DataPoints(),
-  _rank(1), _x(1), _xError(1), _value(), _stat(), _syst()
+  _rank(1), _x(1), _xError(1), _value(), _stat(), _syst(), _systMinus()
   {
   setRank(rank);
   }
@@ -107,7 +107,9 @@ namespace Datum
   {
   checkIndex(index,__FUNCTION__);
   if (_rank!=1) throw MathException("point() requires rank 1; use createPoint()",__FUNCTION__);
-  return DataPoint2D(_x[0][index],_xError[0][index],_value[index],_stat[index],_syst[index]);
+  DataPoint2D p(_x[0][index],_xError[0][index],_value[index],_stat[index],_syst[index]);
+  p.setSyst(_syst[index],_systMinus[index]);
+  return p;
   }
 
   std::vector<double> DataPointColumns::coordinatesAt(unsigned int index) const
@@ -128,7 +130,9 @@ namespace Datum
 
   double DataPointColumns::valueAt(unsigned int index) const     { checkIndex(index,__FUNCTION__); return _value[index]; }
   double DataPointColumns::statErrorAt(unsigned int index) const { checkIndex(index,__FUNCTION__); return _stat[index];  }
-  double DataPointColumns::sysErrorAt(unsigned int index) const  { checkIndex(index,__FUNCTION__); return _syst[index];  }
+  double DataPointColumns::sysErrorAt(unsigned int index) const  { checkIndex(index,__FUNCTION__); return std::max(_syst[index],_systMinus[index]); }
+  double DataPointColumns::sysErrorPlusAt(unsigned int index) const  { checkIndex(index,__FUNCTION__); return _syst[index]; }
+  double DataPointColumns::sysErrorMinusAt(unsigned int index) const { checkIndex(index,__FUNCTION__); return _systMinus[index]; }
 
   void DataPointColumns::addPoint(const DataPoint2D & dataPoint)
   {
@@ -151,23 +155,30 @@ namespace Datum
 
   void DataPointColumns::addPoint(const DataPoint & dataPoint)
   {
-  addPoint(dataPoint.xValues(),dataPoint.xErrors(),dataPoint.value(),dataPoint.stat(),dataPoint.syst());
+  addPoint(dataPoint.xValues(),dataPoint.xErrors(),dataPoint.value(),dataPoint.stat(),dataPoint.systPlus(),dataPoint.systMinus());
   }
 
   void DataPointColumns::addPoint(const std::vector<double> & x, const std::vector<double> & xError,
                                   double value, double stat, double syst)
+  {
+  addPoint(x,xError,value,stat,syst,syst);
+  }
+
+  void DataPointColumns::addPoint(const std::vector<double> & x, const std::vector<double> & xError,
+                                  double value, double stat, double systPlus, double systMinus)
   {
   if (x.empty()) throw MathException("A point needs at least one independent variable",__FUNCTION__);
   if (!_value.empty() && x.size()!=_rank) throw MathException("Point rank differs from the rank of the container",__FUNCTION__);
   if (!xError.empty() && xError.size()!=x.size()) throw MathException("x and xError sizes differ",__FUNCTION__);
   for (double e : xError) if (e<0) throw MathException("xError<0",__FUNCTION__);
   if (stat<0) throw MathException("stat<0",__FUNCTION__);
-  if (syst<0) throw MathException("syst<0",__FUNCTION__);
+  if (systPlus<0)  throw MathException("systPlus<0",__FUNCTION__);
+  if (systMinus<0) throw MathException("systMinus<0",__FUNCTION__);
   if (_value.empty() && x.size()!=_rank) setRank(x.size());
   // Make room in every column first (geometric growth), so that the push_backs below cannot throw part way
   // through and leave columns of different sizes.
   std::size_t n = _value.size();
-  bool full = _value.capacity()==n || _stat.capacity()==n || _syst.capacity()==n;
+  bool full = _value.capacity()==n || _stat.capacity()==n || _syst.capacity()==n || _systMinus.capacity()==n;
   for (unsigned int i=0; i<_rank && !full; i++) full = _x[i].capacity()==n || _xError[i].capacity()==n;
   if (full) reserve(std::max<std::size_t>(16,2*n));
   for (unsigned int i=0; i<_rank; i++)
@@ -177,19 +188,23 @@ namespace Datum
     }
   _value.push_back(value);
   _stat.push_back(stat);
-  _syst.push_back(syst);
+  _syst.push_back(systPlus);
+  _systMinus.push_back(systMinus);
   }
 
   std::unique_ptr<DataPoint> DataPointColumns::createPoint(unsigned int index) const
   {
   checkIndex(index,__FUNCTION__);
+  std::unique_ptr<DataPoint> p;
   if (_rank==1)
-    return std::unique_ptr<DataPoint>(new DataPoint2D(_x[0][index],_xError[0][index],_value[index],_stat[index],_syst[index]));
-  if (_rank==2)
-    return std::unique_ptr<DataPoint>(new DataPoint3D(_x[0][index],_xError[0][index],_x[1][index],_xError[1][index],
-                                                      _value[index],_stat[index],_syst[index]));
-  return std::unique_ptr<DataPoint>(new DataPointND(coordinatesAt(index),coordinateErrorsAt(index),
-                                                    _value[index],_stat[index],_syst[index]));
+    p.reset(new DataPoint2D(_x[0][index],_xError[0][index],_value[index],_stat[index],_syst[index]));
+  else if (_rank==2)
+    p.reset(new DataPoint3D(_x[0][index],_xError[0][index],_x[1][index],_xError[1][index],
+                            _value[index],_stat[index],_syst[index]));
+  else
+    p.reset(new DataPointND(coordinatesAt(index),coordinateErrorsAt(index),_value[index],_stat[index],_syst[index]));
+  p->setSyst(_syst[index],_systMinus[index]);
+  return p;
   }
 
   //////////////////////////////////////////////////////////////////////////
@@ -214,13 +229,24 @@ namespace Datum
                                     const std::vector<double> & stat,
                                     const std::vector<double> & syst)
   {
+  setColumns(x,xError,value,stat,syst,syst);
+  }
+
+  void DataPointColumns::setColumns(const std::vector< std::vector<double> > & x,
+                                    const std::vector< std::vector<double> > & xError,
+                                    const std::vector<double> & value,
+                                    const std::vector<double> & stat,
+                                    const std::vector<double> & systPlus,
+                                    const std::vector<double> & systMinus)
+  {
   if (x.empty()) throw MathException("At least one independent variable column is required",__FUNCTION__);
   if (!xError.empty() && xError.size()!=x.size()) throw MathException("x and xError have different numbers of columns",__FUNCTION__);
   std::size_t n = value.size();
   for (const auto & c : x)      checkColumn(c,n,false,false,"x",__FUNCTION__);
   for (const auto & c : xError) checkColumn(c,n,true,true,"xError",__FUNCTION__);
   checkColumn(stat,n,true,true,"stat",__FUNCTION__);
-  checkColumn(syst,n,true,true,"syst",__FUNCTION__);
+  checkColumn(systPlus,n,true,true,"systPlus",__FUNCTION__);
+  checkColumn(systMinus,n,true,true,"systMinus",__FUNCTION__);
   // Build the new columns, then swap them in: the container is unchanged if anything above or below throws.
   std::vector< std::vector<float> > newX, newXError;
   newX.reserve(x.size());
@@ -232,13 +258,15 @@ namespace Datum
     }
   std::vector<float> newValue = toFloat(value,n);
   std::vector<float> newStat  = toFloat(stat,n);
-  std::vector<float> newSyst  = toFloat(syst,n);
+  std::vector<float> newSyst  = toFloat(systPlus,n);
+  std::vector<float> newSystMinus = systMinus.empty() ? newSyst : toFloat(systMinus,n);
   _rank = x.size();
   _x.swap(newX);
   _xError.swap(newXError);
   _value.swap(newValue);
   _stat.swap(newStat);
   _syst.swap(newSyst);
+  _systMinus.swap(newSystMinus);
   }
 
   //////////////////////////////////////////////////////////////////////////
@@ -263,7 +291,8 @@ namespace Datum
     }
   _value[index] = dataPoint.value();
   _stat[index]  = dataPoint.stat();
-  _syst[index]  = dataPoint.syst();
+  _syst[index]  = dataPoint.systPlus();
+  _systMinus[index] = dataPoint.systMinus();
   }
 
   void DataPointColumns::setPoint(unsigned int index, const DataPoint & dataPoint)
@@ -284,6 +313,7 @@ namespace Datum
   _value.erase(_value.begin()+index);
   _stat.erase(_stat.begin()+index);
   _syst.erase(_syst.begin()+index);
+  _systMinus.erase(_systMinus.begin()+index);
   }
 
   void DataPointColumns::clear()
@@ -292,6 +322,7 @@ namespace Datum
   _value.clear();
   _stat.clear();
   _syst.clear();
+  _systMinus.clear();
   }
 
   void DataPointColumns::reserve(unsigned int n)
@@ -300,6 +331,7 @@ namespace Datum
   _value.reserve(n);
   _stat.reserve(n);
   _syst.reserve(n);
+  _systMinus.reserve(n);
   }
 
   void DataPointColumns::sortByX(unsigned int variable)
@@ -319,6 +351,7 @@ namespace Datum
   permute(_value);
   permute(_stat);
   permute(_syst);
+  permute(_systMinus);
   }
 
   //////////////////////////////////////////////////////////////////////////
@@ -339,6 +372,7 @@ namespace Datum
     if (subtract) p->subtract(*q); else p->add(*q);
     result.setPoint(k,*p);
     }
+  result.setCommonSystOf(left,right,subtract);
   return result;
   }
   }
@@ -374,6 +408,10 @@ namespace Datum
   writeColumn(_stat);
   writeColumn(_syst);
   _fits.encodeBinary(w);   // format version 2: fits attached
+  encodeCommonSyst(w);     // format version 3: common systematic, then the lower systematic column if it differs
+  bool asymmetric = _systMinus!=_syst;
+  w.writeUInt8(asymmetric ? 1 : 0);
+  if (asymmetric) writeColumn(_systMinus);
   }
 
   void DataPointColumns::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int version)
@@ -389,12 +427,28 @@ namespace Datum
   std::vector<float> stat  = readColumn();
   std::vector<float> syst  = readColumn();
   if (version>=2) _fits.decodeBinary(r);
+  std::vector<float> systMinus = syst;
+  double commonPlus = 0.0, commonMinus = 0.0;
+  if (version>=3)
+    {
+    DataPointColumns probe;            // reads the common systematic without changing this object before the end
+    probe.decodeCommonSyst(r);
+    commonPlus  = probe.getCommonSystPlus();
+    commonMinus = probe.getCommonSystMinus();
+    uint8_t asymmetric = r.readUInt8();
+    if (asymmetric>1) throw Exception("Invalid systematic column flag","DataPointColumns::decodeBinary()");
+    if (asymmetric) systMinus = readColumn();
+    for (float v : systMinus) if (!(v>=0)) throw Exception("Invalid lower systematic uncertainty","DataPointColumns::decodeBinary()");
+    }
+  _commonSystPlus  = commonPlus;
+  _commonSystMinus = commonMinus;
   _rank = rank;
   _x.swap(x);
   _xError.swap(xError);
   _value.swap(value);
   _stat.swap(stat);
   _syst.swap(syst);
+  _systMinus.swap(systMinus);
   }
 
   void DataPointColumns::writeBinary(std::ostream & out) const                     { writeBinaryObject(out,*this); }

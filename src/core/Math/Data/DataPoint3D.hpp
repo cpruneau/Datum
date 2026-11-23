@@ -106,7 +106,11 @@ namespace Datum
   //! @brief Statistical uncertainty on z. @return zStatError
   float zStatError() const { return _stat; }
   //! @brief Systematic uncertainty on z. @return zSysError
-  float zSysError() const { return _syst; }
+  float zSysError() const { return syst(); }
+  //! @brief Upper systematic uncertainty on z. @return systPlus()
+  float zSysErrorPlus() const { return _systPlus; }
+  //! @brief Lower systematic uncertainty on z. @return systMinus()
+  float zSysErrorMinus() const { return _systMinus; }
   //! @brief Total uncertainty on z, statistical and systematic added in quadrature. @return sqrt(zStatError^2+zSysError^2)
   float zError() const { return error(); }
 
@@ -168,7 +172,7 @@ namespace Datum
   //! @brief Tag of DataPoint3D records in binary files. @return "DTMT"
   static const char * binaryTag() { return "DTMT"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 1; }
+  static unsigned int binaryVersion() { return 2; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Rebuild this object from a binary payload. @param r reader @param name stored name @param version format version

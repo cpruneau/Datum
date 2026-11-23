@@ -30,7 +30,8 @@ namespace Datum
   //!  - xErrorColumn(i) : uncertainty on independent variable i (independent variables are treated as uncorrelated)
   //!  - valueColumn()   : dependent value
   //!  - statColumn()    : statistical uncertainty on the dependent value
-  //!  - systColumn()    : systematic uncertainty on the dependent value
+  //!  - systColumn()    : upper systematic uncertainty on the dependent value
+  //!  - systMinusColumn() : lower systematic uncertainty on the dependent value (equal to the upper one when symmetric)
   //! All columns always have size() elements. Values are stored as float, like the DataPoint classes.
   //!
   //! The rank is set at construction (1 by default) and can be changed while the container is empty, with
@@ -59,7 +60,8 @@ namespace Datum
   std::vector< std::vector<float> > _xError;   //!< uncertainties on the independent variables: _rank columns
   std::vector<float> _value;                   //!< dependent values
   std::vector<float> _stat;                    //!< statistical uncertainties on the dependent values
-  std::vector<float> _syst;                    //!< systematic uncertainties on the dependent values
+  std::vector<float> _syst;                    //!< upper systematic uncertainties on the dependent values
+  std::vector<float> _systMinus;               //!< lower systematic uncertainties on the dependent values
 
   //! @brief Throw if index is not a valid point index. @param index point index @param source caller name
   //! @throws MathException if index>=size()
@@ -138,8 +140,12 @@ namespace Datum
   double valueAt(unsigned int index) const override;
   //! @brief Statistical uncertainty of a point. @param index point index @return stat
   double statErrorAt(unsigned int index) const override;
-  //! @brief Systematic uncertainty of a point. @param index point index @return syst
+  //! @brief Systematic uncertainty of a point: the larger side. @param index point index @return syst
   double sysErrorAt(unsigned int index) const override;
+  //! @brief Upper systematic uncertainty of a point. @param index point index @return upper syst
+  double sysErrorPlusAt(unsigned int index) const override;
+  //! @brief Lower systematic uncertainty of a point. @param index point index @return lower syst
+  double sysErrorMinusAt(unsigned int index) const override;
 
   //! @brief Append a rank 1 point. @param dataPoint point @throws MathException if the rank is not 1 (and the container not empty)
   void addPoint(const DataPoint2D & dataPoint) override;
@@ -176,6 +182,16 @@ namespace Datum
                 double value, double stat=0.0, double syst=0.0);
 
   //!
+  //! @brief Append a point given its values, with asymmetric systematic uncertainties.
+  //! @param x independent variables (rank() values) @param xError their uncertainties (rank() values, or empty)
+  //! @param value dependent value @param stat statistical uncertainty @param systPlus upper systematic uncertainty
+  //! @param systMinus lower systematic uncertainty
+  //! @throws MathException if the sizes do not match the rank or an uncertainty is negative
+  //!
+  void addPoint(const std::vector<double> & x, const std::vector<double> & xError,
+                double value, double stat, double systPlus, double systMinus);
+
+  //!
   //! @brief Copy of point index as a point of the matching class: DataPoint2D (rank 1), DataPoint3D (rank 2) or DataPointND.
   //! @param index point index (0 to size()-1) @return the point (owned by the caller)
   //! @throws MathException if index>=size()
@@ -195,8 +211,10 @@ namespace Datum
   const std::vector<float> & valueColumn() const { return _value; }
   //! @brief Statistical uncertainty column. @return column
   const std::vector<float> & statColumn() const { return _stat; }
-  //! @brief Systematic uncertainty column. @return column
+  //! @brief Upper systematic uncertainty column. @return column
   const std::vector<float> & systColumn() const { return _syst; }
+  //! @brief Lower systematic uncertainty column. @return column
+  const std::vector<float> & systMinusColumn() const { return _systMinus; }
 
   //!
   //! @brief Replace all columns; the rank becomes x.size().
@@ -211,6 +229,20 @@ namespace Datum
                   const std::vector<double> & value,
                   const std::vector<double> & stat,
                   const std::vector<double> & syst);
+
+  //!
+  //! @brief Replace all columns, with asymmetric systematic uncertainties; the rank becomes x.size().
+  //! @param x one column per independent variable @param xError their uncertainties (or empty) @param value dependent
+  //! values @param stat statistical uncertainties (or empty) @param systPlus upper systematic uncertainties (or empty)
+  //! @param systMinus lower systematic uncertainties (or empty: equal to systPlus)
+  //! @throws MathException if x is empty, the sizes differ, or an uncertainty is negative (the container is then unchanged)
+  //!
+  void setColumns(const std::vector< std::vector<double> > & x,
+                  const std::vector< std::vector<double> > & xError,
+                  const std::vector<double> & value,
+                  const std::vector<double> & stat,
+                  const std::vector<double> & systPlus,
+                  const std::vector<double> & systMinus);
 
   //! @}
 
@@ -257,14 +289,15 @@ namespace Datum
 
   //! @name Binary files (independent of ROOT)
   //! Saved as "DTMK" records in the Datum binary format (see BinaryIO.hpp): rank, size, then each column (float32):
-  //! x[0], xError[0], ..., x[rank-1], xError[rank-1], value, stat, syst; then the fits attached (format version 2,
-  //! see FitList::encodeBinary()). Restored exactly.
+  //! x[0], xError[0], ..., x[rank-1], xError[rank-1], value, stat, syst (upper); then the fits attached (format version 2,
+  //! see FitList::encodeBinary()); then (version 3) the common systematic uncertainty and a flag byte, followed, if 1,
+  //! by the lower systematic column (otherwise lower = upper). Restored exactly.
   //! @{
 
   //! @brief Tag of DataPointColumns records in binary files. @return "DTMK"
   static const char * binaryTag() { return "DTMK"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 2; }
+  static unsigned int binaryVersion() { return 3; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Write the binary payload after the name. @param w writer

@@ -7,7 +7,7 @@
  * Author: Claude Pruneau
  *
  * *********************************************************************/
-#include "ParticlePair3DBFHistos.hpp"
+#include "ParticlePair3DBfHistos.hpp"
 #include "Exceptions.hpp"
 #include "NameHelpers.hpp"
 

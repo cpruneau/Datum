@@ -107,6 +107,8 @@ namespace Datum
     PointList copies = clonePoints(rhs._dataPoints);   // may throw: this container is then unchanged
     adopt(_dataPoints,copies);
     _fits = rhs._fits;
+    _commonSystPlus  = rhs._commonSystPlus;
+    _commonSystMinus = rhs._commonSystMinus;
     }
   return *this;
   }
@@ -118,6 +120,8 @@ namespace Datum
     deletePoints();
     _dataPoints.swap(rhs._dataPoints);
     _fits = std::move(rhs._fits);
+    _commonSystPlus  = rhs._commonSystPlus;
+    _commonSystMinus = rhs._commonSystMinus;
     }
   return *this;
   }
@@ -184,6 +188,18 @@ namespace Datum
   {
   checkIndex(index,__FUNCTION__);
   return _dataPoints[index]->syst();
+  }
+
+  double DataPointsVector::sysErrorPlusAt(unsigned int index) const
+  {
+  checkIndex(index,__FUNCTION__);
+  return _dataPoints[index]->systPlus();
+  }
+
+  double DataPointsVector::sysErrorMinusAt(unsigned int index) const
+  {
+  checkIndex(index,__FUNCTION__);
+  return _dataPoints[index]->systMinus();
   }
 
   void DataPointsVector::addPoint(const DataPoint & dataPoint)
@@ -335,6 +351,7 @@ namespace Datum
   PointList result = clonePoints(_dataPoints);
   for (std::size_t i=0; i<result.size(); i++) result[i]->add(*rhs._dataPoints[i]);
   adopt(_dataPoints,result);
+  setCommonSystOf(*this,rhs,false);
   return *this;
   }
 
@@ -344,6 +361,7 @@ namespace Datum
   PointList result = clonePoints(_dataPoints);
   for (std::size_t i=0; i<result.size(); i++) result[i]->subtract(*rhs._dataPoints[i]);
   adopt(_dataPoints,result);
+  setCommonSystOf(*this,rhs,true);
   return *this;
   }
 
@@ -381,6 +399,7 @@ namespace Datum
       }
     }
   _fits.encodeBinary(w);   // format version 3: fits attached
+  encodeCommonSyst(w);     // format version 4: common systematic (and points of rank > 2 with both systematic sides)
   }
 
   void DataPointsVector::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int version)
@@ -420,13 +439,14 @@ namespace Datum
       else
         {
         std::unique_ptr<DataPointND> p(new DataPointND());
-        p->decodeBinary(r);
+        p->decodeBinary(r,version>=4 ? 2 : 1);
         if (p->rank()!=pointRank) throw Exception("Point rank differs from the container rank","DataPointsVector::decodeBinary()");
         points.emplace_back(p.release());
         }
       }
     }
   if (version>=3) _fits.decodeBinary(r);
+  if (version>=4) decodeCommonSyst(r);
   adopt(_dataPoints,points);
   }
 

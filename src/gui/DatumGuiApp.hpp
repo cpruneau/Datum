@@ -21,6 +21,9 @@
 #include "PlotDocument.hpp"
 #include "PlotSpec.hpp"
 #include "PlotTemplate.hpp"
+#ifdef DATUM_WITH_HEPDATA
+#include "HEPDataDialog.hpp"
+#endif
 
 namespace Datum
 {
@@ -349,6 +352,14 @@ namespace Datum
   void exportDataFile(int id, const String & kind, const String & path);
   //! Files the windows and canvases were saved to (Windows > Save, Canvas > Save), by viewKey()
   std::map<std::string, String> _viewFiles;
+#ifdef DATUM_WITH_HEPDATA
+  //! @brief Open the HEPData export window, offering the objects of the open data files (the one selected checked).
+  void openHEPDataExport();
+  //! @brief OK of a HEPData import: a new data file holding the objects. @param name name of the data file
+  //! @param plan objects @param message set to what to tell @return false on failure
+  bool importHEPData(const String & name, const HEPDataImportPlan & plan, String & message);
+  HEPDataDialog _hepDataDialog;   //!< File > Import / Export > HEPData YAML, with their preview
+#endif
   };
 
   } // namespace GUI
