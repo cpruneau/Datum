@@ -10,7 +10,7 @@
 //! @file ParticlePair3DTasks.cpp
 //! @brief Task classes of the ParticlePair3D library, registered for Task::instantiateTask() (see TaskRegistration.hpp).
 #include "ParticlePair3DAnalyzer.hpp"
-#include "ParticlePair3DBFHistos.hpp"
+#include "ParticlePair3DBfHistos.hpp"
 #include "TaskRegistration.hpp"
 
 DATUM_REFLECTION(ParticlePair3DTasks)
