@@ -1,0 +1,87 @@
+comment: |
+  Ultra-relativistic heavy-ion collisions create a hot and dense medium of deconfined quarks and gluons, the quark--gluon plasma (QGP), in which parton energy loss (``jet quenching'') is a key probe of hot medium properties. 
+  While parton energy loss has been firmly established in large systems such as Pb--Pb and Au--Au collisions, no unambiguous direct evidence exists in smaller systems such as high-multiplicity p--Pb and pp collisions. 
+  To probe the onset of parton energy loss at intermediate system size, measurements of neutral-pion production are presented in this Letter for oxygen--oxygen (OO) and proton--oxygen (pO) collisions recorded with the ALICE detector in July 2025, relative to a pp baseline. 
+  The nuclear modification factor $R_{\rm OO}$ is suppressed relative to unity with a transverse-momentum dependence similar to that observed in Pb--Pb collisions, consistent with a previous CMS measurement in OO collisions with charged particles.
+  As $R_{\rm OO}$ contains contributions from both cold and hot nuclear matter effects, $R_{\rm pO}$ is also presented in order to constrain cold nuclear matter (CNM) contributions.
+  $R_{\rm pO}$ is found to be compatible with unity, indicating that CNM effects alone cannot account for the suppression observed in $R_{\rm OO}$.
+  Final-state effects are isolated using the measured double ratio $R_{\rm OO}/R_{\rm pO}^{2}$, which largely cancels CNM contributions and exhibits a significant suppression relative to expectations without energy loss at a 4.9$\sigma$ level. 
+  Theoretical models incorporating parton energy loss via different mechanisms predict a significant suppression of the $R_{\rm OO}/R_{\rm pO}^{2}$ relative to unity, consistent with the data.
+  These findings establish parton energy loss in OO collisions, extending experimental evidence for jet quenching to the smallest nuclear system studied to date.
+---
+data_file: data1.yaml
+description: Differential production cross section of neutral pions in pp collisions at 5.36 TeV. In addition to the edges of the $p_{\rm T}$ intervals, the table shows the corresponding $p_{\rm T}$ position as described in the publication.
+keywords:
+- {name: observables, values: [E*D3SIG/DP**3]}
+- {name: reactions, values: [P P --> PI0 X]}
+- {name: cmenergies, values: [5360]}
+location: Data from Figure 1 (yellow markers).
+name: $\pi^{0}$ production in pp at 5.36 TeV
+---
+data_file: data2.yaml
+description: Differential production cross section of neutral pions in pp collisions at 9.62 TeV obtained via interpolation of the measured production at 5.36 and 13.6 TeV. In addition to the edges of the $p_{\rm T}$ intervals, the table shows the corresponding $p_{\rm T}$ position as described in the publication.
+keywords:
+- {name: observables, values: [E*D3SIG/DP**3]}
+- {name: reactions, values: [P P --> PI0 X]}
+- {name: cmenergies, values: [9620]}
+location: Data from Figure 1 (red markers).
+name: $\pi^{0}$ production in pp at 9.62 TeV
+---
+data_file: data3.yaml
+description: Differential production cross section of neutral pions in pp collisions at 13.6 TeV. In addition to the edges of the $p_{\rm T}$ intervals, the table shows the corresponding $p_{\rm T}$ position as described in the publication.
+keywords:
+- {name: observables, values: [E*D3SIG/DP**3]}
+- {name: reactions, values: [P P --> PI0 X]}
+- {name: cmenergies, values: [13600]}
+location: Data from Figure 1 (black markers).
+name: $\pi^{0}$ production in pp at 13.6 TeV
+---
+data_file: data4.yaml
+description: Differential production cross section of neutral pions in pO collisions at 9.62 TeV. In addition to the edges of the $p_{\rm T}$ intervals, the table shows the corresponding $p_{\rm T}$ position as described in the publication.
+keywords:
+- {name: observables, values: [E*D3SIG/DP**3]}
+- {name: reactions, values: [P O --> PI0 X]}
+- {name: cmenergies, values: [9620]}
+location: Data from Figure 1 (green markers).
+name: $\pi^{0}$ production in pO at 9.62 TeV
+---
+data_file: data5.yaml
+description: Differential production cross section of neutral pions in OO collisions at 5.36 TeV. In addition to the edges of the $p_{\rm T}$ intervals, the table shows the corresponding $p_{\rm T}$ position as described in the publication.
+keywords:
+- {name: observables, values: [E*D3SIG/DP**3]}
+- {name: reactions, values: [O O --> PI0 X]}
+- {name: cmenergies, values: [5360]}
+location: Data from Figure 1 (blue markers).
+name: $\pi^{0}$ production in OO at 5.36 TeV
+---
+data_file: data6.yaml
+description: Nuclear modification factor $R_{\rm OO}$ for $\pi^{0}$ meson production in OO/pp collisions at 5.36 TeV.
+keywords:
+- {name: observables, values: [RAA]}
+- {name: reactions, values: [O O --> PI0 X]}
+- {name: reactions, values: [P P --> PI0 X]}
+- {name: cmenergies, values: [5360]}
+location: Data from Figure 2 (upper panel).
+name: $\pi^{0}$ $R_{\rm OO}$ at 5.36 TeV
+---
+data_file: data7.yaml
+description: Nuclear modification factor $R_{\rm pO}$ for $\pi^{0}$ meson production in pO/pp collisions at 9.62 TeV.
+keywords:
+- {name: observables, values: [RPA]}
+- {name: reactions, values: [P O --> PI0 X]}
+- {name: reactions, values: [P P --> PI0 X]}
+- {name: cmenergies, values: [9620]}
+location: Data from Figure 2 (lower panel).
+name: $\pi^{0}$ $R_{\rm pO}$ at 9.62 TeV
+---
+data_file: data8.yaml
+description: Nuclear modification factor $R_{\rm OO}/R_{\rm pO}^{2}$ for $\pi^{0}$ meson production with $R_{\rm OO}$ at 5.36 TeV and $R_{\rm pO}$ at 9.62 TeV.
+keywords:
+- {name: observables, values: [RAA/RPA/RPA]}
+- {name: reactions, values: [O O --> PI0 X]}
+- {name: reactions, values: [P O --> PI0 X]}
+- {name: reactions, values: [P P --> PI0 X]}
+- {name: cmenergies, values: [5360]}
+- {name: cmenergies, values: [9620]}
+location: Data from Figure 3.
+name: $\pi^{0}$ $R_{\rm OO}/R_{\rm pO}^{2}$ at 5.36 TeV/9.62 TeV
