@@ -160,6 +160,8 @@ namespace Datum
   _entries       = h._entries;
   _avgValues        = h._avgValues;
   _avgUncertainties = h._avgUncertainties;
+  _commonSystPlus   = h._commonSystPlus;
+  _commonSystMinus  = h._commonSystMinus;
   }
 
   void Histogram::checkCompatible(const Histogram & h, const char * source) const
@@ -301,6 +303,7 @@ namespace Datum
     _avgValues[k]        *= coefficient;
     _avgUncertainties[k] *= absCoefficient;
     }
+  if (coefficient<0) setCommonSyst(_commonSystMinus,_commonSystPlus);   // relative: the sides swap
   }
 
   // add a constant to every bin value; empty bins become bins with one entry
@@ -326,6 +329,7 @@ namespace Datum
     double uncertainty = statErrorSum(valueUncertainty(k),coefficient*h.valueUncertainty(k));
     setValue(k,entries,sum,uncertainty);
     }
+  setCommonSystOf(*this,h,coefficient<0);
   }
 
   // this = this * (coefficient*h)
@@ -342,6 +346,7 @@ namespace Datum
     double e2 = std::fabs(coefficient)*h.valueUncertainty(k);
     setValue(k,1,v1*v2,statErrorProduct(v1,e1,v2,e2));
     }
+  setCommonSystOf(*this,h,coefficient<0);
   }
 
   // this = this / (coefficient*h); bins where the divisor vanishes are set empty
@@ -358,6 +363,7 @@ namespace Datum
     double e2 = std::fabs(coefficient)*h.valueUncertainty(k);
     setValue(k,1,v1/v2,statErrorRatio(v1,e1,v2,e2));
     }
+  setCommonSystOf(*this,h,coefficient>=0);   // the divisor enters with a negative derivative: its sides swap
   }
 
   // replace every bin value by its inverse; empty or zero bins are set empty
@@ -372,6 +378,7 @@ namespace Datum
     double invUncertainty = valueUncertainty(k)*inv*inv;
     setValue(k,1,inv,invUncertainty);   // entry count is no longer meaningful
     }
+  setCommonSyst(_commonSystMinus,_commonSystPlus);   // d(1/v)/dv < 0: the sides swap
   }
 
   void Histogram::setAsSumOf(const Histogram & h1, const Histogram & h2,
@@ -801,6 +808,7 @@ namespace Datum
   result.setPrecision(precision());
   result.setName(name());
   result.setTitle(title());
+  result.setCommonSyst(_commonSystPlus,_commonSystMinus);
   unsigned int nTarget = partition.nBinsTotal();
   std::vector<long>   entries(nTarget,0);
   std::vector<double> values(nTarget,0.0), errors2(nTarget,0.0);
@@ -1158,6 +1166,40 @@ namespace Datum
   statErrorAt(index);   // same index check
   return 0.0;           // a histogram has no systematic uncertainty
   }
+
+  double Histogram::binSystPlusAtGlobal(unsigned int /*k*/) const
+  {
+  throw MathException("A Histogram has no systematic uncertainties per bin: use a HistogramSyst",__FUNCTION__);
+  }
+
+  double Histogram::binSystMinusAtGlobal(unsigned int /*k*/) const
+  {
+  throw MathException("A Histogram has no systematic uncertainties per bin: use a HistogramSyst",__FUNCTION__);
+  }
+
+  void Histogram::setBinSystAtGlobal(unsigned int /*k*/, double /*plus*/, double /*minus*/)
+  {
+  throw MathException("A Histogram has no systematic uncertainties per bin: use a HistogramSyst",__FUNCTION__);
+  }
+
+  double Histogram::binSystPlusAt(unsigned int i) const                                   { return binSystPlusAtGlobal(binIndex(i,true)); }
+  double Histogram::binSystPlusAt(unsigned int i0, unsigned int i1) const                 { return binSystPlusAtGlobal(binIndex(i0,i1,true)); }
+  double Histogram::binSystPlusAt(unsigned int i0, unsigned int i1, unsigned int i2) const{ return binSystPlusAtGlobal(binIndex(i0,i1,i2,true)); }
+  double Histogram::binSystPlusAt(const std::vector<unsigned int> & indices) const        { return binSystPlusAtGlobal(binIndex(indices,true)); }
+  double Histogram::binSystMinusAt(unsigned int i) const                                   { return binSystMinusAtGlobal(binIndex(i,true)); }
+  double Histogram::binSystMinusAt(unsigned int i0, unsigned int i1) const                 { return binSystMinusAtGlobal(binIndex(i0,i1,true)); }
+  double Histogram::binSystMinusAt(unsigned int i0, unsigned int i1, unsigned int i2) const{ return binSystMinusAtGlobal(binIndex(i0,i1,i2,true)); }
+  double Histogram::binSystMinusAt(const std::vector<unsigned int> & indices) const        { return binSystMinusAtGlobal(binIndex(indices,true)); }
+  double Histogram::binSystAt(unsigned int i) const                                   { return binSystAtGlobal(binIndex(i,true)); }
+  double Histogram::binSystAt(unsigned int i0, unsigned int i1) const                 { return binSystAtGlobal(binIndex(i0,i1,true)); }
+  double Histogram::binSystAt(unsigned int i0, unsigned int i1, unsigned int i2) const{ return binSystAtGlobal(binIndex(i0,i1,i2,true)); }
+  double Histogram::binSystAt(const std::vector<unsigned int> & indices) const        { return binSystAtGlobal(binIndex(indices,true)); }
+  void Histogram::setBinSystAt(unsigned int i, double plus, double minus)                  { setBinSystAtGlobal(binIndex(i,true),plus,minus); }
+  void Histogram::setBinSystAt(unsigned int i0, unsigned int i1, double plus, double minus){ setBinSystAtGlobal(binIndex(i0,i1,true),plus,minus); }
+  void Histogram::setBinSystAt(unsigned int i0, unsigned int i1, unsigned int i2, double plus, double minus)
+  { setBinSystAtGlobal(binIndex(i0,i1,i2,true),plus,minus); }
+  void Histogram::setBinSystAt(const std::vector<unsigned int> & indices, double plus, double minus)
+  { setBinSystAtGlobal(binIndex(indices,true),plus,minus); }
 
   DataPoint2D Histogram::point(unsigned int index) const
   {

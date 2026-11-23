@@ -1,5 +1,6 @@
 #ifndef DATUM_Histogram
 #define DATUM_Histogram
+#include <algorithm>
 #include <vector>
 #include <cmath>
 #include <ostream>
@@ -376,7 +377,7 @@ namespace Datum
   //! @brief Storage precision. @return kFloat or kDouble
   Precision precision() const { return _avgValues.isDouble() ? kDouble : kFloat; }
   //! @brief Set the storage precision, converting the stored values. @param precision kFloat or kDouble
-  void setPrecision(Precision precision) { _avgValues.setDouble(precision==kDouble); _avgUncertainties.setDouble(precision==kDouble); }
+  virtual void setPrecision(Precision precision) { _avgValues.setDouble(precision==kDouble); _avgUncertainties.setDouble(precision==kDouble); }
   //! @name Access by global bin index
   //! The global index k runs from 0 to nBinsTotal()-1 over all bins, axis 0 fastest: k = i0 + n0*(i1 + n1*i2).
   //! Values are bin values (entries*average), with their uncertainties. Setting the value or uncertainty of an empty bin
@@ -636,7 +637,7 @@ namespace Datum
   //! @brief Add a constant to every bin value. Uncertainties are unchanged; empty bins become bins with one entry.
   //! @param value constant to add
   //!
-  void add(double value);
+  virtual void add(double value);
 
   //!
   //! @brief Add coefficient*h bin by bin: entries summed, values combined, uncertainties added in quadrature.
@@ -654,7 +655,7 @@ namespace Datum
   //! @param coefficient coefficient multiplying rhs
   //! @throws Exception if the binnings differ
   //!
-  void multiplyBy(const Histogram & rhs, double coefficient=1.0);
+  virtual void multiplyBy(const Histogram & rhs, double coefficient=1.0);
 
   //!
   //! @brief Divide by coefficient*rhs bin by bin.
@@ -664,14 +665,14 @@ namespace Datum
   //! @param coefficient coefficient multiplying rhs
   //! @throws Exception if the binnings differ
   //!
-  void divideBy(const Histogram & rhs, double coefficient=1.0);
+  virtual void divideBy(const Histogram & rhs, double coefficient=1.0);
 
   //!
   //! @brief Replace every bin value v by 1/v, with uncertainty e/v^2.
   //!
   //! Result bins hold one entry; empty bins and bins with a zero value are set empty.
   //!
-  void inverse();
+  virtual void inverse();
 
   //!
   //! @brief Set this histogram to coefficient1*h1 + coefficient2*h2.
@@ -708,7 +709,7 @@ namespace Datum
   //! @param coefficient2 coefficient multiplying h2
   //! @throws Exception if h1 and h2 have different binnings
   //!
-  void setAsProductOf(const Histogram & h1, const Histogram & h2,
+  virtual void setAsProductOf(const Histogram & h1, const Histogram & h2,
                       double coefficient1=1.0, double coefficient2=1.0);
 
   //!
@@ -720,7 +721,7 @@ namespace Datum
   //! @throws Exception if the list is empty, the sizes differ or the binnings differ
   //! @throws NullPointerException if a histogram pointer is null
   //!
-  void setAsProductOf(const std::vector<const Histogram *> & histograms,
+  virtual void setAsProductOf(const std::vector<const Histogram *> & histograms,
                       const std::vector<double> & coefficients);
 
   //!
@@ -733,7 +734,7 @@ namespace Datum
   //! @param coefficient2 coefficient multiplying h2
   //! @throws Exception if h1 and h2 have different binnings
   //!
-  void setAsRatioOf(const Histogram & h1, const Histogram & h2,
+  virtual void setAsRatioOf(const Histogram & h1, const Histogram & h2,
                     double coefficient1=1.0, double coefficient2=1.0);
 
   //! @}
@@ -1295,9 +1296,70 @@ namespace Datum
   //! @brief Uncertainty of the value of a bin. @param index global bin index @return uncertainty of the bin value
   //! @throws IndexOutOfBoundException if index>=size()
   double statErrorAt(unsigned int index) const override;
-  //! @brief Systematic uncertainty of a bin: 0, a histogram has none. @param index global bin index @return 0
-  //! @throws IndexOutOfBoundException if index>=size()
+  //! @brief Systematic uncertainty of a bin: 0, a histogram has none (HistogramSyst: the larger side).
+  //! @param index global bin index @return 0 @throws IndexOutOfBoundException if index>=size()
   double sysErrorAt(unsigned int index) const override;
+
+  //! @name Systematic uncertainties of the bins (HistogramSyst)
+  //! A Histogram has no systematic uncertainties per bin: hasSystUncertainties() is false and the functions below
+  //! throw MathException. The derived class HistogramSyst stores an upper and a lower systematic uncertainty of the
+  //! value of each bin and implements them. The common systematic uncertainty (DataPoints::setCommonSyst()) is
+  //! available in both classes.
+  //! @{
+
+  //! @brief Whether this histogram stores systematic uncertainties per bin. @return false (HistogramSyst: true)
+  virtual bool hasSystUncertainties() const { return false; }
+  //! @brief Upper systematic uncertainty of the value of a bin. @param k global bin index @return uncertainty
+  //! @throws MathException (a Histogram has none)
+  virtual double binSystPlusAtGlobal(unsigned int k) const;
+  //! @brief Lower systematic uncertainty of the value of a bin. @param k global bin index @return uncertainty
+  //! @throws MathException (a Histogram has none)
+  virtual double binSystMinusAtGlobal(unsigned int k) const;
+  //! @brief Set the upper and lower systematic uncertainties of the value of a bin. @param k global bin index
+  //! @param plus upper uncertainty (>= 0) @param minus lower uncertainty (>= 0) @throws MathException (a Histogram has none)
+  virtual void setBinSystAtGlobal(unsigned int k, double plus, double minus);
+  //! @brief Systematic uncertainty of a bin: the larger side. @param k global bin index @return uncertainty
+  double binSystAtGlobal(unsigned int k) const { return std::max(binSystPlusAtGlobal(k),binSystMinusAtGlobal(k)); }
+  //! @brief Set a symmetric systematic uncertainty of a bin. @param k global bin index @param syst uncertainty (>= 0)
+  void setBinSystAtGlobal(unsigned int k, double syst) { setBinSystAtGlobal(k,syst,syst); }
+
+  //! @brief Upper systematic uncertainty of a bin (rank 1). @param i bin index @return uncertainty
+  double binSystPlusAt(unsigned int i) const;
+  //! @brief Upper systematic uncertainty of a bin (rank 2). @param i0 index along axis 0 @param i1 index along axis 1 @return uncertainty
+  double binSystPlusAt(unsigned int i0, unsigned int i1) const;
+  //! @brief Upper systematic uncertainty of a bin (rank 3). @param i0 axis 0 @param i1 axis 1 @param i2 axis 2 @return uncertainty
+  double binSystPlusAt(unsigned int i0, unsigned int i1, unsigned int i2) const;
+  //! @brief Upper systematic uncertainty of a bin (any rank). @param indices bin indices along each axis @return uncertainty
+  double binSystPlusAt(const std::vector<unsigned int> & indices) const;
+  //! @brief Lower systematic uncertainty of a bin (rank 1). @param i bin index @return uncertainty
+  double binSystMinusAt(unsigned int i) const;
+  //! @brief Lower systematic uncertainty of a bin (rank 2). @param i0 index along axis 0 @param i1 index along axis 1 @return uncertainty
+  double binSystMinusAt(unsigned int i0, unsigned int i1) const;
+  //! @brief Lower systematic uncertainty of a bin (rank 3). @param i0 axis 0 @param i1 axis 1 @param i2 axis 2 @return uncertainty
+  double binSystMinusAt(unsigned int i0, unsigned int i1, unsigned int i2) const;
+  //! @brief Lower systematic uncertainty of a bin (any rank). @param indices bin indices along each axis @return uncertainty
+  double binSystMinusAt(const std::vector<unsigned int> & indices) const;
+  //! @brief Systematic uncertainty of a bin, the larger side (rank 1). @param i bin index @return uncertainty
+  double binSystAt(unsigned int i) const;
+  //! @brief Systematic uncertainty of a bin, the larger side (rank 2). @param i0 axis 0 @param i1 axis 1 @return uncertainty
+  double binSystAt(unsigned int i0, unsigned int i1) const;
+  //! @brief Systematic uncertainty of a bin, the larger side (rank 3). @param i0 axis 0 @param i1 axis 1 @param i2 axis 2 @return uncertainty
+  double binSystAt(unsigned int i0, unsigned int i1, unsigned int i2) const;
+  //! @brief Systematic uncertainty of a bin, the larger side (any rank). @param indices bin indices @return uncertainty
+  double binSystAt(const std::vector<unsigned int> & indices) const;
+  //! @brief Set the systematic uncertainties of a bin (rank 1; pass plus = minus for a symmetric one).
+  //! @param i bin index @param plus upper uncertainty @param minus lower uncertainty
+  void setBinSystAt(unsigned int i, double plus, double minus);
+  //! @brief Set the systematic uncertainties of a bin (rank 2). @param i0 axis 0 @param i1 axis 1
+  //! @param plus upper uncertainty @param minus lower uncertainty
+  void setBinSystAt(unsigned int i0, unsigned int i1, double plus, double minus);
+  //! @brief Set the systematic uncertainties of a bin (rank 3). @param i0 axis 0 @param i1 axis 1 @param i2 axis 2
+  //! @param plus upper uncertainty @param minus lower uncertainty
+  void setBinSystAt(unsigned int i0, unsigned int i1, unsigned int i2, double plus, double minus);
+  //! @brief Set the systematic uncertainties of a bin (any rank). @param indices bin indices along each axis
+  //! @param plus upper uncertainty @param minus lower uncertainty
+  void setBinSystAt(const std::vector<unsigned int> & indices, double plus, double minus);
+  //! @}
 
   //!
   //! @brief Data point of a bin: x = bin center, y = bin value, statistical uncertainty = uncertainty of the bin value,
