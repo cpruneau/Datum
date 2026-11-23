@@ -178,6 +178,77 @@ namespace Datum
   void endEdit();
   //! @}
 
+  //! @name Regrouping
+  //!
+  //! Gather histograms and functions chosen by the pattern of their names into common graphs: e.g. the transverse
+  //! momentum spectra "*_pt" of several particles, or of several conditions, overlaid. The items matched (in the order of
+  //! the document) are moved into new graphs of new canvases, placed in the window of the first one, after its canvas;
+  //! at most itemsPerGraph items per graph and graphsPerCanvas graphs per canvas, more graphs and canvases being made as
+  //! needed; with canvasesPerWindow, the new canvases go into new windows of at most that many canvases. The new
+  //! graphs take the style of the graph of the first item (axes, margins, legend), the new canvases that of its canvas
+  //! (size, background), the new windows that of its window. Graphs and canvases left empty are removed, and the grids
+  //! (columns x rows) of the windows and canvases changed are fitted to what they hold, so that all is shown: a grid
+  //! given in the file keeps its number of columns (fewer if it holds fewer elements) and gets the rows needed; one not
+  //! given is chosen when the file is drawn. One step of undo.
+  //!
+  //! Patterns: wildcards, * (any text) and ? (one character); several patterns separated by ';' match items matching any
+  //! of them. A pattern holding '/' is matched against the whole path of a histogram in its file (e.g. "MB_*/n1_pt"),
+  //! one without '/' against the name of the histogram (the last part of its path, e.g. "*_pt"), then, if that fails,
+  //! against the whole path (e.g. "*PiP*" for the histograms of a folder MB_PiP). A function is matched
+  //! by its label, or its class. With regularExpression, the pattern is an ECMAScript regular expression searched in
+  //! the path (or the label of a function).
+  //!
+  //! Items without a label are given one that tells them apart in the legend (labelItems): the text matched by the
+  //! wildcards (or the groups of a regular expression), or, if that is not distinct, the parts of their input and path
+  //! that differ.
+  //! @{
+
+  //! @brief How regroup() gathers items.
+  struct RegroupOptions
+  {
+    String pattern;                   //!< wildcard patterns separated by ';', or a regular expression
+    bool regularExpression = false;   //!< the pattern is a regular expression
+    bool caseSensitive = true;        //!< upper and lower case differ
+    Path scope;                       //!< element searched (a window, canvas or graph; empty: the whole document)
+    int itemsPerGraph = 0;            //!< largest number of items in a graph (0: no limit)
+    int graphsPerCanvas = 0;          //!< largest number of graphs in a canvas (0: no limit)
+    int canvasesPerWindow = 0;        //!< largest number of new canvases in a window (0: all in the window of the first
+                                      //!< item); with a limit, the new canvases go into new windows, after that one
+    String canvasName;                //!< name of the new canvases ("": made from the pattern)
+    String graphTitle;                //!< title of the new graphs ("": none)
+    bool labelItems = true;           //!< label the items that have no label
+    bool removeEmpty = true;          //!< remove the graphs and canvases left empty
+  };
+  //! @brief One item matched.
+  struct RegroupEntry
+  {
+    Path path;        //!< path of the item now
+    String name;      //!< text matched (path of a histogram, label or class of a function)
+    String location;  //!< where it is now, e.g. "Spectra / pt / graph 2"
+    String label;     //!< label it will have in the legend ("": its own, or none)
+  };
+  //! @brief What regroup() would do.
+  struct RegroupPlan
+  {
+    std::vector<RegroupEntry> entries;        //!< items matched, in the order of the document
+    std::vector<std::vector<int>> graphs;     //!< entries of each new graph
+    std::vector<std::vector<int>> canvases;   //!< new graphs of each new canvas
+    std::vector<String> canvasNames;          //!< names of the new canvases
+    Path window;                              //!< window receiving the new canvases
+    std::vector<std::vector<int>> windows;    //!< new canvases of each new window (empty: all go into window)
+    std::vector<String> windowTitles;         //!< titles of the new windows
+    String error;                             //!< why nothing would be done ("" if something would)
+  };
+  //! @brief What regroup() would do, without changing anything (the preview). @param options options @return plan
+  RegroupPlan planRegroup(const RegroupOptions & options) const;
+  //!
+  //! @brief Move the items matched by a pattern into new graphs and canvases (see above).
+  //! @param options options @param plan set to what was done (may be null)
+  //! @return path of the first new canvas, or an empty path with nothing done (see plan->error)
+  //!
+  Path regroup(const RegroupOptions & options, RegroupPlan * plan=nullptr);
+  //! @}
+
   //! @name Undo
   //! @{
   bool canUndo() const { return !_undo.empty(); }   //!< Whether an edit can be undone
@@ -212,11 +283,22 @@ namespace Datum
   //! @param before canvas as drawn @param after canvas now @return true if the element changed
   //!
   static bool syncCanvas(XmlElement & canvas, const XmlElement & before, const XmlElement & after);
+  //!
+  //! @brief Fit the grid of a window (its canvases) or canvas (its graphs) given in the file to the n elements it holds:
+  //! the number of columns kept (n if fewer; more if the grid cannot hold the n elements, for a grid as square as
+  //! possible), the rows needed; its width and height (if given) follow, in proportion,
+  //! so that each cell keeps its size (a window or canvas left with fewer elements shrinks; one that gets more grows,
+  //! up to 1800 x 1100 or its size). A grid not given is chosen when the file is drawn. Done by move(), remove(),
+  //! paste() and regroup() on the element left and on the element that received. @param e element @param n elements
+  //!
+  static void fitGrid(XmlElement & e, int n);
   //! @brief Path relative to a directory if it is below it (or near it: "../a/b"), absolute otherwise.
   //! @param path absolute path @param directory directory @return path
   static String relativePath(const String & path, const String & directory);
 
   private:
+  //! @brief Fit the grid of the element of a path (a window or a canvas) to its canvases or graphs. @param path path
+  void fitGridAt(const Path & path);
   XmlDocument _document;   //!< the file
   String _fileName;   //!< file read or written last
   String _untitled = "Untitled";   //!< name of a new document

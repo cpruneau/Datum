@@ -307,6 +307,13 @@
       <PARAMETER name="p" value="0.5" type="LowHigh" minimum="0" maximum="1"/>
     </VARIANT>
   </FUNCTION>
+  <FUNCTION name="Boxcar" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="width" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
   <FUNCTION name="Cauchy" rank="1" composite="false">
     <VARIANT nParameters="3" default="true">
       <PARAMETER name="amplitude" value="1" type="Free"/>
@@ -851,6 +858,22 @@
       <PARAMETER name="c1" value="0" type="Free"/>
       <PARAMETER name="c2" value="0" type="Free"/>
       <PARAMETER name="c3" value="0" type="Free"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="DampedOscillation" rank="1" composite="false">
+    <VARIANT nParameters="5" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="tau" value="1" type="Low" minimum="0"/>
+      <PARAMETER name="omega" value="6.2831853071795862" type="Free"/>
+      <PARAMETER name="phi" value="0" type="Free"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="DiracComb" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="weight" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="period" value="1" type="Low" minimum="0"/>
     </VARIANT>
   </FUNCTION>
   <FUNCTION name="Dirichlet" rank="2" composite="false">
@@ -1900,6 +1923,36 @@
       <PARAMETER name="s" value="0" type="Free"/>
     </VARIANT>
   </FUNCTION>
+  <FUNCTION name="GammaDistribution" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="shape" value="2" type="Low" minimum="0"/>
+      <PARAMETER name="scale" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="GaussianWavePacket" rank="1" composite="false">
+    <VARIANT nParameters="5" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="sigma" value="1" type="Low" minimum="0"/>
+      <PARAMETER name="k0" value="5" type="Free"/>
+      <PARAMETER name="phi" value="0" type="Free"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="HeavisideStep" rank="1" composite="false">
+    <VARIANT nParameters="2" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="HermiteFunction" rank="1" composite="false">
+    <VARIANT nParameters="4" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="scale" value="1" type="Low" minimum="0"/>
+      <PARAMETER name="order" value="0" type="Fixed"/>
+    </VARIANT>
+  </FUNCTION>
   <FUNCTION name="HermiteSeries" rank="1" composite="false">
     <VARIANT nParameters="3">
       <PARAMETER name="c0" value="1" type="Free"/>
@@ -2418,6 +2471,13 @@
       <PARAMETER name="c27" value="0" type="Free"/>
       <PARAMETER name="x0" value="0" type="Fixed"/>
       <PARAMETER name="scale" value="1" type="Fixed"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="HyperbolicSecant" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="scale" value="1" type="Low" minimum="0"/>
     </VARIANT>
   </FUNCTION>
   <FUNCTION name="Hypergeometric" rank="1" composite="false">
@@ -4026,6 +4086,13 @@
       <PARAMETER name="correlation" value="0" type="LowHigh" minimum="-0.999" maximum="0.999"/>
     </VARIANT>
   </FUNCTION>
+  <FUNCTION name="OneSidedExponential" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="tau" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
   <FUNCTION name="Parabolic" rank="1" composite="false">
     <VARIANT nParameters="3" default="true">
       <PARAMETER name="c0" value="0" type="Free"/>
@@ -4669,12 +4736,41 @@
       <PARAMETER name="c4" value="0" type="Free"/>
     </VARIANT>
   </FUNCTION>
+  <FUNCTION name="Sinc" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="q" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
   <FUNCTION name="Student" rank="1" composite="false">
     <VARIANT nParameters="4" default="true">
       <PARAMETER name="amplitude" value="1" type="Free"/>
       <PARAMETER name="ndf" value="1" type="Low" minimum="0"/>
       <PARAMETER name="location" value="0" type="Free"/>
       <PARAMETER name="scale" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="Triangle" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="halfWidth" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="TwoSidedExponential" rank="1" composite="false">
+    <VARIANT nParameters="3" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="tau" value="1" type="Low" minimum="0"/>
+    </VARIANT>
+  </FUNCTION>
+  <FUNCTION name="Voigt" rank="1" composite="false">
+    <VARIANT nParameters="4" default="true">
+      <PARAMETER name="amplitude" value="1" type="Free"/>
+      <PARAMETER name="position" value="0" type="Free"/>
+      <PARAMETER name="sigma" value="1" type="Low" minimum="0"/>
+      <PARAMETER name="gamma" value="1" type="Low" minimum="0"/>
     </VARIANT>
   </FUNCTION>
   <FUNCTION name="Weibull" rank="1" composite="false">

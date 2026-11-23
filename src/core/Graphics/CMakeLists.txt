@@ -86,6 +86,7 @@ PdfPainter.cpp
 PlotSpec.cpp
 PlotTemplate.cpp
 PlotDocument.cpp
+PlotRegroup.cpp
 PptxPainter.cpp
 TextAttributes.cpp
 TextRenderer.cpp)
@@ -153,3 +154,6 @@ add_test(NAME PlotTemplate COMMAND TestPlotTemplate)
 add_executable(TestPlotDocument tests/TestPlotDocument.cpp)
 target_link_libraries(TestPlotDocument Graphics Math Base)
 add_test(NAME PlotDocument COMMAND TestPlotDocument)
+add_executable(TestPlotRegroup tests/TestPlotRegroup.cpp)
+target_link_libraries(TestPlotRegroup Graphics Math Base)
+add_test(NAME PlotRegroup COMMAND TestPlotRegroup)

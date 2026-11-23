@@ -32,8 +32,15 @@ namespace Datum
   //! folders between, e.g. "MB_PiP_PiM") and name (e.g. "R2_DyDphi"). Which names and combinations are plotted is
   //! chosen by task (all at first), by hand (setNameSelected(), setCombinationSelected()) or with patterns
   //! (select()). makeSpec() then lays them out: per task, one window (or several, of at most maxCanvases canvases)
-  //! holding either one canvas per histogram name with a graph per combination, or one canvas per combination with
-  //! a graph per histogram name; graphs of histograms of rank 1 can also overlay the combinations.
+  //! holding one of
+  //! - (default) one canvas per family of related names, with a graph per name and combination. A family is the names
+  //!   of one rank sharing their first word (the text before the first '_': "n1" for n1_pt, n1_eta, n1_phi); the
+  //!   names alone in their family share one canvas ("others"). A family with more graphs than maxGraphs gets a
+  //!   canvas per combination (then several if needed);
+  //! - one canvas per histogram name with a graph per combination;
+  //! - one canvas per combination with a graph per histogram name.
+  //! Graphs of histograms of rank 1 can also overlay the combinations. The canvases of one family (name, or
+  //! combination) are kept in one window unless they are more than a window holds.
   //! @code
   //!   PlotTemplate t;
   //!   int input = t.addInput("pairs", "derived.datum");
@@ -60,13 +67,14 @@ namespace Datum
   //! How the histograms are laid out
   struct Options
   {
-  //! One canvas per histogram name (a graph per combination), or one canvas per combination (a graph per name)
-  enum Grouping { kByHistogram, kByCombination };
-  Grouping grouping = kByHistogram;   //!< layout of the canvases
+  //! One canvas per histogram name (a graph per combination), one canvas per combination (a graph per name), or
+  //! one canvas per family of related names (a graph per name and combination)
+  enum Grouping { kByHistogram, kByCombination, kByFamily };
+  Grouping grouping = kByFamily;      //!< layout of the canvases
   bool overlay = false;               //!< histograms of rank 1 of a canvas overlaid in one graph (at most maxOverlay)
   int  maxOverlay = 8;                //!< histograms per graph when overlaid
   int  maxGraphs = 12;                //!< graphs per canvas (more: several canvases)
-  int  maxCanvases = 6;               //!< canvases per window (more: several windows)
+  int  maxCanvases = 4;               //!< canvases per window (more: several windows)
   String outputDirectory = "figures"; //!< directory of the outputs (Output element)
   String title = "Plots";             //!< title of the outputs
   bool printFiles = true;             //!< each canvas printed to <name>.pdf (attribute file)

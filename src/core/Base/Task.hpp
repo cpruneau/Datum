@@ -106,6 +106,17 @@ namespace Datum
   //! @brief Finalize the subtasks and stop the timer.
   virtual void finalize();
   //!
+  //! @brief Whether this task (an event generator) can produce its events in pT-hat bins weighted by their cross
+  //! sections: it then accepts the keys \<name\>:PTHAT_MIN and \<name\>:PTHAT_MAX (GeV/c; negative: not set), which
+  //! restrict the hard process to that pT-hat range, and saves in its folder of the output file, at the end of the run,
+  //! the cross section of the run (DATUM_SIGMA_GEN, mb), its uncertainty (DATUM_SIGMA_ERR), the events generated
+  //! (DATUM_N_ACCEPTED) and the range (DATUM_PTHAT_MIN, DATUM_PTHAT_MAX): SubSampleStatCalculator adds the bins of a
+  //! production with the weights sigma/N. The template of the class says so (attribute ptHatBinning="true" of its TASK
+  //! element, see createXmlTemplate()), so that RunDatum offers the pT-hat bins only for workflows with such a task.
+  //! @return false here (PythiaEventGenerator and HerwigEventGenerator: true)
+  //!
+  virtual bool hasWeightedPtHatBinning() const { return false; }
+  //!
   //! @brief Add the histograms of this task and of its subtasks to the folder written to the output file of the job
   //! (one sub-folder per task that has histograms, named after it; see Datum.cxx). Here: those of the subtasks.
   //! @param top folder of the job
@@ -233,7 +244,8 @@ namespace Datum
   //! @brief Template of this task alone, as a standalone XML document: root element Datum (attribute type="template")
   //! holding the TASK element of this task filled with its default parameters and their types (see
   //! defineXmlElement(); subtasks are not included). Meant for editors of configurations: the template lists every
-  //! parameter a task of this class accepts.
+  //! parameter a task of this class accepts. The TASK element has the attribute ptHatBinning="true" for the classes
+  //! whose hasWeightedPtHatBinning() is true.
   //! @return document
   //!
   XmlDocument createXmlTemplate();

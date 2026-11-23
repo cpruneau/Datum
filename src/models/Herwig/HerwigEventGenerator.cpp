@@ -9,6 +9,7 @@
  * *********************************************************************/
 //! @file HerwigEventGenerator.cpp
 //! @brief Implementation of HerwigEventGenerator (through Herwig::API and ThePEG).
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -20,11 +21,14 @@
 #include "Event.hpp"
 #include "Exceptions.hpp"
 #include "FileSystem.hpp"
+#include "Folder.hpp"
+#include "LongParameter.hpp"
 #include "Particle.hpp"
 #include "ParticleDb.hpp"
 #include "ParticleFilter.hpp"
 #include "ParticleType.hpp"
 #include "PrintHelpers.hpp"
+#include "StringParameter.hpp"
 // Herwig and ThePEG last (their names stay in their namespaces)
 #include "Herwig/API/HerwigAPI.h"
 #include "Herwig/API/HerwigUI.h"
@@ -48,8 +52,10 @@ class HerwigSettings : public Herwig::HerwigUI
 {
 public:
   HerwigSettings(Herwig::RunMode::Mode mode, const std::string & repository, const std::string & input,
-                 const std::string & setup="", int seed=0, const std::string & tag="")
-  : _mode(mode), _repository(repository), _input(input), _setup(setup), _seed(seed), _tag(tag) { }
+                 const std::string & setup="", int seed=0, const std::string & tag="",
+                 const std::vector<std::string> & readDirectories=std::vector<std::string>())
+  : _mode(mode), _repository(repository), _input(input), _setup(setup), _seed(seed), _tag(tag),
+    _read(readDirectories) { }
   Herwig::RunMode::Mode runMode() const override { return _mode; }
   std::string repository() const override { return _repository; }
   std::string inputfile() const override { return _input; }
@@ -58,7 +64,7 @@ public:
   bool tics() const override { return false; }
   std::string tag() const override { return _tag; }
   std::string integrationList() const override { return ""; }
-  const std::vector<std::string> & prependReadDirectories() const override { return _none; }
+  const std::vector<std::string> & prependReadDirectories() const override { return _read; }
   const std::vector<std::string> & appendReadDirectories() const override { return _none; }
   long N() const override { return 0; }
   int seed() const override { return _seed; }
@@ -78,6 +84,7 @@ private:
   std::string _repository, _input, _setup;
   int _seed;
   std::string _tag;
+  std::vector<std::string> _read;
   std::vector<std::string> _none;
 };
 
@@ -107,6 +114,71 @@ std::string savedRunName(const std::filesystem::path & input)
     }
   return name;
 }
+
+//! A momentum or mass in GeV as a repository value (e.g. 12.5*GeV).
+std::string gev(double value)
+{
+  char text[64];
+  std::snprintf(text, sizeof(text), "%.17g*GeV", value);
+  return text;
+}
+
+//! Repository commands restricting the hard process to the pT-hat range [ptMin, ptMax) (negative: not set): the kT of
+//! the outgoing partons (JetKtCut), and the mass of the hard process lowered to 2 ptMin (it is at least 2 pT-hat).
+std::vector<std::string> ptHatCommands(double ptMin, double ptMax)
+{
+  std::vector<std::string> commands;
+  if (ptMin>=0.0)
+    {
+    commands.push_back("set /Herwig/Cuts/JetKtCut:MinKT " + gev(ptMin));
+    commands.push_back("set /Herwig/Cuts/QCDCuts:MHatMin " + gev(2.0*ptMin));
+    }
+  if (ptMax>=0.0) commands.push_back("set /Herwig/Cuts/JetKtCut:MaxKT " + gev(ptMax));
+  return commands;
+}
+
+//! Text of an input file with the commands inserted before its last saverun command, which then saves <run>_pthat;
+//! the name of that run file is returned in runName ("" if the file has no saverun command).
+std::string ptHatInput(const std::filesystem::path & input, const std::vector<std::string> & commands,
+                       std::string & runName)
+{
+  std::ifstream in(input);
+  std::vector<std::string> lines;
+  std::string line;
+  int last = -1;
+  while (std::getline(in, line))
+    {
+    std::istringstream words(line.substr(0, line.find('#')));
+    std::string command;
+    if (words >> command && command == "saverun") last = int(lines.size());
+    lines.push_back(line);
+    }
+  runName.clear();
+  if (last<0) return "";
+  std::istringstream words(lines[last].substr(0, lines[last].find('#')));
+  std::string command, run, generator;
+  words >> command >> run >> generator;
+  std::ostringstream out;
+  for (int k=0; k<int(lines.size()); k++)
+    {
+    if (k!=last) { out << lines[k] << "\n"; continue; }
+    out << "# Datum: pT-hat range of the hard process (HerwigEventGenerator PTHAT_MIN, PTHAT_MAX)\n";
+    out << "cd /\n";
+    for (const std::string & c : commands) out << c << "\n";
+    out << "saverun " << run << "_pthat " << generator << "\n";
+    }
+  runName = run + "_pthat.run";
+  return out.str();
+}
+
+//! Content of a file ("" if it cannot be read).
+std::string fileText(const std::filesystem::path & path)
+{
+  std::ifstream in(path);
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
 } // namespace
 
 //! The event generator of Herwig (a ThePEG::EventGenerator, reference counted).
@@ -123,7 +195,12 @@ herwig(nullptr),
 savePhotons(true),
 saveNeutrinos(true),
 nWeighted(0),
-nFailed(0)
+nFailed(0),
+nAccepted(0),
+ptHatMin(-1.0),
+ptHatMax(-1.0),
+sigmaGen(-1.0),
+sigmaErr(0.0)
 {
   appendClassName("HerwigEventGenerator");
   setMinimumReportLevel(Object::kInfo);
@@ -138,7 +215,12 @@ herwig(nullptr),
 savePhotons(source.savePhotons),
 saveNeutrinos(source.saveNeutrinos),
 nWeighted(0),
-nFailed(0)
+nFailed(0),
+nAccepted(0),
+ptHatMin(source.ptHatMin),
+ptHatMax(source.ptHatMax),
+sigmaGen(source.sigmaGen),
+sigmaErr(source.sigmaErr)
 { }
 
 HerwigEventGenerator::~HerwigEventGenerator()
@@ -153,6 +235,8 @@ HerwigEventGenerator & HerwigEventGenerator::operator=(const HerwigEventGenerato
     EventProcessor::operator=(rhs);
     savePhotons   = rhs.savePhotons;
     saveNeutrinos = rhs.saveNeutrinos;
+    ptHatMin = rhs.ptHatMin;  ptHatMax = rhs.ptHatMax;
+    sigmaGen = rhs.sigmaGen;  sigmaErr = rhs.sigmaErr;
     }
   return *this;
 }
@@ -172,6 +256,8 @@ void HerwigEventGenerator::setDefaultConfiguration()
   _configuration.addProperty(createKey(taskName,"SavePhotons"),      true);
   _configuration.addProperty(createKey(taskName,"SaveNeutrinos"),    true);
   _configuration.addProperty(createKey(taskName,"Print:Statistics"), true);
+  _configuration.addProperty(createKey(taskName,"PTHAT_MIN"),        -1.0);
+  _configuration.addProperty(createKey(taskName,"PTHAT_MAX"),        -1.0);
   for (int k=0; k<kNHerwigOptions; k++)
     {
     String option = "Option"; option += k;
@@ -191,6 +277,16 @@ void HerwigEventGenerator::initialize()
   skippedCodes.clear();
   nWeighted = 0;
   nFailed   = 0;
+  nAccepted = 0;
+  sigmaGen  = -1.0;
+  sigmaErr  = 0.0;
+  ptHatMin = _configuration.valueDouble(createKey(taskName,"PTHAT_MIN"),true,-1.0);
+  ptHatMax = _configuration.valueDouble(createKey(taskName,"PTHAT_MAX"),true,-1.0);
+  if (ptHatMin>=0.0 && ptHatMax>=0.0 && !(ptHatMax>ptHatMin))
+    throw ConfigurationException(createKey(taskName,"PTHAT_MAX"),"PTHAT_MAX must be above PTHAT_MIN",__FUNCTION__);
+  const std::vector<std::string> ptHatCuts = ptHatCommands(ptHatMin, ptHatMax);
+  if (ptHatMin>=0.0) printValue("Herwig:PTHAT_MIN (JetKtCut:MinKT)",ptHatMin);
+  if (ptHatMax>=0.0) printValue("Herwig:PTHAT_MAX (JetKtCut:MaxKT)",ptHatMax);
   savePhotons   = _configuration.valueBool(createKey(taskName,"SavePhotons"));
   saveNeutrinos = _configuration.valueBool(createKey(taskName,"SaveNeutrinos"));
   std::string repository = FileSystem::expand(_configuration.valueString(createKey(taskName,"Repository"))).str();
@@ -221,7 +317,31 @@ void HerwigEventGenerator::initialize()
                                    String("The Herwig input file has no saverun command: ") + String(in.c_str()),
                                    __FUNCTION__);
     fs::path run = in.parent_path() / saved;
-    if (!fs::is_regular_file(run) || fs::last_write_time(run) < fs::last_write_time(in))
+    if (!ptHatCuts.empty())
+      {
+      // the input file with the cuts of the pT-hat range, read in the current directory (the job's), its directory
+      // added to those read from (its own read commands)
+      std::string ptHatRun;
+      std::string text = ptHatInput(in, ptHatCuts, ptHatRun);
+      fs::path ptHatIn = fs::absolute(std::string(taskName.str()) + "_pthat.in");
+      run = fs::absolute(ptHatRun);
+      bool same = fileText(ptHatIn)==text;
+      if (!same)
+        {
+        std::ofstream out(ptHatIn);
+        out << text;
+        if (!out) throw Exception(String("Cannot write ") + String(ptHatIn.c_str()),__FUNCTION__);
+        }
+      if (!same || !fs::is_regular_file(run) || fs::last_write_time(run) < fs::last_write_time(ptHatIn))
+        {
+        printValue("Herwig read (pT-hat range)",String(ptHatIn.c_str()));
+        Herwig::API::read(HerwigSettings(Herwig::RunMode::READ, repository, ptHatIn.string(), "", 0, "",
+                                         std::vector<std::string>{in.parent_path().string()}));
+        if (!fs::is_regular_file(run))
+          throw Exception(String("Herwig read did not make the run file ") + String(run.c_str()),__FUNCTION__);
+        }
+      }
+    else if (!fs::is_regular_file(run) || fs::last_write_time(run) < fs::last_write_time(in))
       {
       printValue("Herwig read",String(in.c_str()));
       DirectoryGuard here(in.parent_path());          // Herwig saves the run file in the current directory
@@ -235,6 +355,9 @@ void HerwigEventGenerator::initialize()
     throw ConfigurationException(createKey(taskName,"RunFile"),
                                  String("No Herwig run file ") + String(runFile.c_str())
                                  + " (make it with: Herwig read <input file>, or give InputFile)",__FUNCTION__);
+  if (noInput && !ptHatCuts.empty() && reportWarning(__FUNCTION__))
+    printValue("pT-hat range set at run time (Herwig run -x); the run file was integrated with its own cuts: "
+               "prefer InputFile",String(runFile.c_str()));
 
   // the setup: the setup file and the commands of the options, in one file of the current directory
   std::string setup = FileSystem::expand(_configuration.valueString(createKey(taskName,"SetupFile"))).str();
@@ -250,6 +373,7 @@ void HerwigEventGenerator::initialize()
       commands.push_back(value.str());
       }
     }
+  if (noInput) commands.insert(commands.end(), ptHatCuts.begin(), ptHatCuts.end());   // no input file: at run time
   if (!commands.empty())
     {
     std::string combined = std::string(taskName.str()) + "_setup.in";
@@ -313,6 +437,7 @@ void HerwigEventGenerator::execute()
     return;
     }
   if (source->weight()!=1.0) nWeighted++;
+  nAccepted++;
   Event & theEvent = event();
   ParticleFilter * particleFilter = particleFilters().empty() ? nullptr : particleFilters()[0];
   for (const ThePEG::tPPtr & p : source->getFinalState())
@@ -358,20 +483,44 @@ void HerwigEventGenerator::finalize()
     }
   if (nFailed>0 && reportWarning(__FUNCTION__)) printValue("Herwig events that failed (skipped)",nFailed);
   if (nWeighted>0 && reportWarning(__FUNCTION__))
-    printValue("Weighted Herwig events (Datum ignores the weights)",nWeighted);
+    printValue((ptHatMin>=0.0 || ptHatMax>=0.0)
+               ? "Weighted Herwig events (Datum ignores the weights: the pT-hat bins need unweighted events)"
+               : "Weighted Herwig events (Datum ignores the weights)",nWeighted);
   if (herwig && herwig->generator)
     {
+    sigmaGen = double(herwig->generator->integratedXSec()/ThePEG::millibarn);
+    sigmaErr = double(herwig->generator->integratedXSecErr()/ThePEG::millibarn);
     if (_configuration.valueBool(createKey(name(),"Print:Statistics")))
       {
       printValue("Herwig events",long(herwig->generator->currentEventNumber()));
       printValue("Herwig cross section (pb)",double(herwig->generator->integratedXSec()/ThePEG::picobarn));
       printValue("Herwig cross section error (pb)",double(herwig->generator->integratedXSecErr()/ThePEG::picobarn));
+      printValue("Herwig events accepted",nAccepted);
       }
     herwig->generator->finalize();                  // Herwig writes its .out file
     }
   delete herwig;
   herwig = nullptr;
   EventProcessor::finalize();
+}
+
+void HerwigEventGenerator::saveHistograms(Folder & top)
+{
+  if (sigmaGen>=0.0)
+    {
+    Folder * folder = top.folder(name());
+    if (!folder) folder = top.addFolder(name());
+    auto text = [](double value) { char s[64]; std::snprintf(s,sizeof(s),"%.17g",value); return String(s); };
+    auto put = [&](const char * key, const String & value)
+      { if (!folder->get<StringParameter>(key)) folder->add(new StringParameter(key,value),key); };
+    put("DATUM_SIGMA_GEN",text(sigmaGen));
+    put("DATUM_SIGMA_ERR",text(sigmaErr));
+    put("DATUM_PTHAT_MIN",text(ptHatMin));
+    put("DATUM_PTHAT_MAX",text(ptHatMax));
+    if (!folder->get<LongParameter>("DATUM_N_ACCEPTED"))
+      folder->add(new LongParameter("DATUM_N_ACCEPTED",nAccepted),"DATUM_N_ACCEPTED");
+    }
+  EventProcessor::saveHistograms(top);
 }
 
 } // namespace Datum

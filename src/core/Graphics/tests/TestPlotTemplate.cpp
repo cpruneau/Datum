@@ -104,8 +104,59 @@ int main()
   t.selectAll("Event", false);
   CHECK(t.nSelected() == 10);
 
-  // layout: a canvas per name, a graph per combination
+  // layout (default): a canvas per family of names (n1_*, R2_*), a graph per name and combination
   PlotTemplate::Options options;
+  CHECK(options.grouping == PlotTemplate::Options::kByFamily);
+  XmlDocument byFamily = t.makeSpec(options);
+  CHECK(count(byFamily.root(), "Canvas") == 2);       // Pair: n1, Pair: R2 (Event not selected)
+  CHECK(count(byFamily.root(), "Graph") == 10);
+  CHECK(count(byFamily.root(), "Window") == 1);
+  {
+    const XmlElement * w = byFamily.root().child("Window");
+    CHECK(w && w->attribute("title", "") == "Pair" && w->children().size() == 2);
+    const XmlElement * c = w ? w->child("Canvas") : nullptr;
+    CHECK(c && c->attribute("title", "") == "Pair: n1" && c->children().size() == 4);
+    CHECK(c && c->children().front()->attribute("title", "") == "n1_pt MB_PiP");
+    CHECK(c && c->children()[1]->attribute("title", "") == "n1_pt MB_PiM");
+  }
+  options.overlay = true;
+  XmlDocument familyOverlay = t.makeSpec(options);
+  CHECK(count(familyOverlay.root(), "Canvas") == 2);
+  CHECK(count(familyOverlay.root(), "Graph") == 2 + 6);
+  CHECK(count(familyOverlay.root(), "Histogram") == 10);
+  options.overlay = false;
+  // too many graphs for a canvas: a canvas per combination; the canvases of a family in a window of their own
+  options.maxGraphs = 2;
+  options.maxCanvases = 3;
+  XmlDocument familySplit = t.makeSpec(options);
+  CHECK(count(familySplit.root(), "Canvas") == 2 + 3);
+  CHECK(count(familySplit.root(), "Window") == 2);
+  {
+    const XmlElement * w = familySplit.root().child("Window");
+    CHECK(w && w->attribute("title", "") == "Pair: n1" && w->children().size() == 2);
+    CHECK(w && w->child("Canvas")->attribute("title", "") == "Pair: n1 MB_PiP");
+  }
+  // names alone in their family share a canvas, "others"
+  {
+    Folder top("top");
+    Folder * f = top.addFolder("Single")->addFolder("All");
+    for (const char * n : {"n1_pt", "n1_eta", "mult", "ptAvg", "spt_phi"}) f->add(new MATH::Histogram(n, n, 10, 0.0, 1.0), n);
+    f->add(new MATH::Histogram("n1_phiEta", "n1", 8, 0.0, 1.0, 8, 0.0, 1.0), "n1_phiEta");
+    PlotTemplate u;
+    u.addFolder(u.addInput("s", "s.cap"), top);
+    XmlDocument d = u.makeSpec(PlotTemplate::Options());
+    CHECK(count(d.root(), "Window") == 1);
+    CHECK(count(d.root(), "Canvas") == 3);                   // n1 (1D), others 1D, n1_phiEta (2D)
+    const XmlElement * w = d.root().child("Window");
+    CHECK(w && w->children().size() == 3);
+    CHECK(w && w->children()[0]->attribute("title", "") == "Single: n1" && w->children()[0]->children().size() == 2);
+    CHECK(w && w->children()[1]->attribute("title", "") == "Single: others 1D" && w->children()[1]->children().size() == 3);
+    CHECK(w && w->children()[2]->attribute("title", "") == "Single: n1_phiEta");
+  }
+
+  // layout: a canvas per name, a graph per combination
+  options = PlotTemplate::Options();
+  options.grouping = PlotTemplate::Options::kByHistogram;
   XmlDocument byName = t.makeSpec(options);
   CHECK(count(byName.root(), "Input") == 1);          // the first input plots nothing
   CHECK(count(byName.root(), "Canvas") == 4);
@@ -126,7 +177,7 @@ int main()
   options.maxCanvases = 3;
   XmlDocument split = t.makeSpec(options);
   CHECK(count(split.root(), "Canvas") == 6);
-  CHECK(count(split.root(), "Window") == 2);
+  CHECK(count(split.root(), "Window") == 3);      // the canvases of a name kept in one window
 
   // the file written is read by PlotSpec and its canvases are built from a Datum file
   char buffer[] = "/tmp/DatumTestPlotTemplate.XXXXXX";
@@ -138,6 +189,7 @@ int main()
   }
   t.setInputFile(b, FileSystem::join(top, "derived.cap"));
   options = PlotTemplate::Options();
+  options.grouping = PlotTemplate::Options::kByHistogram;
   String path = FileSystem::join(top, "plots.xml");
   t.makeSpec(options).write(path);
   PlotSpec spec;

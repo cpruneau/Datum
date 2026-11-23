@@ -29,11 +29,13 @@ log in without a password: ssh keys) and submits the array; Status shows the que
 Fetch copies their output files back. Combine then runs the combination here. The script can also be submitted by hand,
 and Combine run on the outputs of jobs run elsewhere: it needs the directories <prefix>* holding the output files.
 
-pT-hat bins (PYTHIA): with bin edges p0 < p1 < ... < pK (GeV/c), each sub-sample is K jobs, <prefix>sss_pthat<kk>,
-generating the same number of events with PythiaEventGenerator PTHAT_MIN = p_k and PTHAT_MAX = p_k+1 (a hard process,
-e.g. Option HardQCD:all = on; not SoftQCD), each with a seed of its own, keeping the raw histograms (JOB:NORMALIZE
-false). The combination adds the bins of each sub-sample with the weights sigma_k/N_k (sigma_k the cross section PYTHIA
-gives for the bin): the differential cross sections in mb (or, with the normalization per event, divided by the cross
+pT-hat bins: offered for workflows whose event processing has a generator producing events in pT-hat bins weighted by
+their cross sections (template attribute ptHatBinning, Datum::Task::hasWeightedPtHatBinning(): PythiaEventGenerator,
+HerwigEventGenerator). With bin edges p0 < p1 < ... < pK (GeV/c), each sub-sample is K jobs, <prefix>sss_pthat<kk>,
+generating the same number of events with the generator's PTHAT_MIN = p_k and PTHAT_MAX = p_k+1 (a hard process: for
+PYTHIA e.g. Option HardQCD:all = on, not SoftQCD; for Herwig an input file with a hard matrix element, e.g. MEQCD2to2,
+not MEMinBias), each with a seed of its own, keeping the raw histograms (JOB:NORMALIZE false). The combination adds the
+bins of each sub-sample with the weights sigma_k/N_k (sigma_k the cross section the generator gives for the bin): the differential cross sections in mb (or, with the normalization per event, divided by the cross
 section of the range covered), then combines the sub-samples as set above. The jobs run event processing only: the later
 stages are run by the combination (Jackknife through stages).
 
@@ -59,8 +61,7 @@ LOCAL, SLURM = "LOCAL", "SLURM"
 #: covered (divided by the sum of the cross sections of the bins).
 SIGMA, COVERED = "SIGMA", "COVERED"
 NORMALIZATION_TITLES = {SIGMA: "dσ (mb)", COVERED: "per event"}
-#: Class of the generator whose pT-hat range is set per job, and its keys.
-PTHAT_GENERATOR = "PythiaEventGenerator"
+#: Keys of the pT-hat range of the generators producing events in pT-hat bins (TaskConfig.pthat_binning).
 PTHAT_MIN_KEY, PTHAT_MAX_KEY = "PTHAT_MIN", "PTHAT_MAX"
 #: Parameters holding a seed (key Seed or SeedValue, alone or after a group) and their switches.
 SEED_KEY = re.compile(r"(?:^|:)(?:Seed|SeedValue)$")
@@ -210,8 +211,50 @@ def _tasks_of(tasks):
 
 
 def pthat_generators(tasks):
-    """The PYTHIA generators of tasks (and subtasks), whose pT-hat range is set per job."""
-    return [t for t in _tasks_of(tasks) if t.cls.replace("Datum::", "") == PTHAT_GENERATOR]
+    """The generators of tasks (and subtasks) producing events in pT-hat bins (TaskConfig.pthat_binning, from the
+    templates: Datum::Task::hasWeightedPtHatBinning()), whose pT-hat range is set per job."""
+    return [t for t in _tasks_of(tasks) if getattr(t, "pthat_binning", False)]
+
+
+def _class(task):
+    return task.cls.replace("Datum::", "")
+
+
+def _check_pythia(g):
+    """Problems of a PYTHIA generator in pT-hat bins: a hard process switched on, no SoftQCD."""
+    errors = []
+    options = [(p.value or "").replace(" ", "").lower() for p in g.params if re.fullmatch(r"Option\d+", p.key)]
+    if any(o.startswith("softqcd:") and o.endswith("=on") for o in options):
+        errors.append("pT-hat bins: %s generates SoftQCD processes, which ignore the pT-hat range: use a hard "
+                      "process (e.g. HardQCD:all = on)." % g.name)
+    if not any(o.startswith("hardqcd:") and o.endswith("=on") for o in options):
+        errors.append("pT-hat bins: %s has no hard process switched on (e.g. an Option HardQCD:all = on)." % g.name)
+    return errors
+
+
+def _check_herwig(g):
+    """Problems of a Herwig generator in pT-hat bins: an input file (read here when it can be) generating a hard
+    process, not minimum bias."""
+    def value(key):
+        p = g.param(key)
+        v = (p.value or "").strip() if p is not None else ""
+        return "" if v.lower() == "none" else v
+    path = value("InputFile") or (value("RunFile") if value("RunFile").endswith(".in") else "")
+    if not path:
+        return []                               # a run file only: the cuts are set at run time (warning of the job)
+    try:
+        with open(os.path.expandvars(os.path.expanduser(path))) as f:
+            text = "\n".join(line.split("#")[0] for line in f)
+    except OSError:
+        return []                               # not here (e.g. on the cluster): checked by the job
+    if "MEMinBias" in text and "MEQCD2to2" not in text:
+        return ["pT-hat bins: the Herwig input file of %s generates minimum bias (MEMinBias), which ignores the "
+                "pT-hat range: use a hard process (e.g. MEQCD2to2)." % g.name]
+    return []
+
+
+#: Checks of the generators in pT-hat bins, by class (the other classes: none).
+PTHAT_CHECKS = {"PythiaEventGenerator": _check_pythia, "HerwigEventGenerator": _check_herwig}
 
 
 def check_pthat(settings, api, stages, present):
@@ -229,14 +272,10 @@ def check_pthat(settings, api, stages, present):
         errors.append("pT-hat bins: the edges must be positive and increasing (the first one the hard pT-hat minimum).")
     generators = pthat_generators(stages.get(api.EVENTS) or [])
     if not generators:
-        errors.append("pT-hat bins: event processing has no %s." % PTHAT_GENERATOR)
+        errors.append("pT-hat bins: event processing has no generator producing events in pT-hat bins "
+                      "(e.g. PythiaEventGenerator, HerwigEventGenerator).")
     for g in generators:
-        options = [(p.value or "").replace(" ", "").lower() for p in g.params if re.fullmatch(r"Option\d+", p.key)]
-        if any(o.startswith("softqcd:") and o.endswith("=on") for o in options):
-            errors.append("pT-hat bins: %s generates SoftQCD processes, which ignore the pT-hat range: use a hard "
-                          "process (e.g. HardQCD:all = on)." % g.name)
-        if not any(o.startswith("hardqcd:") and o.endswith("=on") for o in options):
-            errors.append("pT-hat bins: %s has no hard process switched on (e.g. an Option HardQCD:all = on)." % g.name)
+        errors += PTHAT_CHECKS.get(_class(g), lambda _: [])(g)
     if present and present[0] != api.EVENTS:
         errors.append("pT-hat bins: the workflow has no event processing.")
     elif len(present) > 1 and settings.mode != JACKKNIFE_STAGES and combined_stage(settings, api, stages) != api.EVENTS:
@@ -319,7 +358,8 @@ def directory_name(settings, j):
 
 
 def pthat_tasks(tasks, settings, j):
-    """Set the pT-hat range of bin k of job j in the PYTHIA generators of tasks (copies), in place."""
+    """Set the pT-hat range of bin k of job j in the generators of tasks (copies) producing events in pT-hat bins,
+    in place."""
     _, k = job_of(settings, j)
     edges = settings.edges()
     for g in pthat_generators(tasks):
@@ -686,7 +726,11 @@ def make_bar(parent, app, settings, api, ToolTip):
         bar.slurm_label.configure(text=("%s:%s" % (settings.slurm.host, settings.slurm.directory)
                                         if slurm and settings.slurm.host else ""))
         bar.parallel_entry.configure(state=tk.DISABLED if slurm else tk.NORMAL)
-        bar.normalization_box.configure(state="readonly" if settings.pthat() else tk.DISABLED)
+        models = app.pthat_models() if hasattr(app, "pthat_models") else None
+        offered = models is None or bool(models) or settings.pthat()      # kept editable to clear edges set before
+        bar.pthat_entry.configure(state=tk.NORMAL if offered else tk.DISABLED)
+        bar.pthat_label.configure(state=tk.NORMAL if offered else tk.DISABLED)
+        bar.normalization_box.configure(state="readonly" if settings.pthat() and offered else tk.DISABLED)
         present = app.present_stages()
         bar.stage_box.configure(values=["Last stage"] + [api.STAGE_TITLES[s] for s in present])
 
@@ -735,14 +779,16 @@ def make_bar(parent, app, settings, api, ToolTip):
     bar.stage_box.pack(side=tk.LEFT, padx=(2, 12))
     bar.stage_box.bind("<<ComboboxSelected>>", changed)
     ToolTip(bar.stage_box, "Stage whose output is combined")
-    ttk.Label(samples_line, text="pT-hat bins:").pack(side=tk.LEFT)
+    bar.pthat_label = ttk.Label(samples_line, text="pT-hat bins:")
+    bar.pthat_label.pack(side=tk.LEFT)
     vars_["pthat"] = tk.StringVar(bar, value=settings.ptHatEdges)
-    e = ttk.Entry(samples_line, textvariable=vars_["pthat"], width=22)
+    e = bar.pthat_entry = ttk.Entry(samples_line, textvariable=vars_["pthat"], width=22)
     e.pack(side=tk.LEFT, padx=(2, 2))
-    ToolTip(e, "Edges of the pT-hat bins of PYTHIA (GeV/c, e.g. 5 10 20 40 80 160; empty: none). Each sub-sample is then "
-               "one job per bin (%s000_pthat00, ...), the same number of events in each, with PythiaEventGenerator "
-               "PTHAT_MIN/PTHAT_MAX set to the edges of the bin (a hard process: HardQCD:all = on). The combination "
-               "adds the bins with the weights sigma/N of each bin" % settings.prefix)
+    ToolTip(e, "Edges of the pT-hat bins (GeV/c, e.g. 5 10 20 40 80 160; empty: none), offered when event processing "
+               "has a generator producing events in pT-hat bins (PythiaEventGenerator, HerwigEventGenerator). Each "
+               "sub-sample is then one job per bin (%s000_pthat00, ...), the same number of events in each, with the "
+               "generator's PTHAT_MIN/PTHAT_MAX set to the edges of the bin (a hard process: PYTHIA HardQCD:all = on, "
+               "Herwig MEQCD2to2). The combination adds the bins with the weights sigma/N of each bin" % settings.prefix)
     vars_["normalization"] = tk.StringVar(bar, value=NORMALIZATION_TITLES[settings.normalization])
     bar.normalization_box = ttk.Combobox(samples_line, textvariable=vars_["normalization"], state="readonly", width=9,
                                          values=[NORMALIZATION_TITLES[n] for n in (SIGMA, COVERED)])

@@ -90,6 +90,7 @@ namespace Datum
       gui.fontSize  = float(e->attributeDouble("fontSize", gui.fontSize));
       gui.fontFile  = e->attribute("font", gui.fontFile);
       gui.viewports = e->attributeBool("viewports", gui.viewports);
+      gui.detachedWindows = e->attributeBool("detachedWindows", gui.detachedWindows);
       }
     if (const XmlElement * e = root.child("Canvases"))
       {
@@ -152,6 +153,7 @@ namespace Datum
     window.setAttribute("fontSize", double(gui.fontSize));
     if (!gui.fontFile.isNull()) window.setAttribute("font", gui.fontFile);
     window.setAttribute("viewports", gui.viewports);
+    window.setAttribute("detachedWindows", gui.detachedWindows);
     XmlElement & canvases = root.addChild("Canvases");
     canvases.setAttribute("columns", gui.columns);
     canvases.setAttribute("rows", gui.rows);
@@ -2041,6 +2043,7 @@ namespace Datum
   ImGui::InputInt("Width", &c.gui.width);
   ImGui::InputInt("Height", &c.gui.height);
   ImGui::Checkbox("Windows can leave the main window (restart)", &c.gui.viewports);
+  ImGui::Checkbox("Each window of a plot file in a window of its own (View > Detached Windows)", &c.gui.detachedWindows);
 
   ImGui::SeparatorText("Canvases");
   int layout[2] = {_gui.nColumns(), _gui.nRows()};

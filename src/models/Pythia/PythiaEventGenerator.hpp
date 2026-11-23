@@ -63,6 +63,9 @@ public:
   virtual void execute();
   //! @brief Finalize the task (the cross section of the run is kept for saveHistograms()).
   virtual void finalize();
+  //! @brief PYTHIA produces events in pT-hat bins (PTHAT_MIN, PTHAT_MAX, see Task::hasWeightedPtHatBinning()).
+  //! @return true
+  bool hasWeightedPtHatBinning() const override { return true; }
   //! @brief Save the cross section of the run (sigmaGen, its uncertainty, the events accepted, the pT-hat range) in
   //! the folder of the task. @param top folder of the job
   virtual void saveHistograms(Folder & top);

@@ -522,6 +522,8 @@ namespace Datum
   edit.addItem("Add Canvas",   "plot.addCanvas",   "", "A new canvas in the window of the selection");
   edit.addItem("Add Graph",    "plot.addGraph",    "", "A new graph in the canvas of the selection");
   edit.addItem("Add Function", "plot.addFunction", "", "A function in the graph of the selection");
+  edit.addItem("Regroup...",   "plot.regroup",     "", "Gather the histograms and functions whose names match a pattern "
+                                                          "(e.g. *_pt) into common graphs, after a preview");
   edit.addItem("Move Up",      "plot.up",          "", "Move the selection before the previous element");
   edit.addItem("Move Down",    "plot.down",        "", "Move the selection after the next element");
   edit.addSeparator();
@@ -539,6 +541,8 @@ namespace Datum
   view.addItem("Style Elements", "plot.showStyle", "", "Show the elements of style (Margins, Axis, Marker, ...) in the tree").setCheckable(true);
   view.addItem("All Windows",    "plot.allWindows", "", "Every window of the plot file: the first one here, the others in windows of their own "
                                                         "(otherwise the window of the selection)").setCheckable(true);
+  view.addItem("Detached Windows", "plot.detachedWindows", "", "Every window of the plot file in a window of its own, which can "
+                                                        "be moved and sized on its own; the main window keeps the tree and the browser").setCheckable(true);
   view.addSeparator();
   view.addItem("Canvases",       "view.canvases",  "", "The canvases of the session by window, with their graphs").setCheckable(true);
   view.addItem("Fit Results",    "view.fits",      "", "The results of the fits of the selected graph, below the canvases").setCheckable(true);
@@ -572,6 +576,7 @@ namespace Datum
   enable("plot.newWindow", any);
   enable("plot.newCanvas", any);
   enable("plot.newCanvasWindow", any);
+  enable("plot.regroup", any);
   enable("plot.closeWindow", any && !t->document->children(PlotDocument::Path(), PlotDocument::kWindow).empty());
   {
   bool windows = any && !t->document->children(PlotDocument::Path(), PlotDocument::kWindow).empty();
@@ -617,6 +622,7 @@ namespace Datum
   if (MenuItem * item = bar.findItem("plot.inspector"))  item->setChecked(_showInspector);
   if (MenuItem * item = bar.findItem("plot.showStyle"))  item->setChecked(_showStyle);
   if (MenuItem * item = bar.findItem("plot.allWindows")) item->setChecked(_allWindows);
+  if (MenuItem * item = bar.findItem("plot.detachedWindows")) item->setChecked(_detachedWindows);
   }
 
   void DatumGuiApp::connectToPlot(FileBrowser & browser)
@@ -627,6 +633,7 @@ namespace Datum
 
   void DatumGuiApp::onStartup()
   {
+  _detachedWindows = configuration().gui.detachedWindows;
   _gui.setSideWindow(kEditorWindow, 0.40f);
   std::function<void()> previous = _gui.onFrame;
   _gui.onFrame = [this, previous]() { if (previous) previous(); renderFrame(); };
@@ -1013,6 +1020,19 @@ namespace Datum
     if (!ok) { _gui.setStatus("Select a canvas first"); return; }
     t->selected = d->addGraph(cv);
     }
+  else if (c == "plot.regroup" && d)
+    {
+    // the window, canvas or graph of the selection may limit the search (whole file by default)
+    Path scope;
+    if (selected)
+      for (PlotDocument::Kind k : { PlotDocument::kGraph, PlotDocument::kCanvas, PlotDocument::kWindow })
+        {
+        bool ok = false;
+        Path p = d->enclosing(t->selected, k, ok);
+        if (ok) { scope = p; break; }
+        }
+    requestRegroup(scope, false);
+    }
   else if (c == "plot.addFunction" && d)
     {
     bool ok = false;
@@ -1066,6 +1086,7 @@ namespace Datum
   else if (c == "plot.inspector") _showInspector = !_showInspector;
   else if (c == "plot.showStyle") _showStyle = !_showStyle;
   else if (c == "plot.allWindows") { _allWindows = !_allWindows; _drawnTab = -1; }
+  else if (c == "plot.detachedWindows") { setDetachedWindows(!_detachedWindows); _drawnTab = -1; }
   else if (c == "plot.help") _showHelp = true;
   else if (std::sscanf(c.data(), "window.layout.%dx%d", &columns, &rows) == 2) setGrid(false, columns, rows);
   else if (std::sscanf(c.data(), "window.graphs.%dx%d", &columns, &rows) == 2) setGrid(true, columns, rows);
@@ -1718,6 +1739,9 @@ namespace Datum
   if (ImGui::SmallButton("+ Graph")) actionPerformed(ActionEvent{"plot.addGraph", nullptr});
   ImGui::SameLine();
   if (ImGui::SmallButton("+ Function")) actionPerformed(ActionEvent{"plot.addFunction", nullptr});
+  ImGui::SameLine();
+  if (ImGui::SmallButton("Regroup...")) actionPerformed(ActionEvent{"plot.regroup", nullptr});
+  ImGui::SetItemTooltip("Gather histograms whose names match a pattern (e.g. *_pt) into common graphs");
   ImGui::SameLine(0, 18);
   ImGui::BeginDisabled(!d.canUndo());
   if (ImGui::SmallButton("Undo")) d.undo();
@@ -1865,6 +1889,8 @@ namespace Datum
   if (kind == PlotDocument::kGraph || kind == PlotDocument::kHistogram || kind == PlotDocument::kFunction)
     item("Add Function", "plot.addFunction");
   if (kind == PlotDocument::kRoot) item("Add Window", "plot.addWindow");
+  if (kind == PlotDocument::kRoot || kind == PlotDocument::kWindow || kind == PlotDocument::kCanvas || kind == PlotDocument::kGraph)
+    if (ImGui::MenuItem("Regroup...")) requestRegroup(path, !path.empty());
   if (kind == PlotDocument::kRoot || kind == PlotDocument::kWindow || kind == PlotDocument::kCanvas)
     if (ImGui::MenuItem("Rename..."))
       requestRename(kind == PlotDocument::kRoot ? 1 : (kind == PlotDocument::kWindow ? 2 : 3), path);
@@ -2288,9 +2314,202 @@ namespace Datum
   ImGui::PopID();
   }
 
+  void DatumGuiApp::requestRegroup(const Path & scope, bool onlyScope)
+  {
+  Tab * t = tab();
+  if (!t) return;
+  _regroup.requested = true;
+  _regroup.tab = t->id;
+  _regroup.scope = scope;
+  _regroup.onlyScope = onlyScope && !scope.empty();
+  _regroup.previewed = false;
+  _regroup.message.clear();
+  }
+
+  void DatumGuiApp::renderRegroupDialog()
+  {
+  const char * title = "Regroup Histograms##plotRegroup";
+  if (_regroup.requested) { ImGui::OpenPopup(title); _regroup.requested = false; }
+  ImGui::SetNextWindowSize(ImVec2(700, 560), ImGuiCond_Appearing);
+  if (!ImGui::BeginPopupModal(title, nullptr)) return;
+  Tab * t = nullptr;
+  for (auto & tab : _documents) if (tab.id == _regroup.tab) t = &tab;
+  if (!t) { ImGui::CloseCurrentPopup(); ImGui::EndPopup(); return; }
+  PlotDocument & d = *t->document;
+  RegroupDialog & r = _regroup;
+
+  ImGui::TextWrapped("The histograms and functions whose names match the pattern are moved into common graphs of new "
+                     "canvases, placed after the canvas of the first one. Preview shows what would be done; OK does it "
+                     "(Edit > Undo undoes it).");
+  ImGui::Spacing();
+  if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+  ImGui::SetNextItemWidth(-160);
+  bool preview = ImGui::InputTextWithHint("pattern", "e.g. *_pt   or   *PiP*_pt; *PiM*_pt   or   MB_*/n1_pt", &r.pattern,
+                                          ImGuiInputTextFlags_EnterReturnsTrue);
+  ImGui::SetItemTooltip("Wildcards: * any text, ? one character; several patterns separated by ';'.\n"
+                        "Without '/': matched against the name of a histogram (the last part of its path), then its whole path.\n"
+                        "With '/': matched against its whole path in its file. Functions: their label, or class.\n"
+                        "Press Enter for a preview.");
+  ImGui::Checkbox("regular expression", &r.regularExpression);
+  ImGui::SetItemTooltip("The pattern is an ECMAScript regular expression, searched in the whole path (e.g. Pi[PM]/n1_pt$)");
+  ImGui::SameLine(0, 24);
+  ImGui::Checkbox("case sensitive", &r.caseSensitive);
+  if (!r.scope.empty() && d.element(r.scope))
+    {
+    std::string where = std::string(PlotDocument::kindName(d.kind(r.scope))) + " " + PlotDocument::label(*d.element(r.scope)).str();
+    int only = r.onlyScope ? 1 : 0;
+    ImGui::RadioButton("search the whole plot file", &only, 0);
+    ImGui::SameLine(0, 24);
+    ImGui::RadioButton((std::string("search only in the ") + where).c_str(), &only, 1);
+    r.onlyScope = only == 1;
+    }
+  ImGui::SetNextItemWidth(120);
+  if (ImGui::InputInt("histograms per graph", &r.itemsPerGraph)) r.itemsPerGraph = std::max(0, r.itemsPerGraph);
+  ImGui::SetItemTooltip("At most this many histograms and functions in a graph; more graphs are made as needed (0: no limit)");
+  ImGui::SameLine(0, 24);
+  ImGui::SetNextItemWidth(120);
+  if (ImGui::InputInt("graphs per canvas", &r.graphsPerCanvas)) r.graphsPerCanvas = std::max(0, r.graphsPerCanvas);
+  ImGui::SetItemTooltip("At most this many graphs in a canvas; more canvases are made as needed (0: no limit)");
+  ImGui::SameLine(0, 24);
+  ImGui::SetNextItemWidth(120);
+  if (ImGui::InputInt("canvases per window", &r.canvasesPerWindow)) r.canvasesPerWindow = std::max(0, r.canvasesPerWindow);
+  ImGui::SetItemTooltip("0: the new canvases go into the window of the first histogram; otherwise into new windows of at most\n"
+                        "this many canvases each, after it");
+  ImGui::SetNextItemWidth(220);
+  ImGui::InputTextWithHint("canvas name", "from the pattern", &r.canvasName);
+  ImGui::SameLine(0, 24);
+  ImGui::SetNextItemWidth(220);
+  ImGui::InputTextWithHint("graph title", "none", &r.graphTitle);
+  ImGui::Checkbox("label the histograms by what tells them apart", &r.labelItems);
+  ImGui::SetItemTooltip("Histograms without a label get one for the legend: the text matched by the wildcards, or the parts of\n"
+                        "their paths (and inputs) that differ");
+  ImGui::SameLine(0, 24);
+  ImGui::Checkbox("remove the graphs and canvases left empty", &r.removeEmpty);
+
+  PlotDocument::RegroupOptions o;
+  o.pattern = String(r.pattern.c_str());
+  o.regularExpression = r.regularExpression;
+  o.caseSensitive = r.caseSensitive;
+  if (r.onlyScope) o.scope = r.scope;
+  o.itemsPerGraph = r.itemsPerGraph;
+  o.graphsPerCanvas = r.graphsPerCanvas;
+  o.canvasesPerWindow = r.canvasesPerWindow;
+  o.canvasName = String(r.canvasName.c_str());
+  o.graphTitle = String(r.graphTitle.c_str());
+  o.labelItems = r.labelItems;
+  o.removeEmpty = r.removeEmpty;
+  std::string key = r.pattern + "|" + std::to_string(r.regularExpression) + std::to_string(r.caseSensitive)
+                  + std::to_string(r.onlyScope) + std::to_string(r.labelItems) + "|" + std::to_string(r.itemsPerGraph) + "|"
+                  + std::to_string(r.graphsPerCanvas) + "|" + std::to_string(r.canvasesPerWindow) + "|" + r.canvasName + "|" + std::to_string(d.version());
+
+  ImGui::Spacing();
+  preview = ImGui::Button("Preview") || preview;
+  ImGui::SameLine();
+  bool ok = ImGui::Button("OK");
+  ImGui::SameLine();
+  bool cancel = ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape);
+  if (preview)
+    {
+    r.plan = d.planRegroup(o);
+    r.previewed = true;
+    r.previewKey = key;
+    r.message.clear();
+    }
+  if (r.previewed && r.previewKey != key)
+    {
+    ImGui::SameLine(0, 18);
+    ImGui::TextDisabled("(changed since the preview)");
+    }
+  if (!r.message.empty()) { ImGui::SameLine(0, 18); ImGui::TextColored(ImVec4(0.85f, 0.2f, 0.2f, 1.0f), "%s", r.message.c_str()); }
+
+  // the preview: the new canvases, their graphs and the histograms going there
+  ImGui::Separator();
+  if (ImGui::BeginChild("##regroupPreview", ImVec2(0, 0), ImGuiChildFlags_Borders))
+    {
+    const PlotDocument::RegroupPlan & p = r.plan;
+    if (!r.previewed) ImGui::TextDisabled("Type a pattern, then Preview (or Enter)");
+    else if (!p.error.isNull()) ImGui::TextColored(ImVec4(0.85f, 0.2f, 0.2f, 1.0f), "%s", p.error.data());
+    else
+      {
+      if (p.windows.empty())
+        ImGui::Text("%d histograms and functions into %d graphs in %d canvases", int(p.entries.size()), int(p.graphs.size()),
+                    int(p.canvases.size()));
+      else
+        ImGui::Text("%d histograms and functions into %d graphs in %d canvases in %d new windows", int(p.entries.size()),
+                    int(p.graphs.size()), int(p.canvases.size()), int(p.windows.size()));
+      std::vector<int> windowOf(p.canvases.size(), -1);
+      for (std::size_t w=0; w<p.windows.size(); w++) for (int c : p.windows[w]) windowOf[std::size_t(c)] = int(w);
+      for (std::size_t c=0; c<p.canvases.size(); c++)
+        {
+        if (windowOf[c] >= 0 && p.windows[std::size_t(windowOf[c])].front() == int(c))
+          ImGui::TextDisabled("Window %s", p.windowTitles[std::size_t(windowOf[c])].data());
+        ImGui::PushID(int(c));
+        if (ImGui::TreeNodeEx("canvas", ImGuiTreeNodeFlags_DefaultOpen, "Canvas %s", p.canvasNames[c].data()))
+          {
+          for (int g : p.canvases[c])
+            {
+            ImGui::PushID(g);
+            if (ImGui::TreeNodeEx("graph", ImGuiTreeNodeFlags_DefaultOpen, "Graph %d  (%d)", g + 1, int(p.graphs[std::size_t(g)].size())))
+              {
+              if (ImGui::BeginTable("##items", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg))
+                {
+                for (int i : p.graphs[std::size_t(g)])
+                  {
+                  const PlotDocument::RegroupEntry & e = p.entries[std::size_t(i)];
+                  ImGui::TableNextRow();
+                  ImGui::TableNextColumn();
+                  ImGui::TextUnformatted(e.name.data());
+                  ImGui::TableNextColumn();
+                  if (!e.label.isNull()) ImGui::Text("\"%s\"", e.label.data());
+                  ImGui::TableNextColumn();
+                  ImGui::TextDisabled("from %s", e.location.data());
+                  }
+                ImGui::EndTable();
+                }
+              ImGui::TreePop();
+              }
+            ImGui::PopID();
+            }
+          ImGui::TreePop();
+          }
+        ImGui::PopID();
+        }
+      }
+    }
+  ImGui::EndChild();
+
+  if (ok)
+    {
+    PlotDocument::RegroupPlan done;
+    Path canvas = d.regroup(o, &done);
+    if (canvas.empty())
+      {
+      r.message = done.error.isNull() ? std::string("Nothing to regroup") : done.error.str();
+      r.plan = done;
+      r.previewed = true;
+      r.previewKey = key;
+      }
+    else
+      {
+      t->selected = canvas;
+      t->hasSelection = true;
+      char text[160];
+      std::snprintf(text, sizeof(text), "Regrouped %d histograms and functions into %d graphs in %d canvases%s",
+                    int(done.entries.size()), int(done.graphs.size()), int(done.canvases.size()),
+                    done.windows.empty() ? "" : " in new windows (View > Detached Windows shows them all)");
+      _gui.setStatus(String(text));
+      r.previewed = false;
+      ImGui::CloseCurrentPopup();
+      }
+    }
+  if (cancel) { r.previewed = false; ImGui::CloseCurrentPopup(); }
+  ImGui::EndPopup();
+  }
+
   void DatumGuiApp::renderDialogs()
   {
   renderRenameDialog();
+  renderRegroupDialog();
   if (_closeDialog) { ImGui::OpenPopup("Save changes?"); _closeDialog = false; }
   if (ImGui::BeginPopupModal("Save changes?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -2547,10 +2766,13 @@ namespace Datum
   int window = _drawnTab == t->id ? _drawnWindow : 0, canvas = -1;
   if (t->hasSelection) d.locate(t->selected, window, canvas);
   if (window < 0 || window >= int(windows.size())) window = windows.empty() ? -1 : 0;
-  if (_allWindows) window = windows.empty() ? -1 : 0;
+  _detachedWindows = configuration().gui.detachedWindows;   // also set in Edit > Preferences
+  bool all = _allWindows || _detachedWindows;
+  if (all) window = windows.empty() ? -1 : 0;
   bool linksValid = true;
   for (const auto & link : _links) if (paneIndexOf(link.pane) < 0) linksValid = false;   // a pane closed by the user
-  if (linksValid && _drawnTab == t->id && _drawnVersion == d.version() && _drawnWindow == window && _drawnAll == _allWindows) return;
+  if (linksValid && _drawnTab == t->id && _drawnVersion == d.version() && _drawnWindow == window && _drawnAll == _allWindows
+      && _drawnDetached == _detachedWindows) return;
   // shapes drawn on the canvases are kept when the canvases are drawn again
   std::map<std::string, std::vector<GRAPHICS::Shape>> shapes;
   for (const auto & link : _links)
@@ -2570,6 +2792,7 @@ namespace Datum
   _drawnVersion = d.version();
   _drawnWindow = window;
   _drawnAll = _allWindows;
+  _drawnDetached = _detachedWindows;
   std::unique_ptr<GRAPHICS::PlotSpec> spec(new GRAPHICS::PlotSpec());
   String error, problems;
   String title = String("DatumGui: ") + d.displayName();
@@ -2604,27 +2827,43 @@ namespace Datum
     f = id >= 0 ? file(id) : nullptr;
     if (f) spec->setInputFile(int(k), f->file);
     }
-  // the windows drawn: one (the main window), or all (the first in the main window)
+  // the windows drawn: one (the main window), all (the first in the main window), or all detached (each in a window of
+  // its own, the main window showing a note)
   std::vector<int> shown;
-  if (_allWindows) for (int w=0; w<int(windows.size()); w++) shown.push_back(w);
+  if (all) for (int w=0; w<int(windows.size()); w++) shown.push_back(w);
   else shown.push_back(window);
-  _gui.closePaneWindowsFrom(int(shown.size()) - 1);
+  int offset = _detachedWindows ? 0 : 1;   // window shown s is in the window of canvases s - offset (-1: the main window)
+  _gui.closePaneWindowsFrom(int(shown.size()) - offset);
+  if (_detachedWindows)
+    {
+    _gui.setPaneGrid(1, 1);
+    CanvasPane & note = *_gui.panesOf(-1)[0];
+    note.canvas() = GRAPHICS::Canvas();
+    note.divide(1, 1);
+    note.setSelectedGraph(0);
+    note.setTitle("The windows of the plot file are in windows of their own (View > Detached Windows)");
+    note.onDrop = [this](int, const ObjectReference & object) { drop(Path(), object, false); };
+    }
+  String hidden;
   for (std::size_t s=0; s<shown.size(); s++)
     {
-    int w = shown[s], host = int(s) - 1;
+    int w = shown[s], host = int(s) - offset;
     const GRAPHICS::PlotSpec::WindowSpec & ws = spec->windows()[std::size_t(w)];
     int n = int(ws.canvases.size());
-    int columns = std::max(1, std::min(6, ws.columns));
-    int rows = std::max(1, std::min(6, std::max(ws.rows, (std::max(n, 1) + columns - 1)/columns)));
+    // exactly one pane per canvas: the last row holds the rest, no empty cell
+    int count = std::max(1, std::min(36, n));
+    int columns = std::max(1, std::min({ 6, ws.columns, count }));
+    int rows = (count + columns - 1)/columns;
+    if (n > 36) hidden += String(" ") + ws.title;
     if (host < 0)
       {
-      if (_gui.nColumns() != columns || _gui.nRows() != rows || int(_gui.panesOf(-1).size()) < columns*rows) _gui.setLayout(columns, rows);
+      if (_gui.nColumns() != columns || _gui.nRows() != rows || int(_gui.panesOf(-1).size()) != count) _gui.setPaneGrid(columns, count);
       title += String(": ") + ws.title;
       }
     else
       {
       _gui.setPaneWindow(host, ws.title, columns, rows, ws.width, ws.height);
-      _gui.setPaneWindowPaneCount(host, std::max(1, n));
+      _gui.setPaneWindowPaneCount(host, count);
       }
     std::vector<Path> canvasPaths = d.children(windows[std::size_t(w)], PlotDocument::kCanvas);
     std::vector<CanvasPane *> panes = _gui.panesOf(host);
@@ -2680,6 +2919,8 @@ namespace Datum
       _links.push_back(link);
       }
     }
+  if (!hidden.isNull()) _gui.setStatus(String("Only the first 36 canvases of a window are shown:") + hidden
+                                       + String(" (Regroup can spread canvases over several windows)"));
   _gui.setWindowTitle(title);
   _spec = std::move(spec);   // the old specification goes after the canvases stopped using its functions
   if (!problems.isNull())
@@ -2825,7 +3066,7 @@ namespace Datum
   if (ImGui::Button("Unselect shown"))
     for (const String & t : _template.tasks()) for (const String & n : _template.names(t)) if (shown(n)) _template.setNameSelected(t, n, false);
   ImGui::Separator();
-  float optionsHeight = 7.0f*ImGui::GetFrameHeightWithSpacing();
+  float optionsHeight = 8.0f*ImGui::GetFrameHeightWithSpacing();
   ImGui::BeginChild("##catalog", ImVec2(0, -optionsHeight), ImGuiChildFlags_Borders);
   for (const String & task : _template.tasks())
     {
@@ -2864,6 +3105,10 @@ namespace Datum
   ImGui::EndChild();
   int grouping = int(_templateOptions.grouping);
   ImGui::TextUnformatted("Canvases:");
+  ImGui::SameLine();
+  if (ImGui::RadioButton("one per family of related histograms (n1_*, R2_*, ...)", grouping == 2)) _templateOptions.grouping = Options::kByFamily;
+  ImGui::SetItemTooltip("Histograms of a same rank whose names share their first word (before the first '_') share a canvas,\na graph per histogram and combination; the histograms alone in their family share the canvas 'others'");
+  ImGui::TextUnformatted("         ");
   ImGui::SameLine();
   if (ImGui::RadioButton("one per histogram, a graph per combination", grouping == 0)) _templateOptions.grouping = Options::kByHistogram;
   ImGui::SameLine();

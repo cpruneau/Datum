@@ -50,6 +50,7 @@ namespace Datum
   float  fontSize   = 15.0f;     //!< points
   String fontFile;               //!< TrueType font; empty: the font distributed with Datum
   bool   viewports  = true;      //!< windows (e.g. the file browser) can be dragged out of the main window
+  bool   detachedWindows = true; //!< each window of a plot file in a window of its own (View > Detached Windows)
   int    columns    = 1;         //!< canvas panes per row
   int    rows       = 1;         //!< rows of canvas panes
   bool   toolbars   = true;      //!< toolbar above each canvas
@@ -130,6 +131,9 @@ namespace Datum
   void setLayout(int nColumns, int nRows);
   //! @brief Set the number of panes, arranged in a grid as square as possible (does nothing if it is already n).
   void setPaneCount(int n);
+  //! @brief Show exactly n canvas panes in the main window, nColumns per row (fewer if fewer panes), the last row
+  //! holding the rest (no empty cell; at most 36 panes, 6 columns). @param nColumns columns @param n panes
+  void setPaneGrid(int nColumns, int n);
   //! @brief Add a pane, docked beside the current one, and make it current. @return the new pane
   CanvasPane & addPane();
   //! @brief Close pane k: not the last one, unless it was moved out of the main window (an empty pane then takes its
@@ -353,6 +357,8 @@ namespace Datum
   int height = 700;       //!< size (points)
   bool placed = false;    //!< placed and sized on screen
   bool layoutPending = true;   //!< the panes are to be docked in its grid
+  int resizeColumns = 0;  //!< grid it had on screen before its grid changed (0: no resize pending): resized so that
+  int resizeRows = 0;     //!< each pane keeps its size (fewer canvases: a smaller window)
   };
   std::vector<PaneWindow> _paneWindows;   //!< windows of canvases
   std::string _sideWindow;   //!< window docked between the browser and the canvases ("" for none)
