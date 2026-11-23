@@ -7,12 +7,14 @@
 #
 #   HEPDataTable       errors, values, qualifiers, variables, keywords, resources, a table and its data file
 #   HEPDataSubmission  submission.yaml and the tables: read from a directory, a file or an archive; written
+#   HEPDataConverter   tables to Datum objects (Histogram, HistogramSyst, DataPointsVector...) and back
 ################################################################################################
 add_compile_options(-Wall -Wextra -pedantic)
 add_library(HEPData SHARED
-HEPData.cpp)
+HEPData.cpp
+HEPDataConverter.cpp)
 
-target_link_libraries(HEPData PUBLIC Base PRIVATE ${DATUM_YAML_TARGET})
+target_link_libraries(HEPData PUBLIC Base Math PRIVATE ${DATUM_YAML_TARGET})
 target_include_directories(HEPData PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 datum_install(HEPData LIBRARY "$ENV{DATUM_LIB_PATH}")
@@ -24,3 +26,6 @@ add_test(NAME YamlCpp COMMAND TestYamlCpp)
 add_executable(TestHEPData tests/TestHEPData.cpp)
 target_link_libraries(TestHEPData HEPData Base)
 add_test(NAME HEPData COMMAND TestHEPData ${CMAKE_CURRENT_SOURCE_DIR}/tests/data)
+add_executable(TestHEPDataConverter tests/TestHEPDataConverter.cpp)
+target_link_libraries(TestHEPDataConverter HEPData Math Base)
+add_test(NAME HEPDataConverter COMMAND TestHEPDataConverter ${CMAKE_CURRENT_SOURCE_DIR}/tests/data)
