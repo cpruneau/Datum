@@ -38,6 +38,7 @@ option(DATUM_WITH_HERWIG       "Build the interface to the Herwig event generato
 option(DATUM_WITH_GLAUBER      "Build the Glauber module (Glauber Monte Carlo of nucleus-nucleus collisions)" ON)
 option(DATUM_WITH_SHERPA       "Build the interface to the Sherpa event generator (placeholder)" OFF)
 option(DATUM_WITH_THERMALFIST  "Build the interface to Thermal-FIST (placeholder)"              OFF)
+option(DATUM_WITH_YAML         "Read and write YAML files (HEPData) with yaml-cpp (distributed in external/yaml-cpp)" ON)
 # Installation prefixes of the external packages. When empty, a copy distributed with Datum is used if present
 # (a directory <Datum>/pythia8*, <Datum>/external/pythia8*, ...), then the environment (DATUM_PYTHIA8_PATH, PYTHIA8, ...),
 # then the package's configuration tool (pythia8-config --prefix, ...).
@@ -194,11 +195,45 @@ function(datum_resolve_prefix VAR LABEL FILE)
 endfunction()
 
 ################################################################################################
+# yaml-cpp (DATUM_WITH_YAML): a yaml-cpp installed on the system (e.g. brew install yaml-cpp) if CMake finds one,
+# otherwise the copy distributed in <Datum>/external/yaml-cpp, built as a static, position-independent library (linked
+# into the Datum libraries that use it: nothing more to install). DATUM_YAML_TARGET names the target to link.
+################################################################################################
+if(DATUM_WITH_YAML)
+  find_package(yaml-cpp 0.7 CONFIG QUIET)
+  if(TARGET yaml-cpp::yaml-cpp)
+    set(DATUM_YAML_TARGET yaml-cpp::yaml-cpp)
+    set(DATUM_YAML_SOURCE "system, ${yaml-cpp_DIR}")
+  elseif(TARGET yaml-cpp)
+    set(DATUM_YAML_TARGET yaml-cpp)
+    set(DATUM_YAML_SOURCE "system, ${yaml-cpp_DIR}")
+  elseif(EXISTS "${DATUM_TOP_DIR}/external/yaml-cpp/CMakeLists.txt")
+    set(YAML_CPP_BUILD_TESTS   OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_TOOLS   OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_INSTALL       OFF CACHE BOOL "" FORCE)
+    set(YAML_CPP_FORMAT_SOURCE OFF CACHE BOOL "" FORCE)
+    set(YAML_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${DATUM_TOP_DIR}/external/yaml-cpp" "${CMAKE_BINARY_DIR}/external/yaml-cpp" EXCLUDE_FROM_ALL)
+    set_target_properties(yaml-cpp PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_options(yaml-cpp PRIVATE -w)   # third-party code: no warnings
+    set(DATUM_YAML_TARGET yaml-cpp)
+    set(DATUM_YAML_SOURCE "external/yaml-cpp")
+  else()
+    message(FATAL_ERROR "DATUM_WITH_YAML: no yaml-cpp on the system and none in ${DATUM_TOP_DIR}/external/yaml-cpp. "
+                        "Install yaml-cpp, or turn the option off.")
+  endif()
+endif()
+
+################################################################################################
 # Core modules (always built)
 ################################################################################################
 add_subdirectory(core/Base)
 add_subdirectory(models/BasicEventGen)
 add_subdirectory(core/Math)
+if(DATUM_WITH_YAML)
+  add_subdirectory(core/HEPData)   # HEPData YAML files (yaml-cpp)
+endif()
 add_subdirectory(analysis/Global)
 add_subdirectory(analysis/Particles)
 add_subdirectory(analysis/ParticleSingle)
@@ -214,6 +249,9 @@ add_subdirectory(analysis/Spreadsheet)   # tables of data: text, CSV, binary, Ex
 set(DATUM_LINKED_MODULES Base Math Particles SubSample Global Spherocity ParticleSingle ParticlePair
                        ParticlePair3D NuDyn ParticleFlow PtPt Performance Spreadsheet BasicEventGen)
 set(DATUM_OPTIONAL_BUILT "")
+if(DATUM_WITH_YAML)
+  list(APPEND DATUM_OPTIONAL_BUILT "HEPData (yaml-cpp: ${DATUM_YAML_SOURCE})")
+endif()
 if(DATUM_WITH_ROOT)   # ROOT files and trees: RootFileHelpers, RootConversion, RootFileConversion, RootChainManager
   add_subdirectory(core/RootConvert)
   list(APPEND DATUM_LINKED_MODULES RootConvert)
