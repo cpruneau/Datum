@@ -17,6 +17,38 @@ namespace Datum
 {
 
 //!
+//! @brief The publication and the people behind a submission.
+//!
+//! HEPData takes the paper (title, authors, journal, DOI) and the collaboration from the INSPIRE record attached to
+//! the submission: submission.yaml has no field for them. Datum keeps them as comment lines at the top of
+//! submission.yaml ("# Collaboration: ALICE", "# INSPIRE: 1234567", ...), which HEPData ignores and Datum reads back;
+//! summary() gives them as text, to put in the comment of the submission if wanted. Other comment lines at the top of
+//! the file are kept in notes.
+//!
+struct HEPDataPublication
+{
+  String collaboration;          //!< collaboration (e.g. ALICE)
+  String title;                  //!< title of the paper
+  String inspire;                //!< INSPIRE record number (e.g. 1234567)
+  String arXiv;                  //!< arXiv identifier (e.g. 2501.01234)
+  String doi;                    //!< DOI of the paper
+  String journal;                //!< journal reference
+  String contact;                //!< contact (name, e-mail)
+  std::vector<String> notes;     //!< other comment lines at the top of submission.yaml (without '#')
+
+  //! @brief Whether nothing is set. @return true if so
+  bool isEmpty() const;
+  //! @brief The comment lines written at the top of submission.yaml (with '#', one per line). @return text
+  String headerLines() const;
+  //! @brief Read the comment lines at the top of a text (lines starting with '#'). @param text text of submission.yaml
+  //! @return publication
+  static HEPDataPublication fromHeader(const String & text);
+  //! @brief The publication as one sentence, e.g. "ALICE Collaboration, Title, arXiv:2501.01234 (INSPIRE 1234567)."
+  //! @return text (empty if nothing is set)
+  String summary() const;
+};
+
+//!
 //! @brief A HEPData submission: submission.yaml (comment, resources, one document per table) and the data files.
 //!
 //! read() accepts what hepdata.net gives and what authors prepare:
@@ -41,6 +73,7 @@ class HEPDataSubmission
 public:
 
   String comment;                          //!< comment of the whole submission
+  HEPDataPublication publication;          //!< publication and collaboration (comment lines of submission.yaml)
   std::vector<HEPDataResource> resources;  //!< additional resources of the whole submission
   std::vector<HEPDataTable>    tables;     //!< tables, in order
 
@@ -66,7 +99,7 @@ public:
   std::vector<String> problems() const;
 
   //!
-  //! @brief The text of submission.yaml: the first document (comment, resources) if either is set, then one document
+  //! @brief The text of submission.yaml: the comment lines of the publication (if any), the first document (comment, resources) if either is set, then one document
   //! per table (name, description, location, keywords, data_file, licence, resources). @return YAML text
   //!
   String submissionYaml() const;

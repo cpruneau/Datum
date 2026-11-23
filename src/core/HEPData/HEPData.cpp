@@ -638,6 +638,104 @@ void HEPDataTable::writeDataFile(const String & fileName, unsigned int digits, b
 }
 
 //////////////////////////////////////////////////////////////////////////
+// HEPDataPublication
+//////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+struct PublicationKey { const char * name; String HEPDataPublication::* field; };
+
+const std::vector<PublicationKey> & publicationKeys()
+{
+  static const std::vector<PublicationKey> keys = {
+    {"Collaboration",&HEPDataPublication::collaboration}, {"Title",&HEPDataPublication::title},
+    {"INSPIRE",&HEPDataPublication::inspire}, {"arXiv",&HEPDataPublication::arXiv}, {"DOI",&HEPDataPublication::doi},
+    {"Journal",&HEPDataPublication::journal}, {"Contact",&HEPDataPublication::contact} };
+  return keys;
+}
+
+std::string lowerCase(std::string s)
+{
+  for (char & c : s) c = (char) std::tolower((unsigned char) c);
+  return s;
+}
+
+std::string trimmedText(const std::string & s)
+{
+  std::size_t a = s.find_first_not_of(" \t\r"), b = s.find_last_not_of(" \t\r");
+  return a==std::string::npos ? std::string() : s.substr(a,b-a+1);
+}
+
+//! The field of a key read in a header line (other names used by collaborations accepted), or nullptr.
+String HEPDataPublication::* publicationField(const std::string & key)
+{
+  std::string k = lowerCase(trimmedText(key));
+  if (k=="inspirehep" || k=="inspire id" || k=="inspire-hep" || k=="inspire record") k = "inspire";
+  if (k=="reference" || k=="journal reference") k = "journal";
+  if (k=="email" || k=="e-mail" || k=="contacts") k = "contact";
+  for (const PublicationKey & p : publicationKeys()) if (lowerCase(p.name)==k) return p.field;
+  return nullptr;
+}
+}
+
+bool HEPDataPublication::isEmpty() const
+{
+  for (const PublicationKey & p : publicationKeys()) if (!(this->*p.field).isNull()) return false;
+  return notes.empty();
+}
+
+String HEPDataPublication::headerLines() const
+{
+  std::string text;
+  for (const PublicationKey & p : publicationKeys())
+    {
+    std::string v = trimmedText((this->*p.field).str());
+    for (char & c : v) if (c=='\n' || c=='\r') c = ' ';
+    if (!v.empty()) text += std::string("# ")+p.name+": "+v+"\n";
+    }
+  for (const String & n : notes)
+    {
+    std::string v = n.str();
+    for (char & c : v) if (c=='\n' || c=='\r') c = ' ';
+    text += (v.empty() ? std::string("#") : "# "+v)+"\n";
+    }
+  return String(text);
+}
+
+HEPDataPublication HEPDataPublication::fromHeader(const String & text)
+{
+  HEPDataPublication p;
+  std::istringstream in(text.str());
+  std::string line;
+  while (std::getline(in,line))
+    {
+    std::string t = trimmedText(line);
+    if (t.empty()) continue;
+    if (t[0]!='#') break;                                     // the comment lines at the top only
+    std::string body = trimmedText(t.substr(1));
+    std::size_t colon = body.find(':');
+    String HEPDataPublication::* field = colon==std::string::npos ? nullptr : publicationField(body.substr(0,colon));
+    if (field && (p.*field).isNull()) p.*field = String(trimmedText(body.substr(colon+1)));
+    else p.notes.push_back(String(body));
+    }
+  return p;
+}
+
+String HEPDataPublication::summary() const
+{
+  std::string s;
+  auto append = [&s](const std::string & part) { if (part.empty()) return; if (!s.empty()) s += ", "; s += part; };
+  append(collaboration.isNull() ? std::string() : collaboration.str()+" Collaboration");
+  append(title.str());
+  append(journal.str());
+  append(arXiv.isNull() ? std::string() : "arXiv:"+arXiv.str());
+  append(doi.isNull() ? std::string() : "doi:"+doi.str());
+  if (!inspire.isNull()) s += (s.empty() ? std::string() : std::string(" "))+"(INSPIRE "+inspire.str()+")";
+  if (!s.empty()) s += ".";
+  return String(s);
+}
+
+//////////////////////////////////////////////////////////////////////////
 // HEPDataSubmission
 //////////////////////////////////////////////////////////////////////////
 
@@ -647,6 +745,7 @@ HEPDataSubmission HEPDataSubmission::readYaml(const String & text, const String 
   try { documents = YAML::LoadAll(text.str()); }
   catch (const YAML::Exception & e) { invalid(String("submission.yaml"),std::string("invalid YAML: ")+e.what()); }
   HEPDataSubmission s;
+  s.publication = HEPDataPublication::fromHeader(text);
   for (const YAML::Node & d : documents)
     {
     if (!d || d.IsNull()) continue;
@@ -771,6 +870,7 @@ std::vector<String> HEPDataSubmission::problems() const
 String HEPDataSubmission::submissionYaml() const
 {
   YAML::Emitter out;
+  String header = publication.headerLines();
   if (!comment.isNull() || !resources.empty())
     {
     out << YAML::BeginDoc << YAML::BeginMap;
@@ -801,7 +901,7 @@ String HEPDataSubmission::submissionYaml() const
     out << YAML::EndMap;
     }
   if (!out.good()) invalid(String("submission.yaml"),std::string("cannot write submission.yaml: ")+out.GetLastError());
-  return String(std::string(out.c_str())+"\n");
+  return String(header.str()+std::string(out.c_str())+"\n");
 }
 
 void HEPDataSubmission::write(const String & directory, const String & archive, unsigned int digits, bool withDatumBlock) const

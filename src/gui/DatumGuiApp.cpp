@@ -409,7 +409,13 @@ namespace Datum
   DatumApp(argc, argv),
   _mode(mode),
   _plotFiles(plotFiles)
-  { }
+  {
+#ifdef DATUM_WITH_HEPDATA
+  _hepDataDialog.onImport = [this](const String & name, const HEPDataImportPlan & plan, String & message)
+    { return importHEPData(name, plan, message); };
+  _hepDataDialog.onStatus = [this](const String & message) { _gui.setStatus(message); };
+#endif
+  }
 
   DatumGuiApp::~DatumGuiApp()
   {
@@ -437,6 +443,12 @@ namespace Datum
   file.addItem("Save",         "data.save",      "",             "Save the file selected, new or changed, to its Datum file");
   file.addItem("Save As...",   "data.saveAs",    "",             "Save the file selected to a new Datum file");
   file.addSeparator();
+#ifdef DATUM_WITH_HEPDATA
+  Menu & dataImport = file.addMenu("Import", "A new data file made from files of other formats");
+  dataImport.addItem("HEPData YAML...", "data.importHEPData", "", "Tables of HEPData submissions (a folder, an archive or YAML "
+                                                                  "files) as histograms, points and functions: a preview "
+                                                                  "shows what will be made before OK");
+#endif
   Menu & dataExport = file.addMenu("Export", "The file selected in other formats");
 #ifdef DATUM_WITH_ROOT
   dataExport.addItem("ROOT...",       "data.exportRoot",  "", "All the objects of the file selected, converted, to a ROOT file");
@@ -444,6 +456,12 @@ namespace Datum
   dataExport.addItem("PDF...",        "data.exportPdf",   "", "Every histogram of the file selected drawn on a page of its own, in one PDF file");
   dataExport.addItem("LaTeX...",      "data.exportLatex", "", "Every histogram of the file selected drawn in a figure of its own, in a LaTeX document");
   dataExport.addItem("PowerPoint...", "data.exportPptx",  "", "Every histogram of the file selected drawn on a slide of its own");
+#ifdef DATUM_WITH_HEPDATA
+  dataExport.addSeparator();
+  dataExport.addItem("HEPData YAML...", "data.exportHEPData", "", "Histograms, points, fits and functions of the open data files "
+                                                                  "as a HEPData submission, with the publication and the keywords: "
+                                                                  "a preview shows the files before OK writes them");
+#endif
   file.addSeparator();
   file.addItem("Exit",         "file.exit",      "Ctrl+Q",       "Quit (asks to save the changes of the plot files)");
 
@@ -597,6 +615,9 @@ namespace Datum
                          "data.exportPptx"}) enable(c, data != nullptr);
   enable("data.save", data && data->editable && (data->modified || data->path.isNull()));
   enable("data.closeAll", !_files.empty());
+#ifdef DATUM_WITH_HEPDATA
+  enable("data.exportHEPData", !_files.empty());
+#endif
   enable("data.rename", _gui.activeBrowser().canRename());
   enable("win.rename", windows);
   enable("canvas.rename", canvasOfPlot);
@@ -1132,6 +1153,10 @@ namespace Datum
       exportDataFile(id, kind, FileSystem::hasExtension(chosen, extension) ? chosen : chosen + extension);
       });
     }
+#ifdef DATUM_WITH_HEPDATA
+  else if (c == "data.importHEPData") _hepDataDialog.openImport(_configuration.directory);
+  else if (c == "data.exportHEPData") openHEPDataExport();
+#endif
   else if (c == "data.rename")
     {
     if (!_gui.activeBrowser().requestRename())
@@ -1607,6 +1632,46 @@ namespace Datum
     }
   catch (const std::exception & e) { _gui.showMessage("Duplicate", String("Cannot copy:\n") + String(e.what())); }
   }
+
+#ifdef DATUM_WITH_HEPDATA
+  void DatumGuiApp::openHEPDataExport()
+  {
+  std::vector<HEPDataDialog::ExportFile> files;
+  BrowserFile * selected = selectedDataFile();
+  for (const BrowserFile & f : _files)
+    {
+    if (!f.file) continue;
+    HEPDataDialog::ExportFile e;
+    e.label = f.editable ? f.name : FileSystem::stem(f.path);
+    e.folder = std::shared_ptr<const Folder>(f.file, &f.file->folder());   // keeps the file alive
+    e.selected = selected && selected->id == f.id;
+    files.push_back(e);
+    }
+  _hepDataDialog.openExport(files, _configuration.directory);
+  }
+
+  bool DatumGuiApp::importHEPData(const String & name, const HEPDataImportPlan & plan, String & message)
+  {
+  int id = newTree(_gui.activeBrowser());
+  BrowserFile * f = file(id);
+  if (!f || !f->file) { message = "Cannot make a new data file"; return false; }
+  f->name = name;
+  f->file->setFolderName(name);
+  try
+    {
+    unsigned int n = plan.addTo(f->file->folder());
+    f->modified = true;
+    message = name + String(": ") + String(std::to_string(n).c_str()) + String(n == 1 ? " object" : " objects")
+              + String(" imported from HEPData (Save to write it as a Datum file)");
+    return true;
+    }
+  catch (const std::exception & e)
+    {
+    message = String("Cannot import: ") + String(e.what());
+    return false;
+    }
+  }
+#endif
 
   void DatumGuiApp::exportDataFile(int id, const String & kind, const String & path)
   {
@@ -2510,6 +2575,9 @@ namespace Datum
   {
   renderRenameDialog();
   renderRegroupDialog();
+#ifdef DATUM_WITH_HEPDATA
+  _hepDataDialog.render(_gui.fileDialog());
+#endif
   if (_closeDialog) { ImGui::OpenPopup("Save changes?"); _closeDialog = false; }
   if (ImGui::BeginPopupModal("Save changes?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
