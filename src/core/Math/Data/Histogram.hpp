@@ -1324,7 +1324,8 @@ namespace Datum
   //!  - payload: name, title, partition type, rank, then for each axis: number of bins, minimum and maximum (float32),
   //!    title; then the number of non-empty bins and, for each, the gap in global bin index since the previous
   //!    non-empty bin (varint), the entries (zigzag varint), the average value and its uncertainty (float32); then
-  //!    the bin labels of each axis and the fits attached (format version 4, see FitList::encodeBinary())
+  //!    the bin labels of each axis and the fits attached (format version 4, see FitList::encodeBinary()), then the common
+  //!    systematic uncertainty (format version 5, see DataPoints::encodeCommonSyst())
   //! Integers use variable-length encoding (1 byte below 128), multi-byte values are little-endian, and bins with
   //! zero entries, value and uncertainty are not written: a typical filled bin takes about 10 bytes, an empty bin 0.
   //! The content is restored exactly. Corrupted or truncated data is detected (FileException).
@@ -1334,7 +1335,7 @@ namespace Datum
   //! @brief Tag of histogram records in binary files. @return "DTMH"
   static const char * binaryTag() { return "DTMH"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 4; }
+  static unsigned int binaryVersion() { return 5; }
   //! @brief Name stored in binary records. @return name()
   String binaryName() const { return name(); }
   //! @brief Write the binary payload after the name (used by writeBinary()). @param w writer

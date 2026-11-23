@@ -27,7 +27,9 @@ namespace Datum
   //!  - rank()            : number of independent variables (1 for DataPoint2D, 2 for DataPoint3D, n>2 for DataPointND)
   //!  - x(i), xError(i)   : value and uncertainty of independent variable i, 0 <= i < rank()
   //!  - value()           : dependent value
-  //!  - stat(), syst()    : statistical and systematic uncertainties on the dependent value (members _stat and _syst)
+  //!  - stat()            : statistical uncertainty on the dependent value (member _stat)
+  //!  - systPlus(), systMinus() : upper and lower systematic uncertainties on the dependent value (members _systPlus and
+  //!                        _systMinus, both >= 0); they are equal for a symmetric uncertainty. syst() is the larger of the two.
   //!
   //! Storage of the independent variables is left to the derived classes. Their uncertainties are, for now,
   //! treated as mutually independent: no covariance between independent variables is stored.
@@ -35,7 +37,10 @@ namespace Datum
   //! <b>Arithmetic.</b> add(), subtract(), multiply() and divide() act on the dependent value of
   //! two points of the same rank whose independent variables are compatible (see compatibleX()). The result takes the
   //! mean of each independent variable and the mean of its uncertainty. Statistical and systematic uncertainties are
-  //! propagated separately, to first order, assuming the two points are independent. Derived classes expose these
+  //! propagated separately, to first order, assuming the two points are independent. The upper and lower systematic
+  //! uncertainties are propagated separately: an operand entering with a negative derivative (the subtrahend of a
+  //! difference, the denominator of a ratio, a negative scale factor) contributes its lower uncertainty to the upper one
+  //! of the result, and conversely. Derived classes expose these
   //! as operators (+=, -=, *=, /=); the binary operators (+, -, *, /, unary -) are provided for every derived class
   //! by the templates at the end of this file.
   //!
@@ -45,7 +50,8 @@ namespace Datum
 
   float _value;  //!< dependent value
   float _stat;   //!< statistical uncertainty on the dependent value
-  float _syst;   //!< systematic uncertainty on the dependent value
+  float _systPlus;   //!< upper systematic uncertainty on the dependent value (>= 0)
+  float _systMinus;  //!< lower systematic uncertainty on the dependent value (>= 0)
 
   public:
 
@@ -55,7 +61,12 @@ namespace Datum
   //! @brief Default constructor: value and uncertainties are zero.
   DataPoint();
   //! @brief Constructor. @param value dependent value @param stat statistical uncertainty @param syst systematic uncertainty
+  //! (symmetric) @throws MathException if an uncertainty is negative
   DataPoint(double value, double stat=0.0, double syst=0.0);
+  //! @brief Constructor with asymmetric systematic uncertainties. @param value dependent value @param stat statistical
+  //! uncertainty @param systPlus upper systematic uncertainty @param systMinus lower systematic uncertainty (both >= 0)
+  //! @throws MathException if an uncertainty is negative
+  DataPoint(double value, double stat, double systPlus, double systMinus);
   //! @brief Copy constructor. @param source point to copy
   DataPoint(const DataPoint & source);
   //! @brief Destructor.
@@ -94,19 +105,34 @@ namespace Datum
   float value() const { return _value; }
   //! @brief Statistical uncertainty on the dependent value. @return stat
   float stat()  const { return _stat; }
-  //! @brief Systematic uncertainty on the dependent value. @return syst
-  float syst()  const { return _syst; }
-  //! @brief Total uncertainty on the dependent value, stat and syst added in quadrature. @return sqrt(stat^2+syst^2)
-  float error() const { return std::sqrt(double(_stat)*_stat + double(_syst)*_syst); }
+  //! @brief Systematic uncertainty on the dependent value: the larger of the upper and lower ones. @return syst
+  float syst()  const { return _systPlus>=_systMinus ? _systPlus : _systMinus; }
+  //! @brief Upper systematic uncertainty on the dependent value. @return systPlus (>= 0)
+  float systPlus()  const { return _systPlus; }
+  //! @brief Lower systematic uncertainty on the dependent value. @return systMinus (>= 0)
+  float systMinus() const { return _systMinus; }
+  //! @brief Whether the upper and lower systematic uncertainties differ. @return true if asymmetric
+  bool hasAsymmetricSyst() const { return _systPlus!=_systMinus; }
+  //! @brief Upper total uncertainty: stat and systPlus in quadrature. @return sqrt(stat^2+systPlus^2)
+  float errorPlus()  const { return std::sqrt(double(_stat)*_stat + double(_systPlus)*_systPlus); }
+  //! @brief Lower total uncertainty: stat and systMinus in quadrature. @return sqrt(stat^2+systMinus^2)
+  float errorMinus() const { return std::sqrt(double(_stat)*_stat + double(_systMinus)*_systMinus); }
+  //! @brief Total uncertainty on the dependent value, stat and syst() added in quadrature (the larger side).
+  //! @return sqrt(stat^2+syst^2)
+  float error() const { double s = syst(); return std::sqrt(double(_stat)*_stat + s*s); }
   //! @brief Set the dependent value (uncertainties unchanged). @param value new value
   void setValue(double value) { _value = value; }
   //! @brief Set the dependent value and its uncertainties. @param value new value @param stat statistical uncertainty (>= 0)
-  //! @param syst systematic uncertainty (>= 0) @throws MathException if an uncertainty is negative
+  //! @param syst systematic uncertainty (>= 0, symmetric) @throws MathException if an uncertainty is negative
   void setValue(double value, double stat, double syst=0.0);
   //! @brief Set the statistical uncertainty. @param stat uncertainty (>= 0) @throws MathException if stat<0
   void setStat(double stat);
-  //! @brief Set the systematic uncertainty. @param syst uncertainty (>= 0) @throws MathException if syst<0
+  //! @brief Set a symmetric systematic uncertainty (upper = lower = syst). @param syst uncertainty (>= 0)
+  //! @throws MathException if syst<0
   void setSyst(double syst);
+  //! @brief Set the upper and lower systematic uncertainties. @param systPlus upper uncertainty (>= 0)
+  //! @param systMinus lower uncertainty (>= 0) @throws MathException if one is negative
+  void setSyst(double systPlus, double systMinus);
 
   //! @}
 
@@ -134,9 +160,11 @@ namespace Datum
 
   //! @brief Add a constant to the dependent value (uncertainties unchanged). @param constant value added
   void shift(double constant) { _value += constant; }
-  //! @brief Multiply the dependent value by coefficient and its uncertainties by |coefficient|. @param coefficient scale factor
+  //! @brief Multiply the dependent value by coefficient and its uncertainties by |coefficient|; the upper and lower
+  //! systematic uncertainties are swapped if coefficient<0. @param coefficient scale factor
   virtual void scale(double coefficient);
-  //! @brief Replace the value v by 1/v; uncertainties become e/v^2. @throws MathException if the value is zero
+  //! @brief Replace the value v by 1/v; uncertainties become e/v^2, the upper and lower systematic ones swapped.
+  //! @throws MathException if the value is zero
   virtual void inverse();
   //! @brief value = value + rhs.value, with uncertainties propagated (see the class description).
   //! @param rhs point of the same rank with compatible independent variables @throws MathException otherwise
@@ -161,6 +189,8 @@ namespace Datum
   virtual void print(std::ostream & out) const;
   //! @brief Print the point to std::cout, followed by an end of line.
   void print() const;
+  //! @brief Write the systematic uncertainty: "+- s (syst)", or "+u -l (syst)" if asymmetric. @param out output stream
+  void printSyst(std::ostream & out) const;
 
   protected:
 
@@ -178,7 +208,8 @@ namespace Datum
   //! @brief Set this point to the result of a two-operand operation f(v1,v2).
   //!
   //! Each independent variable (and its uncertainty) is set to the mean of the two operands. Uncertainties are
-  //! propagated to first order: stat = sqrt((d1*stat1)^2 + (d2*stat2)^2), and likewise for syst.
+  //! propagated to first order: stat = sqrt((d1*stat1)^2 + (d2*stat2)^2), and likewise for each side of syst (an operand
+  //! with a negative derivative contributes its lower side to the upper side of the result, and conversely).
   //! p1 or p2 may be this point. Derived classes holding more data (e.g., a covariance) override and extend it.
   //! @param p1 first operand @param p2 second operand (same rank) @param value f(v1,v2)
   //! @param d1 partial derivative df/dv1 @param d2 partial derivative df/dv2

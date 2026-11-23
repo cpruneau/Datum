@@ -286,7 +286,7 @@ namespace MATH
   void Profile::decodeBinary(BinaryReader & r, const String & profileName, unsigned int version)
   {
   // the histogram part: format version 3 of Histogram in version 1, version 4 (with the fits) since version 2
-  Histogram::decodeBinary(r,profileName,version>=2 ? 4 : 3);
+  Histogram::decodeBinary(r,profileName,version>=3 ? 5 : (version>=2 ? 4 : 3));
   if (rank()!=1 && rank()!=2) throw Exception("A Profile must have rank 1 or 2","Profile::decodeBinary()");
   setClassName("Profile");
   setPrecision(kDouble);

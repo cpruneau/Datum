@@ -106,7 +106,8 @@ namespace Datum
   _xError       = xError;
   _value        = y;
   _stat         = yStatError;
-  _syst         = ySysError;
+  _systPlus     = ySysError;
+  _systMinus    = ySysError;
   _xyCovariance = 0.0;
   }
 
@@ -296,8 +297,9 @@ namespace Datum
   void DataPoint2D::print(std::ostream & out) const
   {
   out << "x: " << _x << " +- " << _xError
-      << "  y: " << _value << " +- " << _stat << " (stat) +- " << _syst << " (syst)"
-      << "  cov(x,y): " << _xyCovariance;
+      << "  y: " << _value << " +- " << _stat << " (stat) ";
+  printSyst(out);
+  out << "  cov(x,y): " << _xyCovariance;
   }
 
   //////////////////////////////////////////////////////////////////////////
@@ -306,19 +308,24 @@ namespace Datum
 
   void DataPoint2D::encodeBinary(BinaryWriter & w) const
   {
-  const float v[6] = {_x,_xError,_value,_stat,_syst,_xyCovariance};
+  // Bit i of the mask: value i is non-zero and written. Value 4 is the upper systematic uncertainty; bit 6 (format
+  // version 2) marks a lower one that differs from it, written last (absent: lower = upper, as in version 1).
+  const float v[7] = {_x,_xError,_value,_stat,_systPlus,_xyCovariance,_systMinus};
   uint8_t mask = 0;
   for (int i=0; i<6; i++) { uint32_t u; std::memcpy(&u,&v[i],4); if (u!=0) mask |= uint8_t(1u<<i); }
+  if (_systMinus!=_systPlus) mask |= uint8_t(1u<<6);
   w.writeUInt8(mask);
-  for (int i=0; i<6; i++) if (mask & (1u<<i)) w.writeFloat32(v[i]);
+  for (int i=0; i<7; i++) if (mask & (1u<<i)) w.writeFloat32(v[i]);
   }
 
   void DataPoint2D::decodeBinary(BinaryReader & r)
   {
   uint8_t mask = r.readUInt8();
-  if (mask & 0xC0) throw Exception("Invalid data point mask","DataPoint2D::decodeBinary()");
-  float * v[6] = {&_x,&_xError,&_value,&_stat,&_syst,&_xyCovariance};
+  if (mask & 0x80) throw Exception("Invalid data point mask","DataPoint2D::decodeBinary()");
+  float * v[6] = {&_x,&_xError,&_value,&_stat,&_systPlus,&_xyCovariance};
   for (int i=0; i<6; i++) *v[i] = (mask & (1u<<i)) ? r.readFloat32() : 0.0f;
+  _systMinus = (mask & 0x40) ? r.readFloat32() : _systPlus;
+  if (_systPlus<0 || _systMinus<0) throw Exception("Negative systematic uncertainty","DataPoint2D::decodeBinary()");
   }
 
   void DataPoint2D::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int /*version*/)

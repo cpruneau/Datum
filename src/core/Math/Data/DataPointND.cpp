@@ -119,13 +119,15 @@ namespace Datum
     }
   w.writeFloat32(_value);
   w.writeFloat32(_stat);
-  w.writeFloat32(_syst);
+  w.writeFloat32(_systPlus);
+  w.writeFloat32(_systMinus);   // format version 2
   }
 
-  void DataPointND::decodeBinary(BinaryReader & r)
+  void DataPointND::decodeBinary(BinaryReader & r, unsigned int version)
   {
   uint64_t n = r.readVarUInt();
-  if (n<kMinimumRank || n>kMaximumDecodedRank || 4*(2*n+3)>r.remaining())
+  uint64_t nValues = version>=2 ? 4 : 3;
+  if (n<kMinimumRank || n>kMaximumDecodedRank || 4*(2*n+nValues)>r.remaining())
     throw Exception("Invalid data point rank","DataPointND::decodeBinary()");
   std::vector<float> x(n), xError(n);
   for (uint64_t i=0; i<n; i++)
@@ -134,15 +136,17 @@ namespace Datum
     xError[i] = r.readFloat32();
     }
   _value  = r.readFloat32();
-  _stat   = r.readFloat32();
-  _syst   = r.readFloat32();
+  _stat      = r.readFloat32();
+  _systPlus  = r.readFloat32();
+  _systMinus = version>=2 ? r.readFloat32() : _systPlus;
+  if (_systPlus<0 || _systMinus<0) throw Exception("Negative systematic uncertainty","DataPointND::decodeBinary()");
   _x.swap(x);
   _xError.swap(xError);
   }
 
-  void DataPointND::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int /*version*/)
+  void DataPointND::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int version)
   {
-  decodeBinary(r);
+  decodeBinary(r,version);
   }
 
   void DataPointND::writeBinary(std::ostream & out) const                     { writeBinaryObject(out,*this); }

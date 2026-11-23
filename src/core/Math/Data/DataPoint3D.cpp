@@ -120,24 +120,29 @@ namespace Datum
   {
   out << "x: " << _x << " +- " << _xError
       << "  y: " << _y << " +- " << _yError
-      << "  z: " << _value << " +- " << _stat << " (stat) +- " << _syst << " (syst)";
+      << "  z: " << _value << " +- " << _stat << " (stat) ";
+  printSyst(out);
   }
 
   void DataPoint3D::encodeBinary(BinaryWriter & w) const
   {
-  const float v[7] = {_x,_xError,_y,_yError,_value,_stat,_syst};
+  // Bit i of the mask: value i is non-zero and written. Value 6 is the upper systematic uncertainty; bit 7 (format
+  // version 2) marks a lower one that differs from it, written last (absent: lower = upper, as in version 1).
+  const float v[8] = {_x,_xError,_y,_yError,_value,_stat,_systPlus,_systMinus};
   uint8_t mask = 0;
   for (int i=0; i<7; i++) { uint32_t u; std::memcpy(&u,&v[i],4); if (u!=0) mask |= uint8_t(1u<<i); }
+  if (_systMinus!=_systPlus) mask |= uint8_t(1u<<7);
   w.writeUInt8(mask);
-  for (int i=0; i<7; i++) if (mask & (1u<<i)) w.writeFloat32(v[i]);
+  for (int i=0; i<8; i++) if (mask & (1u<<i)) w.writeFloat32(v[i]);
   }
 
   void DataPoint3D::decodeBinary(BinaryReader & r)
   {
   uint8_t mask = r.readUInt8();
-  if (mask & 0x80) throw Exception("Invalid data point mask","DataPoint3D::decodeBinary()");
-  float * v[7] = {&_x,&_xError,&_y,&_yError,&_value,&_stat,&_syst};
+  float * v[7] = {&_x,&_xError,&_y,&_yError,&_value,&_stat,&_systPlus};
   for (int i=0; i<7; i++) *v[i] = (mask & (1u<<i)) ? r.readFloat32() : 0.0f;
+  _systMinus = (mask & 0x80) ? r.readFloat32() : _systPlus;
+  if (_systPlus<0 || _systMinus<0) throw Exception("Negative systematic uncertainty","DataPoint3D::decodeBinary()");
   }
 
   void DataPoint3D::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int /*version*/)

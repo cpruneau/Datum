@@ -1336,6 +1336,7 @@ namespace Datum
     for (const auto & label : _binLabels[d]) { w.writeVarUInt(label.first); w.writeString(label.second); }
     }
   _fits.encodeBinary(w);   // format version 4: fits attached
+  encodeCommonSyst(w);     // format version 5: common systematic uncertainty
   }
 
   void Histogram::decodeBinary(BinaryReader & r, const String & histogramName, unsigned int version)
@@ -1395,6 +1396,7 @@ namespace Datum
       }
     }
   if (version>=4) _fits.decodeBinary(r);
+  if (version>=5) decodeCommonSyst(r); else clearCommonSyst();
   }
 
   void Histogram::writeBinary(std::ostream & out) const                                      { writeBinaryObject(out,*this); }

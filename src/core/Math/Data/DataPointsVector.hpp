@@ -153,8 +153,12 @@ namespace Datum
   double valueAt(unsigned int index) const override;
   //! @brief Statistical uncertainty of the dependent value of a point. @param index point index @return stat
   double statErrorAt(unsigned int index) const override;
-  //! @brief Systematic uncertainty of the dependent value of a point. @param index point index @return syst
+  //! @brief Systematic uncertainty of the dependent value of a point: the larger side. @param index point index @return syst
   double sysErrorAt(unsigned int index) const override;
+  //! @brief Upper systematic uncertainty of a point. @param index point index @return systPlus
+  double sysErrorPlusAt(unsigned int index) const override;
+  //! @brief Lower systematic uncertainty of a point. @param index point index @return systMinus
+  double sysErrorMinusAt(unsigned int index) const override;
 
   //! @brief Append a copy of a rank 1 point. @param dataPoint point to append @throws MathException if the container rank is not 1
   void addPoint(const DataPoint2D & dataPoint) override;
@@ -332,13 +336,16 @@ namespace Datum
   //! exactly. Records of other classes in the same file are skipped.
   //! Format version 2: number of points, rank (if any point), then each point in the binary encoding of its class
   //! (DataPoint2D for rank 1, DataPoint3D for rank 2, DataPointND for rank 3 and more). Version 3 adds the fits
-  //! attached (see FitList::encodeBinary()). Versions 1 (rank 1 only) and 2 are still read.
+  //! attached (see FitList::encodeBinary()). Version 4 adds the common systematic uncertainty (DataPoints::encodeCommonSyst())
+  //! and writes points of rank 3 and more with upper and lower systematic uncertainties (DataPointND version 2; the
+  //! encodings of DataPoint2D and DataPoint3D mark a lower side that differs from the upper one). Versions 1 (rank 1 only),
+  //! 2 and 3 are still read.
   //! @{
 
   //! @brief Tag of DataPointsVector records in binary files. @return "DTMD"
   static const char * binaryTag() { return "DTMD"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 3; }
+  static unsigned int binaryVersion() { return 4; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Write the binary payload after the name (used by writeBinary()). @param w writer

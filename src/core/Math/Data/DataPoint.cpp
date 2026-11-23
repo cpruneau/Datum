@@ -25,20 +25,29 @@ namespace Datum
 
   DataPoint::DataPoint()
   :
-  _value(0.0), _stat(0.0), _syst(0.0)
+  _value(0.0), _stat(0.0), _systPlus(0.0), _systMinus(0.0)
   { }
 
   DataPoint::DataPoint(double value, double stat, double syst)
   :
-  _value(value), _stat(stat), _syst(syst)
+  _value(value), _stat(stat), _systPlus(syst), _systMinus(syst)
   {
   if (stat<0) throw MathException("stat<0",__FUNCTION__);
   if (syst<0) throw MathException("syst<0",__FUNCTION__);
   }
 
+  DataPoint::DataPoint(double value, double stat, double systPlus, double systMinus)
+  :
+  _value(value), _stat(stat), _systPlus(systPlus), _systMinus(systMinus)
+  {
+  if (stat<0)      throw MathException("stat<0",__FUNCTION__);
+  if (systPlus<0)  throw MathException("systPlus<0",__FUNCTION__);
+  if (systMinus<0) throw MathException("systMinus<0",__FUNCTION__);
+  }
+
   DataPoint::DataPoint(const DataPoint & source)
   :
-  _value(source._value), _stat(source._stat), _syst(source._syst)
+  _value(source._value), _stat(source._stat), _systPlus(source._systPlus), _systMinus(source._systMinus)
   { }
 
   DataPoint & DataPoint::operator=(const DataPoint & rhs)
@@ -46,8 +55,9 @@ namespace Datum
   if (this!=&rhs)
     {
     _value = rhs._value;
-    _stat  = rhs._stat;
-    _syst  = rhs._syst;
+    _stat      = rhs._stat;
+    _systPlus  = rhs._systPlus;
+    _systMinus = rhs._systMinus;
     }
   return *this;
   }
@@ -70,9 +80,10 @@ namespace Datum
   {
   if (stat<0) throw MathException("stat<0",__FUNCTION__);
   if (syst<0) throw MathException("syst<0",__FUNCTION__);
-  _value = value;
-  _stat  = stat;
-  _syst  = syst;
+  _value     = value;
+  _stat      = stat;
+  _systPlus  = syst;
+  _systMinus = syst;
   }
 
   void DataPoint::setStat(double stat)
@@ -84,7 +95,16 @@ namespace Datum
   void DataPoint::setSyst(double syst)
   {
   if (syst<0) throw MathException("syst<0",__FUNCTION__);
-  _syst = syst;
+  _systPlus  = syst;
+  _systMinus = syst;
+  }
+
+  void DataPoint::setSyst(double systPlus, double systMinus)
+  {
+  if (systPlus<0)  throw MathException("systPlus<0",__FUNCTION__);
+  if (systMinus<0) throw MathException("systMinus<0",__FUNCTION__);
+  _systPlus  = systPlus;
+  _systMinus = systMinus;
   }
 
   bool DataPoint::compatibleX(const DataPoint & other, double nSigma) const
@@ -118,7 +138,9 @@ namespace Datum
   double a = std::fabs(coefficient);
   _value *= coefficient;
   _stat  *= a;
-  _syst  *= a;
+  _systPlus  *= a;
+  _systMinus *= a;
+  if (coefficient<0) std::swap(_systPlus,_systMinus);
   }
 
   void DataPoint::inverse()
@@ -128,14 +150,17 @@ namespace Datum
   double vSq = v*v;
   _value = 1.0/v;
   _stat  = _stat/vSq;
-  _syst  = _syst/vSq;
+  float plus = _systPlus;
+  _systPlus  = _systMinus/vSq;   // d(1/v)/dv < 0: the sides are swapped
+  _systMinus = plus/vSq;
   }
 
   void DataPoint::clear()
   {
   _value = 0.0;
   _stat  = 0.0;
-  _syst  = 0.0;
+  _systPlus  = 0.0;
+  _systMinus = 0.0;
   for (unsigned int i=0; i<rank(); i++)
     {
     setX(i,0.0);
@@ -147,7 +172,16 @@ namespace Datum
   {
   for (unsigned int i=0; i<rank(); i++)
     out << "x[" << i << "]: " << x(i) << " +- " << xError(i) << "  ";
-  out << "value: " << _value << " +- " << _stat << " (stat) +- " << _syst << " (syst)";
+  out << "value: " << _value << " +- " << _stat << " (stat) ";
+  printSyst(out);
+  }
+
+  void DataPoint::printSyst(std::ostream & out) const
+  {
+  if (hasAsymmetricSyst())
+    out << "+" << _systPlus << " -" << _systMinus << " (syst)";
+  else
+    out << "+- " << _systPlus << " (syst)";
   }
 
   void DataPoint::print() const
@@ -178,15 +212,20 @@ namespace Datum
     xErrorMean[i] = 0.5*(double(p1.xError(i)) + p2.xError(i));
     }
   double s1 = d1*p1._stat, s2 = d2*p2._stat;
-  double t1 = d1*p1._syst, t2 = d2*p2._syst;
+  // Upper and lower sides: a negative derivative turns the lower side of an operand into an upper side of the result.
+  double u1 = d1>=0 ? d1*p1._systPlus  : -d1*p1._systMinus;
+  double l1 = d1>=0 ? d1*p1._systMinus : -d1*p1._systPlus;
+  double u2 = d2>=0 ? d2*p2._systPlus  : -d2*p2._systMinus;
+  double l2 = d2>=0 ? d2*p2._systMinus : -d2*p2._systPlus;
   for (unsigned int i=0; i<n; i++)
     {
     setX(i,xMean[i]);
     setXError(i,xErrorMean[i]);
     }
   _value = value;
-  _stat  = std::sqrt(s1*s1 + s2*s2);
-  _syst  = std::sqrt(t1*t1 + t2*t2);
+  _stat      = std::sqrt(s1*s1 + s2*s2);
+  _systPlus  = std::sqrt(u1*u1 + u2*u2);
+  _systMinus = std::sqrt(l1*l1 + l2*l2);
   }
 
   void DataPoint::add(const DataPoint & rhs)

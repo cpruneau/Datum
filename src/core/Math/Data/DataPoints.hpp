@@ -8,6 +8,12 @@
 
 namespace Datum
 {
+  class BinaryWriter;
+  class BinaryReader;
+}
+
+namespace Datum
+{
   namespace MATH
   {
 
@@ -73,8 +79,15 @@ namespace Datum
   virtual double valueAt(unsigned int index) const;
   //! @brief Statistical uncertainty of the value of a point. @param index index of the point @return statistical uncertainty (yStatError for rank 1)
   virtual double statErrorAt(unsigned int index) const;
-  //! @brief Systematic uncertainty of the value of a point. @param index index of the point @return systematic uncertainty (ySysError for rank 1)
+  //! @brief Systematic uncertainty of the value of a point: the larger of the upper and lower ones. @param index index
+  //! of the point @return systematic uncertainty (ySysError for rank 1)
   virtual double sysErrorAt(unsigned int index) const;
+  //! @brief Upper systematic uncertainty of the value of a point. @param index index of the point @return uncertainty
+  //! (here sysErrorAt(): classes holding asymmetric uncertainties override it)
+  virtual double sysErrorPlusAt(unsigned int index) const;
+  //! @brief Lower systematic uncertainty of the value of a point. @param index index of the point @return uncertainty
+  //! (here sysErrorAt(): classes holding asymmetric uncertainties override it)
+  virtual double sysErrorMinusAt(unsigned int index) const;
 
   //! @}
 
@@ -241,6 +254,39 @@ namespace Datum
   String table(bool fits=true, bool pulls=true) const;
   //! @}
 
+  //! @name Common systematic uncertainty
+  //! A systematic uncertainty shared by all the points (or bins), e.g. that of a luminosity or of a normalization,
+  //! relative to the value: 0.02 is 2% of the value of each point. It has an upper and a lower side (equal when
+  //! symmetric), is kept apart from the uncertainties of the points, and is saved with them in Datum files.
+  //! @{
+
+  //! @brief Set a symmetric common systematic uncertainty. @param relative fraction of the value (>= 0)
+  //! @throws MathException if relative<0
+  void setCommonSyst(double relative) { setCommonSyst(relative,relative); }
+  //! @brief Set the upper and lower common systematic uncertainties. @param plus upper side, fraction of the value (>= 0)
+  //! @param minus lower side, fraction of the value (>= 0) @throws MathException if one is negative
+  void setCommonSyst(double plus, double minus);
+  //! @brief Upper common systematic uncertainty. @return fraction of the value
+  double getCommonSystPlus() const  { return _commonSystPlus; }
+  //! @brief Lower common systematic uncertainty. @return fraction of the value
+  double getCommonSystMinus() const { return _commonSystMinus; }
+  //! @brief Common systematic uncertainty: the larger side. @return fraction of the value
+  double getCommonSyst() const { return _commonSystPlus>=_commonSystMinus ? _commonSystPlus : _commonSystMinus; }
+  //! @brief Whether a common systematic uncertainty is set (either side non-zero). @return true if set
+  bool hasCommonSyst() const { return _commonSystPlus!=0.0 || _commonSystMinus!=0.0; }
+  //! @brief Whether its upper and lower sides differ. @return true if asymmetric
+  bool hasAsymmetricCommonSyst() const { return _commonSystPlus!=_commonSystMinus; }
+  //! @brief Remove the common systematic uncertainty.
+  void clearCommonSyst() { _commonSystPlus = 0.0; _commonSystMinus = 0.0; }
+  //!
+  //! @brief Common systematic uncertainty of the result of a sum, difference, product or ratio of two sets of points:
+  //! the relative uncertainties of the operands added in quadrature, each side separately (the operands independent).
+  //! For a difference or a ratio, pass swapSecond=true: the second operand enters with a negative sign, its sides swap.
+  //! @param a first operand @param b second operand @param swapSecond whether the sides of b swap
+  //!
+  void setCommonSystOf(const DataPoints & a, const DataPoints & b, bool swapSecond=false);
+  //! @}
+
   //! @name Fits attached (see FitRecord, Fitter::record())
   //! @{
 
@@ -263,6 +309,18 @@ namespace Datum
   protected:
 
   FitList _fits;   //!<! fits attached (not streamed by ROOT; shared by copies)
+  double _commonSystPlus  = 0.0;   //!< upper common systematic uncertainty, fraction of the value
+  double _commonSystMinus = 0.0;   //!< lower common systematic uncertainty, fraction of the value
+
+  //!
+  //! @brief Write the common systematic uncertainty in a binary payload: a flag byte (0 none, 1 symmetric, 2
+  //! asymmetric) followed by the side(s) as float64. Used by the records of the derived classes.
+  //! @param w writer
+  //!
+  void encodeCommonSyst(BinaryWriter & w) const;
+  //! @brief Read the common systematic uncertainty written by encodeCommonSyst(). @param r reader
+  //! @throws Exception if the data is invalid
+  void decodeCommonSyst(BinaryReader & r);
 
   //!
   //! @brief Index of the point with the extreme value of x (useY=false) or y (useY=true).

@@ -320,12 +320,12 @@ int main()
   {
     Histogram plain("plain", "no fit", 5, 0.0, 1.0);
     plain.fill(0.5);
-    Histogram read;                                                         // the fits section is 2 bytes when empty
-    CHECK(readRecord(olderRecord(plain, 3, 2), read) && read.nFits() == 0 && read.binValueAtGlobal(2) == plain.binValueAtGlobal(2));
+    Histogram read;                                                         // the fits section is 2 bytes when empty, then 1 byte of common systematic
+    CHECK(readRecord(olderRecord(plain, 3, 3), read) && read.nFits() == 0 && read.binValueAtGlobal(2) == plain.binValueAtGlobal(2));
     DataPointsVector points;
     points.addPoints({0.0, 1.0}, {2.0, 3.0}, {0.1, 0.1});
     DataPointsVector readPoints;
-    CHECK(readRecord(olderRecord(points, 2, 2), readPoints) && readPoints.size() == 2 && readPoints.nFits() == 0);
+    CHECK(readRecord(olderRecord(points, 2, 3), readPoints) && readPoints.size() == 2 && readPoints.nFits() == 0);
     Profile profile("profile", "no fit", 4, 0.0, 1.0);
     profile.fill(0.3, 2.0, 1.0);
     BinaryWriter w;                                                         // version 1: histogram part of version 3
@@ -337,7 +337,7 @@ int main()
     hw.writeString(profile.binaryName());
     histogramPart.Histogram::encodeBinary(hw);
     std::size_t histogramLength = hw.buffer().size();
-    std::string payload = w.buffer().substr(0, histogramLength - 2) + w.buffer().substr(histogramLength);
+    std::string payload = w.buffer().substr(0, histogramLength - 3) + w.buffer().substr(histogramLength);   // no fits, no common systematic
     std::ostringstream out(std::ios::binary);
     writeBinaryRecord(out, Profile::binaryTag(), 1, payload, "profile");
     Profile readProfile;
