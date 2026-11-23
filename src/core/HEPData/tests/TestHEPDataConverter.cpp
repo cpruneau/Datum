@@ -141,20 +141,20 @@ void testAlice(const std::string & data)
   std::vector<C::Imported> objects = C::toObjects(s,C::ImportOptions(),&warnings);
   for (const String & w : warnings) std::printf("  warning: %s\n", w.c_str());
   CHECK(objects.size()==8);
-  // bins of different widths: points, the value of the bin as x, half its width as the x uncertainty
-  const DataPointsVector * pp = as<DataPointsVector>(objects[0]);
+  CHECK(warnings.size()==5);                                  // the pT positions of the 5 spectra are not kept (R: bin centers)
+  // bins of different widths: a HistogramSyst with variable bins, edges as in the file
+  const HistogramSyst * pp = as<HistogramSyst>(objects[0]);
   CHECK(pp!=nullptr);
   if (!pp) return;
   CHECK(pp->name()=="data1" && pp->title()=="E d**3sigma/dp**3 (b GEV**-2 c**3)");
+  CHECK(pp->dimensionTitle(0)=="PT (GEV/c)");
   CHECK(objects[0].table==s.tables[0].name && objects[0].column==0 && objects[0].qualifiers.size()==3);
-  CHECK(pp->size()==27 && pp->rank()==1);
-  const DataPoint2D & p0 = pp->pointAs<DataPoint2D>(0);
-  CHECK(near(p0.x(),1.2958,1e-7) && near(p0.xError(),0.1,1e-6));
-  CHECK(near(p0.y(),1.4166e-03,1e-7) && near(p0.yStatError(),1.17e-05,1e-6));
-  CHECK(near(p0.systPlus(),7.07e-05,1e-6) && !p0.hasAsymmetricSyst());          // sys only: norm is common
-  const DataPoint2D & p26 = pp->pointAs<DataPoint2D>(26);
-  CHECK(near(p26.x(),17.1451,1e-7) && near(p26.xError(),2.5,1e-6));
-  // the common systematic uncertainty: norm/value, averaged over the points
+  CHECK(pp->rank()==1 && pp->nBins(0)==27 && !pp->isRegular(0));
+  CHECK(pp->binLowEdge(0,0)==1.2 && pp->binHighEdge(0,0)==1.4 && pp->binLowEdge(17,0)==3.8 && pp->binHighEdge(26,0)==20.0);
+  CHECK(pp->binEntriesAtGlobal(0)==1 && near(pp->binValueAtGlobal(0),1.4166e-03,1e-7) && near(pp->binUncertaintyAtGlobal(0),1.17e-05,1e-6));
+  CHECK(near(pp->binSystPlusAtGlobal(0),7.07e-05,1e-6) && pp->binSystPlusAtGlobal(0)==pp->binSystMinusAtGlobal(0));   // norm is common
+  CHECK(near(pp->binValueAtGlobal(26),8.2107e-10,1e-7));
+  // the common systematic uncertainty: norm/value, averaged over the bins
   const HEPDataVariable & y = s.tables[0].dependent[0];
   double mean = 0;
   for (const HEPDataValue & v : y.values) mean += v.errors[2].plus/v.value;
@@ -163,9 +163,21 @@ void testAlice(const std::string & data)
   CHECK(near(pp->getCommonSystPlus(),mean,1e-12));
   CHECK(pp->getCommonSystPlus()>0.02 && pp->getCommonSystPlus()<0.03);           // about 2.6%
   // R_OO: no units
-  const DataPointsVector * rOO = as<DataPointsVector>(objects[5]);
+  const HistogramSyst * rOO = as<HistogramSyst>(objects[5]);
   CHECK(rOO && rOO->title()=="ROO=SIG(PI0,OO,5.36TeV)/SIG(PI0,PP,5.36TeV)/256" && rOO->name()=="data6");
-  CHECK(rOO && near(rOO->pointAs<DataPoint2D>(0).x(),1.3,1e-7) && near(rOO->valueAt(0),0.74009,1e-7));
+  CHECK(rOO && near(rOO->binValueAtGlobal(0),0.74009,1e-7));
+  // with the positions: points, x = the position given, x uncertainty = half the width of the bin
+  C::ImportOptions positions;
+  positions.keepPositions = true;
+  std::vector<C::Imported> withPositions = C::toObjects(s.tables[0],positions);
+  const DataPointsVector * points = as<DataPointsVector>(withPositions[0]);
+  CHECK(points && points->size()==27);
+  if (points)
+    {
+    const DataPoint2D & p0 = points->pointAs<DataPoint2D>(0);
+    CHECK(near(p0.x(),1.2958,1e-7) && near(p0.xError(),0.1,1e-6) && near(p0.y(),1.4166e-03,1e-7));
+    CHECK(near(points->pointAs<DataPoint2D>(26).xError(),2.5,1e-6));
+    }
   // norm as an ordinary systematic uncertainty, if asked: added in quadrature to sys
   C::ImportOptions noCommon;
   noCommon.commonLabels.clear();
@@ -173,25 +185,26 @@ void testAlice(const std::string & data)
   CHECK(!q[0].object->hasCommonSyst());
   CHECK(near(q[0].object->sysErrorPlusAt(0),std::sqrt(7.07e-05*7.07e-05+3.68e-05*3.68e-05),1e-6));
 
-  // export for HEPData (strict) and import again: the same numbers, norm as a percentage
+  // export for HEPData (strict) and import again: the same bins and numbers, norm as a percentage
   C::ExportOptions strict;
   strict.lossless = false;
-  HEPDataTable back = C::toTable(objects[0].object ? std::vector<C::Imported>{objects[0]} : std::vector<C::Imported>(),strict);
+  HEPDataTable back = C::toTable(std::vector<C::Imported>{objects[0]},strict);
   CHECK(back.datumBlock.isNull() && back.name==s.tables[0].name);
   CHECK(back.problems().size()==2);                                             // no description, no keywords: to be set
   CHECK(back.dependent[0].qualifiers.size()==3 && back.dependent[0].units=="b GEV**-2 c**3");
-  // points have a symmetric x uncertainty: the edges written are x -+ half the width of the bin, not those read
-  CHECK(back.independent[0].values[0].isNumeric() && near(back.independent[0].values[0].value,1.2958,1e-7));
-  CHECK(near(back.independent[0].values[0].low,1.1958,1e-6) && near(back.independent[0].values[0].high,1.3958,1e-6));
+  CHECK(back.independent[0].name=="PT" && back.independent[0].units=="GEV/c");
+  for (unsigned int k=0; k<27; k++)                                              // the edges of the file, exactly
+    CHECK(back.independent[0].values[k].low==s.tables[0].independent[0].values[k].low &&
+          back.independent[0].values[k].high==s.tables[0].independent[0].values[k].high);
   const HEPDataValue & b0 = back.dependent[0].values[0];
   CHECK(b0.errors.size()==3 && b0.errors[2].label=="norm" && b0.errors[2].percent);
   std::vector<C::Imported> again = C::toObjects(back);
-  const DataPointsVector * a = as<DataPointsVector>(again[0]);
-  CHECK(a && a->size()==27);
+  const HistogramSyst * a = as<HistogramSyst>(again[0]);
+  CHECK(a && a->compatibleWith(*pp));
   for (unsigned int k=0; a && k<27; k++)
     {
-    CHECK(a->valueAt(k)==pp->valueAt(k) && a->statErrorAt(k)==pp->statErrorAt(k));
-    CHECK(a->sysErrorPlusAt(k)==pp->sysErrorPlusAt(k));
+    CHECK(a->binValueAtGlobal(k)==pp->binValueAtGlobal(k) && a->binUncertaintyAtGlobal(k)==pp->binUncertaintyAtGlobal(k));
+    CHECK(a->binSystPlusAtGlobal(k)==pp->binSystPlusAtGlobal(k));
     }
   CHECK(a && near(a->getCommonSystPlus(),pp->getCommonSystPlus(),1e-12));
 }
@@ -216,10 +229,11 @@ void testSample(const std::string & data)
   lumi.commonLabels.push_back("sys,lumi");
   std::vector<C::Imported> l = C::toObjects(*s.table("Table 1"),lumi);
   CHECK(near(l[0].object->getCommonSystPlus(),1.0/25.4) && near(l[0].object->sysErrorPlusAt(0),1.2,1e-7));
-  // bins of different widths
+  // bins of different widths: variable bins
   std::vector<C::Imported> t3 = C::toObjects(*s.table("Table 3"));
-  CHECK(as<DataPointsVector>(t3[0])!=nullptr && t3[0].object->size()==4);
-  CHECK(t3[0].object->coordinatesAt(3)[0]==400.0 && t3[0].object->coordinateErrorsAt(3)[0]==200.0);
+  const HistogramSyst * h3 = as<HistogramSyst>(t3[0]);
+  CHECK(h3 && h3->nBins(0)==4 && !h3->isRegular(0) && h3->binLowEdge(3,0)==200.0 && h3->binHighEdge(3,0)==600.0);
+  CHECK(h3 && h3->binValueAtGlobal(0)==7000.0 && h3->binWidth(1,0)==40.0);
 }
 
 void testHistogramImport()
@@ -242,11 +256,20 @@ void testHistogramImport()
   std::vector<C::Imported> og = C::toObjects(g);
   const Histogram * hg = as<Histogram>(og[0]);
   CHECK(hg && hg->nBins(0)==4 && hg->binEntriesAtGlobal(1)==0 && hg->binEntriesAtGlobal(2)==0 && hg->binValueAtGlobal(3)==40.0);
-  // values away from the middles of the bins: points (the positions are kept)
+  // values away from the middles of the bins: a histogram (a warning), or points with keepPositions
   HEPDataTable off = binnedTable({0,1},{1,2},{1,2},{0.1,0.1},{});
   off.independent[0].values[0].hasValue = true;
   off.independent[0].values[0].value = 0.3;
-  CHECK(as<DataPointsVector>(C::toObjects(off)[0])!=nullptr);
+  std::vector<String> offWarnings;
+  CHECK(as<Histogram>(C::toObjects(off,C::ImportOptions(),&offWarnings)[0])!=nullptr && offWarnings.size()==1);
+  C::ImportOptions keep;
+  keep.keepPositions = true;
+  CHECK(as<DataPointsVector>(C::toObjects(off,keep)[0])!=nullptr);
+  // bins of different widths, and overlapping bins (points)
+  std::vector<C::Imported> ov = C::toObjects(binnedTable({0,1,3},{1,3,7},{1,2,3},{0.1,0.1,0.1},{}));
+  const Histogram * hv = as<Histogram>(ov[0]);
+  CHECK(hv && !hv->isRegular(0) && hv->nBins(0)==3 && hv->binWidth(2,0)==4.0 && hv->binValueAt(2u)==3.0);
+  CHECK(as<DataPointsVector>(C::toObjects(binnedTable({0,0.5},{1,2},{1,2},{0.1,0.1},{}))[0])!=nullptr);
   C::ImportOptions noHistograms;
   noHistograms.histograms = false;
   CHECK(as<DataPointsVector>(C::toObjects(t,noHistograms)[0])!=nullptr);
@@ -276,8 +299,8 @@ void testHistogramImport()
   const Histogram * h2 = as<Histogram>(o2[0]);
   CHECK(h2 && h2->rank()==2 && h2->nBins(0)==3 && h2->nBins(1)==2);
   CHECK(h2 && h2->binValueAt(2,1)==12.0 && h2->minimum(1)==10.0 && h2->maximum(1)==20.0 && h2->name()=="grid");
-  // a grid that is not regular in y: points of rank 2
-  t2.independent[1].values[5] = HEPDataValue::bin(15.0,30.0);
+  // a grid with an overlapping bin in y: points of rank 2
+  t2.independent[1].values[5] = HEPDataValue::bin(12.0,30.0);
   std::vector<C::Imported> op2 = C::toObjects(t2);
   const DataPointsVector * p2 = as<DataPointsVector>(op2[0]);
   CHECK(p2 && p2->rank()==2 && p2->size()==6);
@@ -350,6 +373,11 @@ void testLossless(const std::string & work)
   HistogramSyst s("s","ratio",4,0.0,2.0);
   s.setDimensionTitle(0,"PT (GEV/c)");
   for (unsigned int k=0; k<4; k++) if (k!=2) { s.setBinAtGlobal(k,3,1.0/(k+3),0.01*(k+1)); s.setBinSystAtGlobal(k,0.02,0.01*k); }
+  // variable bins, a common systematic
+  HistogramSyst v("v","spectrum (1/GEV)",std::vector<double>{0.2,0.5,1.0,2.0,4.0,10.0});
+  v.setDimensionTitle(0,"PT (GEV/c)");
+  for (unsigned int k=0; k<5; k++) { v.setBinAtGlobal(k,2,10.0/(k+1),0.3); v.setBinSystAtGlobal(k,0.1*(k+1),0.05); }
+  v.setCommonSyst(0.026);
   // rank 2
   HistogramSyst r2("r2","z",3,0.0,3.0,2,-1.0,1.0);
   r2.setDimensionTitle(0,"x");
@@ -371,7 +399,7 @@ void testLossless(const std::string & work)
   col.setColumns({{1.0,2.0,3.0}},{},{10.0,20.0,30.0},{1.0,2.0,3.0},{0.5,0.6,0.7},{0.1,0.2,0.3});
 
   HEPDataSubmission sub;
-  std::vector<const DataPoints *> all = {&h,&s,&r2,&p,&p3,&col};
+  std::vector<const DataPoints *> all = {&h,&s,&v,&r2,&p,&p3,&col};
   for (const DataPoints * o : all)
     {
     HEPDataTable t = C::toTable(*o);

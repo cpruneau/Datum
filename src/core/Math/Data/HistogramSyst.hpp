@@ -44,7 +44,7 @@ namespace MATH
 //! <b>Data points.</b> As DataPoints, the systematic uncertainty of a bin is sysErrorPlusAt() / sysErrorMinusAt(), and
 //! sysErrorAt() the larger side; point() gives them to the DataPoint2D of a rank 1 histogram.
 //!
-//! <b>Binary files.</b> "DTMY" records: the Histogram record (format version 5) followed by the systematic
+//! <b>Binary files.</b> "DTMY" records: the Histogram record (format version 6) followed by the systematic
 //! uncertainties. The class is registered with Folder.
 //!
 //! Example:
@@ -85,6 +85,8 @@ public:
   //! @brief Empty rank 1 histogram. @param name name @param title title @param n number of bins
   //! @param minimum lower edge @param maximum upper edge
   HistogramSyst(const String & name, const String & title, unsigned int n, double minimum, double maximum);
+  //! @brief Empty rank 1 histogram with variable bins. @param name name @param title title @param edges the n+1 edges
+  HistogramSyst(const String & name, const String & title, const std::vector<double> & edges);
   //! @brief Empty rank 2 histogram. @param name name @param title title @param n0 bins along axis 0
   //! @param minimum_0 lower edge of axis 0 @param maximum_0 upper edge of axis 0 @param n1 bins along axis 1
   //! @param minimum_1 lower edge of axis 1 @param maximum_1 upper edge of axis 1
@@ -215,7 +217,8 @@ public:
   void print() const override;
 
   //! @name Binary files (independent of ROOT)
-  //! A HistogramSyst is saved as one "DTMY" record: the payload of a Histogram record (format version 5), then a flag
+  //! A HistogramSyst is saved as one "DTMY" record: the payload of a Histogram record (format version 5; 6 from format
+  //! version 2: variable bins), then a flag
   //! byte (0: no systematic uncertainty, 1: symmetric, 2: asymmetric), the number of bins with a non-zero uncertainty
   //! (varint) and, for each, the gap in global bin index since the previous one (varint), the upper uncertainty and, if
   //! asymmetric, the lower one (float32, or float64 in double precision).
@@ -224,7 +227,7 @@ public:
   //! @brief Tag of HistogramSyst records in binary files. @return "DTMY"
   static const char * binaryTag() { return "DTMY"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 1; }
+  static unsigned int binaryVersion() { return 2; }
   //! @brief Write the binary payload after the name. @param w writer
   void encodeBinary(BinaryWriter & w) const;
   //! @brief Rebuild this histogram from a binary payload. @param r reader @param name stored name @param version format

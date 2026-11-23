@@ -24,7 +24,8 @@ struct HEPDataImportOptions
   std::vector<String> commonLabels = {String("norm"), String("sys,common")};   //!< labels of the common systematic uncertainty
   double binWidthTolerance = 1.0E-6;   //!< relative tolerance of equal bin widths (for histograms)
   double commonTolerance   = 0.05;     //!< relative variation of the common uncertainty that gives a warning
-  bool   histograms        = true;     //!< make histograms from bins of equal widths (false: always points)
+  bool   histograms        = true;     //!< make histograms from bins (false: always points)
+  bool   keepPositions     = false;    //!< make points, not histograms, when the rows give positions away from the bin middles
 };
 
 //! @brief Options of the export.
@@ -55,9 +56,11 @@ struct HEPDataImported
 //! values) and sets of data points (DataPointsVector, DataPointColumns, any rank).
 //!
 //! <b>Import</b> (toObjects()): one object per dependent variable of a table.
-//!  - One independent variable, bins of equal widths (gaps allowed: empty bins): a Histogram, or a HistogramSyst if
-//!    there are systematic errors. Two independent variables on a regular grid of such bins: a rank 2 histogram.
-//!  - Otherwise (bins of different widths, points, non-binned variables, more variables): a DataPointsVector of
+//!  - Independent variables that are bins not overlapping (up to three; gaps between rows are empty bins, every
+//!    combination of bins at most once): a Histogram, or a HistogramSyst if there are systematic errors, with regular
+//!    axes when the bins have equal widths and variable bins otherwise. Positions given within the bins (values away
+//!    from the middles) are not kept (a warning), unless ImportOptions::keepPositions asks for points instead.
+//!  - Otherwise (points, non-binned or overlapping variables, more variables): a DataPointsVector of
 //!    DataPoint2D, DataPoint3D or DataPointND. The coordinate of a row is its value if given, else the middle of its
 //!    bin; its uncertainty half the width of the bin (0 for an infinite edge or a point).
 //!  - No independent variable: a DataPointsVector with the row index as x.

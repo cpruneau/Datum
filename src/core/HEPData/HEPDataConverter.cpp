@@ -156,45 +156,47 @@ void commonOf(const HEPDataVariable & y, const std::vector<RowErrors> & errors, 
 // Binning of independent variables
 //////////////////////////////////////////////////////////////////////////
 
-//! An axis of equal bins: first lower edge, width, number of bins; the bin of each row.
+//! An axis of bins: their edges (regular: equal widths), the bin of each row.
 struct Axis
 {
-  double low = 0, width = 0;
-  unsigned int n = 0;
+  std::vector<double> edges;
+  bool regular = true;
   std::vector<unsigned int> bin;
+  unsigned int n() const { return (unsigned int) edges.size()-1; }
 };
 
-//! Whether the rows of x are bins of equal widths (gaps allowed) whose values, if any, are their middles.
-bool regularAxis(const HEPDataVariable & x, double tolerance, Axis & axis)
+//!
+//! Whether the rows of x are bins that do not overlap: the edges of the axis are those of the rows (a gap between two
+//! rows is an empty bin); regular if all the bins have the same width. offCenter is set if a row has a value that is
+//! not the middle of its bin.
+//!
+bool binnedAxis(const HEPDataVariable & x, double tolerance, Axis & axis, bool & offCenter)
 {
   if (!x.isBinned()) return false;
-  double low = std::numeric_limits<double>::max(), high = -low, width = -1;
+  std::vector<double> edges;
   for (const HEPDataValue & v : x.values)
     {
     if (std::isinf(v.low) || std::isinf(v.high) || !(v.high>v.low)) return false;
-    low = std::min(low,v.low);
-    high = std::max(high,v.high);
-    if (width<0) width = v.high-v.low;
-    }
-  for (const HEPDataValue & v : x.values)
-    {
-    double w = v.high-v.low;
-    if (std::fabs(w-width)>tolerance*width) return false;
-    if (v.isNumeric() && std::fabs(v.value-0.5*(v.low+v.high))>tolerance*width) return false;   // not the middle
     if (v.hasValue && !v.numeric) return false;
+    edges.push_back(v.low);
+    edges.push_back(v.high);
     }
-  double n = (high-low)/width;
-  if (std::fabs(n-std::round(n))>1.0E-6*std::max(1.0,n)) return false;
-  axis.low = low;
-  axis.width = width;
-  axis.n = (unsigned int) std::round(n);
+  std::sort(edges.begin(),edges.end());
+  edges.erase(std::unique(edges.begin(),edges.end()),edges.end());
   axis.bin.clear();
   for (const HEPDataValue & v : x.values)
     {
-    double i = (v.low-low)/width;
-    if (std::fabs(i-std::round(i))>1.0E-6*std::max(1.0,i)) return false;
-    axis.bin.push_back((unsigned int) std::round(i));
+    std::size_t i = std::lower_bound(edges.begin(),edges.end(),v.low)-edges.begin();
+    if (i+1>=edges.size() || edges[i+1]!=v.high) return false;   // the bin overlaps others
+    axis.bin.push_back((unsigned int) i);
+    double width = v.high-v.low;
+    if (v.isNumeric() && std::fabs(v.value-0.5*(v.low+v.high))>tolerance*width) offCenter = true;
     }
+  double width = edges[1]-edges[0];
+  axis.regular = true;
+  for (std::size_t i=1; i+1<edges.size(); i++)
+    if (std::fabs((edges[i+1]-edges[i])-width)>tolerance*width) axis.regular = false;
+  axis.edges = edges;
   return true;
 }
 
@@ -215,7 +217,7 @@ struct Recorded
 {
   bool   found = false;
   std::string className, name, title, precision;
-  struct RecordedAxis { unsigned int bins = 0; double min = 0, max = 0; std::string title; };
+  struct RecordedAxis { unsigned int bins = 0; double min = 0, max = 0; std::string title; std::vector<double> edges; };
   std::vector<RecordedAxis> axes;
   std::vector<long> entries;
   bool hasCommon = false;
@@ -249,6 +251,7 @@ Recorded recorded(const HEPDataTable & table, unsigned int column, const String 
           axis.min  = a["min"].as<double>();
           axis.max  = a["max"].as<double>();
           if (a["title"]) axis.title = a["title"].as<std::string>();
+          if (a["edges"] && a["edges"].IsSequence()) for (const YAML::Node & e : a["edges"]) axis.edges.push_back(e.as<double>());
           r.axes.push_back(axis);
           }
       if (o["entries"] && o["entries"].IsSequence())
@@ -292,10 +295,16 @@ std::shared_ptr<DataPoints> makeHistogram(const std::vector<Axis> & axes, const 
   Partition partition;
   if (record.found && !record.axes.empty())
     for (const Recorded::RecordedAxis & a : record.axes)
-      partition.addDimension(a.bins,float(a.min),float(a.max),String(a.title));
+      {
+      if (!a.edges.empty()) partition.addDimension(a.edges,String(a.title));
+      else                  partition.addDimension(a.bins,float(a.min),float(a.max),String(a.title));
+      }
   else
     for (unsigned int a=0; a<axes.size(); a++)
-      partition.addDimension(axes[a].n,float(axes[a].low),float(axes[a].low+axes[a].n*axes[a].width),axisTitles[a]);
+      {
+      if (axes[a].regular) partition.addDimension(axes[a].n(),float(axes[a].edges.front()),float(axes[a].edges.back()),axisTitles[a]);
+      else                 partition.addDimension(axes[a].edges,axisTitles[a]);
+      }
   bool syst = record.found ? record.className=="HistogramSyst" : anySyst(errors);
   std::shared_ptr<Histogram> h(syst ? new HistogramSyst(partition) : new Histogram(partition));
   if (record.precision=="double") h->setPrecision(Histogram::kDouble);
@@ -307,7 +316,7 @@ std::shared_ptr<DataPoints> makeHistogram(const std::vector<Axis> & axes, const 
       {
       k = 0;
       unsigned int stride = 1;
-      for (unsigned int a=0; a<axes.size(); a++) { k += stride*axes[a].bin[r]; stride *= axes[a].n; }
+      for (unsigned int a=0; a<axes.size(); a++) { k += stride*axes[a].bin[r]; stride *= axes[a].n(); }
       }
     if (k>=h->nBinsTotal()) throw Exception("More rows than bins in a table written in lossless mode",kSource);
     const HEPDataValue & v = y.values[r];
@@ -427,16 +436,24 @@ std::vector<HEPDataConverter::Imported> HEPDataConverter::toObjects(const HEPDat
     std::vector<Axis> axes(table.independent.size());
     bool histogram = record.found ? (record.className=="Histogram" || record.className=="HistogramSyst")
                                   : (options.histograms && !table.independent.empty() && table.independent.size()<=3);
+    bool offCenter = false;
     if (histogram && !record.found)
       for (unsigned int a=0; a<table.independent.size() && histogram; a++)
-        histogram = regularAxis(table.independent[a],options.binWidthTolerance,axes[a]);
+        histogram = binnedAxis(table.independent[a],options.binWidthTolerance,axes[a],offCenter);
+    if (histogram && !record.found && offCenter)
+      {
+      if (options.keepPositions) histogram = false;
+      else if (warnings)
+        warnings->push_back(column+": the positions given within the bins are not kept by the histogram (bin centers"
+                                   " are used); set ImportOptions::keepPositions for data points");
+      }
     if (histogram && !record.found)
       {
       std::map<unsigned long long,int> used;   // one row per bin
       for (unsigned int r=0; r<n && histogram; r++)
         {
         unsigned long long k = 0, stride = 1;
-        for (unsigned int a=0; a<axes.size(); a++) { k += stride*axes[a].bin[r]; stride *= axes[a].n; }
+        for (unsigned int a=0; a<axes.size(); a++) { k += stride*axes[a].bin[r]; stride *= axes[a].n(); }
         if (used[k]++) histogram = false;
         }
       }
@@ -537,10 +554,19 @@ void emitDatumBlock(HEPDataTable & table, const std::vector<const DataPoints *> 
       out << YAML::Key << "precision" << YAML::Value << (h->precision()==Histogram::kDouble ? "double" : "float");
       out << YAML::Key << "axes" << YAML::Value << YAML::BeginSeq;
       for (unsigned int a=0; a<h->rank(); a++)
+        {
         out << YAML::Flow << YAML::BeginMap << YAML::Key << "bins" << YAML::Value << h->nBins(a)
             << YAML::Key << "min" << YAML::Value << number(h->minimum(a))
             << YAML::Key << "max" << YAML::Value << number(h->maximum(a))
-            << YAML::Key << "title" << YAML::Value << h->dimensionTitle(a).str() << YAML::EndMap;
+            << YAML::Key << "title" << YAML::Value << h->dimensionTitle(a).str();
+        if (!h->isRegular(a))
+          {
+          out << YAML::Key << "edges" << YAML::Value << YAML::Flow << YAML::BeginSeq;
+          for (double e : h->binEdges(a)) out << number(e);
+          out << YAML::EndSeq;
+          }
+        out << YAML::EndMap;
+        }
       out << YAML::EndSeq;
       out << YAML::Key << "entries" << YAML::Value << YAML::Flow << YAML::BeginSeq;
       for (unsigned int k=0; k<h->nBinsTotal(); k++) out << h->binEntriesAtGlobal(k);

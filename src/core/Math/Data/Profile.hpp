@@ -149,7 +149,7 @@ public:
   //! @brief Tag of the records of this class. @return "DTMQ"
   static const char * binaryTag() { return "DTMQ"; }
   //! @brief Version of the record format. @return version
-  static unsigned int binaryVersion() { return 3; }
+  static unsigned int binaryVersion() { return 4; }
   //! @brief Encode the profile. @param w writer
   void encodeBinary(BinaryWriter & w) const;
   //! @brief Decode a profile. @param r reader @param name name of the record @param version version of the record

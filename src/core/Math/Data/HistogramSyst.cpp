@@ -64,6 +64,13 @@ Histogram(name,title,n,minimum,maximum), _systPlus(), _systMinus()
   syncSyst();
 }
 
+HistogramSyst::HistogramSyst(const String & name, const String & title, const std::vector<double> & edges)
+:
+Histogram(name,title,edges), _systPlus(), _systMinus()
+{
+  syncSyst();
+}
+
 HistogramSyst::HistogramSyst(const String & name, const String & title,
                              unsigned int n0, double minimum_0, double maximum_0,
                              unsigned int n1, double minimum_1, double maximum_1)
@@ -405,7 +412,7 @@ HistogramSyst HistogramSyst::rebin(const std::vector<unsigned int> & factors) co
       unsigned int nNew = partition.nBins(a), i = rest%nNew;
       rest /= nNew;
       unsigned int r = nBins(a)%factors[a];
-      if (r!=0 && i==nNew-1) scale *= double(factors[a])/double(r);
+      if (r!=0 && i==nNew-1 && isRegular(a)) scale *= double(factors[a])/double(r);   // variable bins: not extended
       }
     result.setBinSystAtGlobal(t,scale*plus[t],scale*minus[t]);
     }
@@ -478,9 +485,9 @@ void HistogramSyst::encodeBinary(BinaryWriter & w) const
     }
 }
 
-void HistogramSyst::decodeBinary(BinaryReader & r, const String & histogramName, unsigned int /*version*/)
+void HistogramSyst::decodeBinary(BinaryReader & r, const String & histogramName, unsigned int version)
 {
-  Histogram::decodeBinary(r,histogramName,5);   // format version 1: the payload of a Histogram record of version 5
+  Histogram::decodeBinary(r,histogramName,version>=2 ? 6 : 5);   // the payload of a Histogram record of version 5 (6 from 2)
   _systPlus.clear();
   _systMinus.clear();
   syncSyst();

@@ -90,9 +90,10 @@ namespace Datum
   };
 
   //!
-  //! @brief Histogram of rank 1, 2, 3, ... with regular (fixed width) binning.
+  //! @brief Histogram of rank 1, 2, 3, ... with regular (fixed width) or variable bins along each axis.
   //!
-  //! The binning is provided by the base class Partition; bins are addressed either by
+  //! The binning is provided by the base class Partition (see Partition::addDimension() and
+  //! Histogram(const String&, const String&, const std::vector<double>&) for variable bins); bins are addressed either by
   //! per-axis indices, by coordinates, or by a global (flat) bin index (see Partition).
   //!
   //! <b>Bin content.</b> Each bin k stores three numbers:
@@ -446,6 +447,15 @@ namespace Datum
   //!
   Histogram(const String & name, const String & title,
             unsigned int n, double minimum, double maximum);
+
+  //!
+  //! @brief Create an empty rank 1 histogram with variable bins.
+  //! @param name name of the histogram
+  //! @param title title of the histogram
+  //! @param edges the n+1 edges of the n bins (strictly increasing)
+  //! @throws Exception if there are fewer than 2 edges or they do not increase
+  //!
+  Histogram(const String & name, const String & title, const std::vector<double> & edges);
 
   //!
   //! @brief Create an empty rank 2 histogram.
@@ -1387,7 +1397,8 @@ namespace Datum
   //!    title; then the number of non-empty bins and, for each, the gap in global bin index since the previous
   //!    non-empty bin (varint), the entries (zigzag varint), the average value and its uncertainty (float32); then
   //!    the bin labels of each axis and the fits attached (format version 4, see FitList::encodeBinary()), then the common
-  //!    systematic uncertainty (format version 5, see DataPoints::encodeCommonSyst())
+  //!    systematic uncertainty (format version 5, see DataPoints::encodeCommonSyst()), then the axes with variable bins:
+  //!    their number and, for each, its index and its nBins+1 edges (float64) (format version 6)
   //! Integers use variable-length encoding (1 byte below 128), multi-byte values are little-endian, and bins with
   //! zero entries, value and uncertainty are not written: a typical filled bin takes about 10 bytes, an empty bin 0.
   //! The content is restored exactly. Corrupted or truncated data is detected (FileException).
@@ -1397,7 +1408,7 @@ namespace Datum
   //! @brief Tag of histogram records in binary files. @return "DTMH"
   static const char * binaryTag() { return "DTMH"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 5; }
+  static unsigned int binaryVersion() { return 6; }
   //! @brief Name stored in binary records. @return name()
   String binaryName() const { return name(); }
   //! @brief Write the binary payload after the name (used by writeBinary()). @param w writer

@@ -317,7 +317,7 @@ void testHistogramRecords()
   u.fill(1.5);
   BinaryWriter w;
   u.encodeBinary(w);
-  std::string payload = w.buffer().substr(0,w.buffer().size()-1);
+  std::string payload = w.buffer().substr(0,w.buffer().size()-2);   // without the common systematic and variable bins
   BinaryReader r(payload.data(),payload.size());
   Histogram old;
   old.setCommonSyst(0.5);

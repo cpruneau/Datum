@@ -1,5 +1,7 @@
 #include "Partition.hpp"
 #include "Exceptions.hpp"
+#include <algorithm>
+#include <cmath>
 
 
 
@@ -29,6 +31,7 @@ namespace Datum
   _minima(src._minima),
   _maxima(src._maxima),
   _widths(src._widths),
+  _edges(src._edges),
   _titles(src._titles),
   _binLabels(src._binLabels)
   { }
@@ -49,6 +52,7 @@ namespace Datum
     _minima     = rhs._minima;
     _maxima     = rhs._maxima;
     _widths     = rhs._widths;
+    _edges      = rhs._edges;
     _titles     = rhs._titles;
     _binLabels  = rhs._binLabels;
     }
@@ -66,9 +70,93 @@ namespace Datum
   if (&partition==this) throw Exception("Cannot add a partition to itself",__FUNCTION__);
   unsigned int addedRank = partition.rank();
   for (unsigned int k=0; k<addedRank; k++)
+    addDimension(partition,k,0,partition._nBins[k]-1);
+  }
+
+  namespace
+  {
+  void checkEdges(const std::vector<double> & edges, const String & title, const char * source)
+  {
+  if (edges.size()<2) throw Exception(String("Variable bins need at least 2 edges (axis ")+title+")",source);
+  for (std::size_t i=0; i<edges.size(); i++)
     {
-    addDimension(partition._nBins[k],partition._minima[k],partition._maxima[k],partition._titles[k]);
+    if (!std::isfinite(edges[i])) throw Exception(String("Bin edges must be finite (axis ")+title+")",source);
+    if (i>0 && !(edges[i]>edges[i-1])) throw Exception(String("Bin edges must be strictly increasing (axis ")+title+")",source);
     }
+  }
+  }
+
+  void Partition::addDimension(const std::vector<double> & edges, String title)
+  {
+  checkEdges(edges,title,__FUNCTION__);
+  unsigned int nBin = (unsigned int) (edges.size()-1);
+  addDimension(nBin,float(edges.front()),float(edges.back()),title);
+  _edges.back() = edges;
+  _widths.back() = float((edges.back()-edges.front())/double(nBin));
+  }
+
+  void Partition::addDimension(const Partition & partition, unsigned int dimIndex, unsigned int first, unsigned int last)
+  {
+  partition.checkDimIndex(dimIndex,__FUNCTION__);
+  if (first>last || last>=partition._nBins[dimIndex]) throw Exception("Invalid range of bins",__FUNCTION__);
+  if (partition.isRegular(dimIndex))
+    {
+    if (first==0 && last==partition._nBins[dimIndex]-1)
+      addDimension(partition._nBins[dimIndex],partition._minima[dimIndex],partition._maxima[dimIndex],partition._titles[dimIndex]);
+    else
+      addDimension(last-first+1,float(partition.binLowEdge(first,dimIndex)),float(partition.binHighEdge(last,dimIndex)),
+                   partition._titles[dimIndex]);
+    }
+  else
+    {
+    const std::vector<double> & e = partition._edges[dimIndex];
+    addDimension(std::vector<double>(e.begin()+first,e.begin()+last+2),partition._titles[dimIndex]);
+    }
+  }
+
+  void Partition::setBinEdges(unsigned int dimIndex, const std::vector<double> & edges)
+  {
+  checkDimIndex(dimIndex,__FUNCTION__);
+  checkEdges(edges,_titles[dimIndex],__FUNCTION__);
+  if (edges.size()!=_nBins[dimIndex]+1) throw Exception("The number of edges is not the number of bins + 1",__FUNCTION__);
+  _edges[dimIndex]  = edges;
+  _minima[dimIndex] = float(edges.front());
+  _maxima[dimIndex] = float(edges.back());
+  _widths[dimIndex] = float((edges.back()-edges.front())/double(_nBins[dimIndex]));
+  }
+
+  bool Partition::isRegular(unsigned int dimIndex) const
+  {
+  checkDimIndex(dimIndex,__FUNCTION__);
+  return _edges[dimIndex].empty();
+  }
+
+  bool Partition::isRegular() const
+  {
+  for (const auto & e : _edges) if (!e.empty()) return false;
+  return true;
+  }
+
+  std::vector<double> Partition::binEdges(unsigned int dimIndex) const
+  {
+  checkDimIndex(dimIndex,__FUNCTION__);
+  if (!_edges[dimIndex].empty()) return _edges[dimIndex];
+  std::vector<double> edges(_nBins[dimIndex]+1);
+  for (unsigned int i=0; i<=_nBins[dimIndex]; i++) edges[i] = i<_nBins[dimIndex] ? binLowEdge(i,dimIndex) : double(_maxima[dimIndex]);
+  return edges;
+  }
+
+  double Partition::binVolume(unsigned int k) const
+  {
+  double volume = 1.0;
+  unsigned int rest = k;
+  for (unsigned int a=0; a<_rank; a++)
+    {
+    unsigned int i = rest%_nBins[a];
+    rest /= _nBins[a];
+    volume *= binWidth(i,a);
+    }
+  return volume;
   }
 
   void Partition::addDimension(unsigned int nBin, float minimum, float maximum, String title)
@@ -85,6 +173,7 @@ namespace Datum
   _minima.push_back(minimum);
   _maxima.push_back(maximum);
   _widths.push_back((maximum-minimum)/double(nBin));
+  _edges.push_back(std::vector<double>());
   _titles.push_back(title);
   _binLabels.push_back(std::map<unsigned int,String>());
   _rank++;
@@ -98,8 +187,18 @@ namespace Datum
     if (_nBins[k]!=rhs._nBins[k])  return false;
     if (sizeAndLimits)
       {
-      if (_minima[k]!=rhs._minima[k])  return false;
-      if (_maxima[k]!=rhs._maxima[k])  return false;
+      if (_edges[k].empty() && rhs._edges[k].empty())
+        {
+        if (_minima[k]!=rhs._minima[k])  return false;
+        if (_maxima[k]!=rhs._maxima[k])  return false;
+        }
+      else
+        {
+        // a regular axis equals variable bins with the same edges (float limits compared as such)
+        std::vector<double> a = binEdges(k), b = rhs.binEdges(k);
+        for (std::size_t i=0; i<a.size(); i++)
+          if (std::fabs(a[i]-b[i])>1.0E-6*std::max(std::fabs(a[i]),std::fabs(b[i]))) return false;
+        }
       }
     }
   return true;
@@ -114,6 +213,7 @@ namespace Datum
   _minima.clear();
   _maxima.clear();
   _widths.clear();
+  _edges.clear();
   _titles.clear();
   _binLabels.clear();
   }
@@ -222,6 +322,12 @@ namespace Datum
   int Partition::axisBinIndex(double x, unsigned int dimIndex) const
   {
   checkDimIndex(dimIndex,__FUNCTION__);
+  const std::vector<double> & e = _edges[dimIndex];
+  if (!e.empty())
+    {
+    if (!(x>=e.front()) || x>=e.back()) return -1;
+    return int(std::upper_bound(e.begin(),e.end(),x)-e.begin())-1;
+    }
   if (x<_minima[dimIndex] || x>=_maxima[dimIndex]) return -1;
   unsigned int index = (unsigned int) ((x-_minima[dimIndex])/_widths[dimIndex]);
   if (index>=_nBins[dimIndex]) index = _nBins[dimIndex]-1; // guard float rounding at the upper edge
@@ -278,28 +384,48 @@ namespace Datum
   return _maxima[dimIndex];
   }
 
-  // return the bin width -- for now use fixed widths...
-  double Partition::binWidth(unsigned int binIndex __attribute__((unused)), unsigned int dimIndex) const
+  double Partition::binWidth(unsigned int binIndex, unsigned int dimIndex) const
   {
   checkDimIndex(dimIndex,__FUNCTION__);
-  return _widths[dimIndex];
+  const std::vector<double> & e = _edges[dimIndex];
+  if (e.empty()) return _widths[dimIndex];
+  if (binIndex>=_nBins[dimIndex]) throw IndexOutOfBoundException(binIndex,_nBins[dimIndex],"Invalid bin index",__FUNCTION__);
+  return e[binIndex+1]-e[binIndex];
   }
 
   double Partition::binLowEdge(unsigned int binIndex, unsigned int dimIndex) const
   {
   checkDimIndex(dimIndex,__FUNCTION__);
+  const std::vector<double> & e = _edges[dimIndex];
+  if (!e.empty())
+    {
+    if (binIndex>=_nBins[dimIndex]) throw IndexOutOfBoundException(binIndex,_nBins[dimIndex],"Invalid bin index",__FUNCTION__);
+    return e[binIndex];
+    }
   return _minima[dimIndex] + double(binIndex)*_widths[dimIndex];
   }
 
   double Partition::binHighEdge(unsigned int binIndex, unsigned int dimIndex) const
   {
   checkDimIndex(dimIndex,__FUNCTION__);
+  const std::vector<double> & e = _edges[dimIndex];
+  if (!e.empty())
+    {
+    if (binIndex>=_nBins[dimIndex]) throw IndexOutOfBoundException(binIndex,_nBins[dimIndex],"Invalid bin index",__FUNCTION__);
+    return e[binIndex+1];
+    }
   return _minima[dimIndex] + double(binIndex+1)*_widths[dimIndex];
   }
 
   double Partition::binCenter(unsigned int binIndex, unsigned int dimIndex) const
   {
   checkDimIndex(dimIndex,__FUNCTION__);
+  const std::vector<double> & e = _edges[dimIndex];
+  if (!e.empty())
+    {
+    if (binIndex>=_nBins[dimIndex]) throw IndexOutOfBoundException(binIndex,_nBins[dimIndex],"Invalid bin index",__FUNCTION__);
+    return 0.5*(e[binIndex]+e[binIndex+1]);
+    }
   return _minima[dimIndex] + (0.5+double(binIndex))*_widths[dimIndex];
   }
 
@@ -307,7 +433,7 @@ namespace Datum
   {
   checkDimIndex(k,__FUNCTION__);
   Partition newPartition;
-  newPartition.addDimension(_nBins[k], _minima[k], _maxima[k], _titles[k]);
+  newPartition.addDimension(*this,k,0,_nBins[k]-1);
   return newPartition;
   }
 
@@ -317,8 +443,8 @@ namespace Datum
   checkDimIndex(k1,__FUNCTION__);
   if (k0==k1)  throw Exception("Dimension k0 and k1 are the same",__FUNCTION__);
   Partition newPartition;
-  newPartition.addDimension(_nBins[k0], _minima[k0], _maxima[k0], _titles[k0]);
-  newPartition.addDimension(_nBins[k1], _minima[k1], _maxima[k1], _titles[k1]);
+  newPartition.addDimension(*this,k0,0,_nBins[k0]-1);
+  newPartition.addDimension(*this,k1,0,_nBins[k1]-1);
   return newPartition;
   }
 
@@ -331,9 +457,9 @@ namespace Datum
   if (k0==k2)  throw Exception("Dimension k0, k2 are the same",__FUNCTION__);
   if (k1==k2)  throw Exception("Dimension k1, k2 are the same",__FUNCTION__);
   Partition newPartition;
-  newPartition.addDimension(_nBins[k0], _minima[k0], _maxima[k0], _titles[k0]);
-  newPartition.addDimension(_nBins[k1], _minima[k1], _maxima[k1], _titles[k1]);
-  newPartition.addDimension(_nBins[k2], _minima[k2], _maxima[k2], _titles[k2]);
+  newPartition.addDimension(*this,k0,0,_nBins[k0]-1);
+  newPartition.addDimension(*this,k1,0,_nBins[k1]-1);
+  newPartition.addDimension(*this,k2,0,_nBins[k2]-1);
   return newPartition;
   }
   void Partition::setDimensionTitle(unsigned int k, const String & title)
