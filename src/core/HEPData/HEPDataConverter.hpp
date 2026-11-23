@@ -14,6 +14,8 @@
 #include "String.hpp"
 #include "HEPDataSubmission.hpp"
 #include "DataPoints.hpp"
+#include "FitRecord.hpp"
+#include "ParameterizedFunction.hpp"
 
 namespace Datum
 {
@@ -36,10 +38,25 @@ struct HEPDataExportOptions
   String statLabel     = "stat";        //!< label of the statistical uncertainty
   String systLabel     = "sys";         //!< label of the systematic uncertainty
   String commonLabel   = "norm";        //!< label of the common systematic uncertainty
+  bool   withFits      = true;          //!< lossless mode: keep the fits attached to the objects in the datum block
   std::vector<String> xNames;           //!< names of the independent variables (default: axis titles, or x, y, ...)
   std::vector<String> yNames;           //!< names of the dependent variables (default: the titles of the objects)
   //! qualifiers of each dependent variable (one list per object, or a single list for all)
   std::vector< std::vector<HEPDataQualifier> > qualifiers;
+};
+
+//! @brief Options of the tables of functions and fits.
+struct HEPDataFunctionOptions
+{
+  unsigned int nPoints = 100;   //!< points evenly spaced over the range, ends included (when no edges are given)
+  std::vector<double> edges;    //!< if given: bins with these edges instead of points
+  bool averages = true;         //!< with edges: the averages of the function over the bins (false: its values at the centers)
+  bool band     = true;         //!< fits: the uncertainty of the fitted function (from the covariance), a symerror "fit"
+  bool lossless = true;         //!< write the datum block: the function (and the fit), read back exactly
+  String xName  = "x";          //!< name of the independent variable
+  String xUnits;                //!< its units
+  String yName;                 //!< name of the dependent variable (default: the title, or the name, of the function)
+  String yUnits;                //!< its units
 };
 
 //! @brief An object made from a dependent variable of a table, with what it came from.
@@ -96,6 +113,8 @@ public:
   using ExportOptions = HEPDataExportOptions;
   //! @brief An object made from a table (see HEPDataImported).
   using Imported = HEPDataImported;
+  //! @brief Options of the tables of functions and fits (see HEPDataFunctionOptions).
+  using FunctionOptions = HEPDataFunctionOptions;
 
   //! @brief Objects of a table (one per dependent variable). @param table table @param options options
   //! @param warnings if given, messages are appended (asymmetric statistical errors, varying common uncertainty, ...)
@@ -117,6 +136,40 @@ public:
   //! @brief A table holding imported objects again, with their qualifiers. @param objects objects of one table
   //! @param options options (its qualifiers are replaced by those of the objects) @return table
   static HEPDataTable toTable(const std::vector<Imported> & objects, ExportOptions options = ExportOptions());
+
+  //! @name Functions and fits
+  //! A function (of one variable) is written as a table of its values, sampled at points or averaged over bins, so
+  //! that HEPData and Rivet can use it. Its parameters are qualifiers of the dependent variable ("A" = "1520 +- 30"
+  //! for a fit, with "CHI2/NDF" and "FUNCTION"). In lossless mode the datum block holds the function (its class in
+  //! FunctionRegistry, parameters, and its binary record) and the fit (result and binary record), from which
+  //! toFunction() and toFit() rebuild them exactly. The fits attached to histograms and data points are also kept by
+  //! the lossless tables of those objects (ExportOptions::withFits), and attached again by toObjects().
+  //! @{
+
+  //!
+  //! @brief A table of a function over a range. @param function function of one variable @param low lower end
+  //! @param high upper end @param options options @return table (no name, description or keywords: to be set)
+  //! @throws Exception if the function is not of rank 1, the range is empty, or the edges are not increasing
+  //!
+  static HEPDataTable functionTable(const MATH::ParameterizedFunction & function, double low, double high,
+                                    const FunctionOptions & options = FunctionOptions());
+  //!
+  //! @brief A table of a fit: its function over the range of the fit, with the uncertainty band and the parameters.
+  //! @param fit fit (of one variable) @param options options @return table (named after the label of the fit)
+  //! @throws Exception if the fit has no function or is not of rank 1
+  //!
+  static HEPDataTable fitTable(const MATH::FitRecord & fit, const FunctionOptions & options = FunctionOptions());
+  //! @brief Tables of the fits attached to an object, named "<object> fit <k>". @param object object @param options
+  //! options @return tables (none if the object has no fit)
+  static std::vector<HEPDataTable> fitTables(const MATH::DataPoints & object, const FunctionOptions & options = FunctionOptions());
+  //! @brief The function of a table written by functionTable() or fitTable() in lossless mode. @param table table
+  //! @return function, or null if the table has no function in its datum block
+  //! @throws Exception if the datum block is invalid or the class of the function is not available
+  static std::shared_ptr<MATH::ParameterizedFunction> toFunction(const HEPDataTable & table);
+  //! @brief The fit of a table written by fitTable() in lossless mode. @param table table @return fit, or null if none
+  //! @throws Exception if the datum block is invalid
+  static std::shared_ptr<const MATH::FitRecord> toFit(const HEPDataTable & table);
+  //! @}
 
   //! @brief Split "name (units)" into name and units (the last parenthesis at the end). @param title title
   //! @param name name @param units units (empty if none)

@@ -17,6 +17,9 @@
 #include "DataPointND.hpp"
 #include "DataPointsVector.hpp"
 #include "DataPointColumns.hpp"
+#include "HEPDataBase64.hpp"
+#include "BinaryIO.hpp"
+#include "FitRecord.hpp"
 #include "yaml-cpp/yaml.h"
 #include <algorithm>
 #include <cctype>
@@ -222,6 +225,7 @@ struct Recorded
   std::vector<long> entries;
   bool hasCommon = false;
   double commonPlus = 0, commonMinus = 0;
+  std::string fits;   //!< the fits attached, binary (FitList::encodeBinary()) in base64
 };
 
 Recorded recorded(const HEPDataTable & table, unsigned int column, const String & where)
@@ -256,6 +260,7 @@ Recorded recorded(const HEPDataTable & table, unsigned int column, const String 
           }
       if (o["entries"] && o["entries"].IsSequence())
         for (const YAML::Node & e : o["entries"]) r.entries.push_back(e.as<long>());
+      if (o["fits"]) r.fits = o["fits"].as<std::string>();
       if (o["commonSyst"] && o["commonSyst"].IsSequence() && o["commonSyst"].size()==2)
         {
         r.hasCommon = true;
@@ -469,6 +474,16 @@ std::vector<HEPDataConverter::Imported> HEPDataConverter::toObjects(const HEPDat
     object->setTitle(record.found ? String(record.title) : joinTitle(y.name,y.units));
     if (record.hasCommon) object->setCommonSyst(record.commonPlus,record.commonMinus);   // exact, from the datum block
     else object->setCommonSyst(commonPlus,commonMinus);
+    if (!record.fits.empty())
+      {
+      std::string bytes = HEPDataBase64::decode(record.fits);
+      BinaryReader reader(bytes.data(),bytes.size());
+      FitList fits;
+      unsigned int skipped = fits.decodeBinary(reader);
+      for (unsigned int k=0; k<fits.size(); k++) object->addFit(fits.pointer(k));
+      if (skipped>0 && warnings)
+        warnings->push_back(column+": "+String(std::to_string(skipped))+" fit(s) skipped (their functions are not available)");
+      }
     Imported imported;
     imported.object = object;
     imported.table = table.name;
@@ -530,7 +545,8 @@ String xName(const HEPDataConverter::ExportOptions & options, unsigned int a, co
   return a<3 ? String(names[a]) : String("x"+std::to_string(a));
 }
 
-void emitDatumBlock(HEPDataTable & table, const std::vector<const DataPoints *> & objects)
+void emitDatumBlock(HEPDataTable & table, const std::vector<const DataPoints *> & objects,
+                    const HEPDataConverter::ExportOptions & options)
 {
   YAML::Emitter out;
   out << YAML::BeginMap << YAML::Key << "version" << YAML::Value << 1;
@@ -546,6 +562,14 @@ void emitDatumBlock(HEPDataTable & table, const std::vector<const DataPoints *> 
     out << YAML::Key << "class" << YAML::Value << className;
     out << YAML::Key << "name" << YAML::Value << o.name().str();
     out << YAML::Key << "title" << YAML::Value << o.title().str();
+    if (options.withFits && o.nFits()>0)
+      {
+      FitList fits;
+      for (unsigned int k=0; k<o.nFits(); k++) fits.add(o.fitPointer(k));
+      BinaryWriter w;
+      fits.encodeBinary(w);
+      out << YAML::Key << "fits" << YAML::Value << HEPDataBase64::encode(w.buffer());
+      }
     if (o.hasCommonSyst())
       out << YAML::Key << "commonSyst" << YAML::Value << YAML::Flow << YAML::BeginSeq
           << number(o.getCommonSystPlus()) << number(o.getCommonSystMinus()) << YAML::EndSeq;
@@ -708,7 +732,7 @@ HEPDataTable HEPDataConverter::toTable(const std::vector<const DataPoints *> & o
       table.dependent.push_back(y);
       }
     }
-  if (options.lossless) emitDatumBlock(table,objects);
+  if (options.lossless) emitDatumBlock(table,objects,options);
   return table;
 }
 
