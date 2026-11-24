@@ -174,7 +174,13 @@ namespace Datum
 
   void GraphItem::applyDefaultStyle(int k)
   {
-  applyDefaultStyle(k, Palettes::session().colorPalette(), Palettes::session().markerPalette());
+  applyDefaultStyle(k, Palettes::session().colorPalette(), Palettes::session().markerPalette(), Palettes::session().linePalette());
+  }
+
+  void GraphItem::applyDefaultStyle(int k, const ColorPalette & colors, const MarkerPalette & markers, const LinePalette & lines)
+  {
+  applyDefaultStyle(k, colors, markers);
+  _line.setStyle(lines.style(k));
   }
 
   void GraphItem::applyDefaultStyle(int k, const ColorPalette & colors, const MarkerPalette & markers)
@@ -243,6 +249,7 @@ namespace Datum
   _shapes(),
   _colorPaletteName(),
   _markerPaletteName(),
+  _linePaletteName(),
   _logX(false), _logY(false),
   _autoX(true), _autoY(true),
   _xMinimum(0.0), _xMaximum(1.0), _yMinimum(0.0), _yMaximum(1.0),
@@ -291,6 +298,7 @@ namespace Datum
   _shapes(src._shapes),
   _colorPaletteName(src._colorPaletteName),
   _markerPaletteName(src._markerPaletteName),
+  _linePaletteName(src._linePaletteName),
   _logX(src._logX), _logY(src._logY),
   _autoX(src._autoX), _autoY(src._autoY),
   _xMinimum(src._xMinimum), _xMaximum(src._xMaximum), _yMinimum(src._yMinimum), _yMaximum(src._yMaximum),
@@ -351,6 +359,7 @@ namespace Datum
     _shapes = rhs._shapes;
     _colorPaletteName = rhs._colorPaletteName;
     _markerPaletteName = rhs._markerPaletteName;
+    _linePaletteName = rhs._linePaletteName;
     _logX = rhs._logX; _logY = rhs._logY;
     _autoX = rhs._autoX; _autoY = rhs._autoY;
     _xMinimum = rhs._xMinimum; _xMaximum = rhs._xMaximum; _yMinimum = rhs._yMinimum; _yMaximum = rhs._yMaximum;
@@ -576,7 +585,7 @@ namespace Datum
   for (auto & existing : _items) if (existing.object() == item.object()) return existing;
   _items.push_back(item);
   GraphItem & added = _items.back();
-  added.applyDefaultStyle(int(_items.size()) - 1, colorPalette(), markerPalette());
+  added.applyDefaultStyle(int(_items.size()) - 1, colorPalette(), markerPalette(), linePalette());
   if (fresh)
     {
     setTitlesFrom(added);

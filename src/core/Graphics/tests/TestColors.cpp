@@ -90,6 +90,21 @@ int main()
   palettes.setShadingPalette("viridis");
   palettes.setColorPalette("default");
 
+  // ---- line-style palettes: "solid" by default (every line solid), "varied", or the graph's own
+  CHECK(palettes.linePalette().name() == "solid" && palettes.linePalette("varied") && palettes.linePalette("varied")->style(1) == 2);
+  CHECK(g.items()[1].lineAttributes().style() == 1);
+  CHECK(palettes.setLinePalette("varied"));
+  g.restyleItems();
+  CHECK(g.items()[0].lineAttributes().style() == 1 && g.items()[1].lineAttributes().style() == 2);
+  Graph dashed;
+  palettes.add(LinePalette("dashes", { 2, 3 }));
+  dashed.setLinePaletteName("dashes");
+  dashed.show(GraphItem(&a, "a"), false);
+  dashed.show(GraphItem(&b, "b"), false);
+  CHECK(dashed.items()[0].lineAttributes().style() == 2 && dashed.items()[1].lineAttributes().style() == 3);
+  CHECK(Graph(dashed).linePaletteName() == "dashes" && !palettes.setLinePalette("nothing"));
+  palettes.setLinePalette("solid");
+
   std::printf("TestColors: %d checks, %d failed\n", nChecks, nFailures);
   return nFailures;
 }

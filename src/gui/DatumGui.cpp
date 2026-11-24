@@ -502,6 +502,24 @@ namespace Datum
   return _currentWindow;
   }
 
+  String DatumGui::windowTitle(int window) const
+  {
+  if (window == kMainWindow) return _settings.title;
+  if (window >= 0 && window < nPaneWindows()) return _paneWindows[std::size_t(window)].title;
+  std::size_t j = std::size_t(-2 - window);
+  return j < _windows.size() ? _windows[j].title : String();
+  }
+
+  void DatumGui::setWindowTitleOf(int window, const String & title)
+  {
+  if (title.isNull() || title.str().empty()) return;
+  if (window == kMainWindow) { setWindowTitle(title); return; }
+  std::size_t j = std::size_t(-2 - window);
+  if (window > -2 || j >= _windows.size()) return;
+  _windows[j].title = title;
+  _windows[j].label = title.str() + "###DatumWindow" + std::to_string(_windows[j].number);   // same ImGui window
+  }
+
   void DatumGui::layoutGuiWindow(std::size_t j)
   {
   GuiWindow & window = _windows[j];
@@ -602,18 +620,79 @@ namespace Datum
   for (std::size_t k=0; k<_browsers.size(); k++)
     {
     FileBrowser & browser = *_browsers[k];
-    if (windowOf(browser.windowName()) != window) continue;
+    if (_hiddenPanes.count(&browser) || windowOf(browser.windowName()) != window) continue;   // hidden: stays hidden
     if (k == 0) { _settings.browserVisible = false; continue; }
     if (onBrowserCloseRequest && !onBrowserCloseRequest(browser)) { done = false; continue; }
     _browsersToClose.push_back(&browser);
     }
   for (std::size_t k=0; k<_dataPanes.size(); )
-    if (windowOf(_dataPanes[k]->windowTitle().data()) == window) _dataPanes.erase(_dataPanes.begin() + long(k)); else k++;
+    if (!_hiddenPanes.count(_dataPanes[k].get()) && windowOf(_dataPanes[k]->windowTitle().data()) == window) _dataPanes.erase(_dataPanes.begin() + long(k)); else k++;
   for (std::size_t k=0; k<_spreadsheetPanes.size(); )
-    if (windowOf(_spreadsheetPanes[k]->windowTitle().data()) == window) _spreadsheetPanes.erase(_spreadsheetPanes.begin() + long(k)); else k++;
+    if (!_hiddenPanes.count(_spreadsheetPanes[k].get()) && windowOf(_spreadsheetPanes[k]->windowTitle().data()) == window) _spreadsheetPanes.erase(_spreadsheetPanes.begin() + long(k)); else k++;
   if (windowOf(FitPane::windowName()) == window) _fitsVisible = false;
   if (windowOf("Canvases") == window) _canvasListVisible = false;
   return done;
+  }
+
+  // ------------------------------------------------------------------------------------------------ panes shown or hidden
+
+  std::vector<const void *> DatumGui::panesOfKind(PaneKind kind) const
+  {
+  std::vector<const void *> panes;
+  if (kind == kBrowserPanes) for (const auto & b : _browsers) panes.push_back(b.get());
+  else if (kind == kTablePanes) for (const auto & p : _spreadsheetPanes) panes.push_back(p.get());
+  else for (const auto & p : _dataPanes) panes.push_back(p.get());
+  return panes;
+  }
+
+  int DatumGui::nPanesOf(PaneKind kind) const
+  {
+  return int(panesOfKind(kind).size());
+  }
+
+  const void * DatumGui::currentOfKind(PaneKind kind) const
+  {
+  std::vector<const void *> panes = panesOfKind(kind);
+  if (panes.empty()) return nullptr;
+  const void * current = kind == kBrowserPanes ? (_activeBrowser >= 0 && _activeBrowser < int(panes.size()) ? panes[std::size_t(_activeBrowser)] : nullptr)
+                       : kind == kTablePanes ? _currentTable : _currentData;
+  if (std::find(panes.begin(), panes.end(), current) == panes.end()) current = panes.back();   // closed meanwhile: the last one
+  return current;
+  }
+
+  bool DatumGui::paneShown(PaneKind kind, const void * pane) const
+  {
+  if (kind == kBrowserPanes && !_browsers.empty() && pane == _browsers.front().get()) return _settings.browserVisible;
+  return _hiddenPanes.count(pane) == 0;
+  }
+
+  void DatumGui::setPaneShown(PaneKind kind, const void * pane, bool shown)
+  {
+  if (!pane || paneShown(kind, pane) == shown) return;
+  if (kind == kBrowserPanes && pane == _browsers.front().get()) { setBrowserVisible(shown); return; }
+  if (!shown) { _hiddenPanes.insert(pane); return; }
+  _hiddenPanes.erase(pane);
+  // shown again: in the current window if its place was lost (its window closed)
+  std::string name;
+  if (kind == kBrowserPanes) { for (const auto & b : _browsers) if (b.get() == pane) name = b->windowName(); }
+  else if (kind == kTablePanes) { for (const auto & p : _spreadsheetPanes) if (p.get() == pane) name = p->windowTitle().str(); }
+  else for (const auto & p : _dataPanes) if (p.get() == pane) name = p->windowTitle().str();
+  if (!name.empty() && needsPlace(name.c_str())) dockInCurrentWindow(name, kind == kBrowserPanes);
+  }
+
+  bool DatumGui::panesShown(PaneKind kind, bool all) const
+  {
+  if (!all) { const void * current = currentOfKind(kind); return current && paneShown(kind, current); }
+  std::vector<const void *> panes = panesOfKind(kind);
+  if (panes.empty()) return false;
+  for (const void * p : panes) if (!paneShown(kind, p)) return false;
+  return true;
+  }
+
+  void DatumGui::setPanesShown(PaneKind kind, bool all, bool shown)
+  {
+  if (!all) { setPaneShown(kind, currentOfKind(kind), shown); return; }
+  for (const void * p : panesOfKind(kind)) setPaneShown(kind, p, shown);
   }
 
   void DatumGui::closeGuiWindow(std::size_t j)
@@ -894,6 +973,7 @@ namespace Datum
   std::snprintf(name, sizeof(name), "Data %d", ++_dataCounter);
   _dataPanes.emplace_back(new DataPane(name));
   DataPane & pane = *_dataPanes.back();
+  _currentData = &pane;
   std::string beside = paneOfCurrentWindow();
   if (beside.empty()) dockInCurrentWindow(pane.windowTitle().str());
   else _dockBeside.push_back(std::make_pair(std::string("###") + name, beside));
@@ -906,6 +986,7 @@ namespace Datum
   std::snprintf(name, sizeof(name), "Table %d", ++_spreadsheetCounter);
   _spreadsheetPanes.emplace_back(new SpreadsheetPane(name));
   SpreadsheetPane & pane = *_spreadsheetPanes.back();
+  _currentTable = &pane;
   std::string beside = paneOfCurrentWindow();
   if (beside.empty()) dockInCurrentWindow(pane.windowTitle().str());
   else _dockBeside.push_back(std::make_pair(pane.windowId(), beside));
@@ -1175,6 +1256,21 @@ namespace Datum
     if (windowOpen(k)) if (ImGuiViewport * v = viewportOf(k)) _viewportWindows[v->ID] = k;
   for (std::size_t j=0; j<_windows.size(); j++)
     if (_windows[j].open) if (ImGuiViewport * v = viewportOf(-2 - int(j))) _viewportWindows[v->ID] = -2 - int(j);
+  // windows closed from a menu (Datum > Close Window): as their x
+  std::vector<int> closing;
+  closing.swap(_closeWindowRequests);
+  for (int window : closing)
+    {
+    if (!windowOpen(window)) continue;
+    if (window == kMainWindow) glfwSetWindowShouldClose(_window, GLFW_TRUE);   // handled by run(): hidden or the end
+    else if (window <= -2) closeGuiWindow(std::size_t(-2 - window));
+    else if (!onCloseWindow || onCloseWindow(window))
+      {
+      closeWindowContents(window);
+      for (int j=nPanes()-1; j>=0; j--) if (_panes[std::size_t(j)]->host() == window) _panes.erase(_panes.begin() + j);
+      if (_currentPane >= nPanes()) _currentPane = 0;
+      }
+    }
   validateCurrentWindow();
   gActiveViewport = viewportOf(_currentWindow);
   FileDialog::viewport = gActiveViewport;
@@ -1408,6 +1504,7 @@ namespace Datum
   for (std::size_t k=1; k<_browsers.size(); )
     {
     FileBrowser & browser = *_browsers[k];
+    if (_hiddenPanes.count(&browser)) { k++; continue; }   // hidden (View > File Browsers)
     ImGui::SetNextWindowSize(ImVec2(380, viewport->WorkSize.y*0.75f), ImGuiCond_FirstUseEver);
     bool open = true;
     if (ImGui::Begin(browser.windowName(), &open))
@@ -1419,6 +1516,7 @@ namespace Datum
     ImGui::End();
     if (open) { k++; continue; }
     if (onBrowserCloseRequest && !onBrowserCloseRequest(browser)) { k++; continue; }
+    _hiddenPanes.erase(&browser);
     if (onCloseBrowser) onCloseBrowser(browser);
     _browsers.erase(_browsers.begin() + long(k));
     if (_activeBrowser >= int(k)) _activeBrowser = 0;
@@ -1513,11 +1611,12 @@ namespace Datum
   for (std::size_t k=0; k<_dataPanes.size(); )
     {
     DataPane & pane = *_dataPanes[k];
+    if (_hiddenPanes.count(&pane)) { k++; continue; }   // hidden (View > Data Panes)
     bool open = true;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 6));
     bool visible = ImGui::Begin(pane.windowTitle().data(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) noteFocus(pane.windowTitle().data());
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { noteFocus(pane.windowTitle().data()); _currentData = &pane; }
     if (visible) pane.render();
     ImGui::End();
     if (open) k++;
@@ -1527,11 +1626,12 @@ namespace Datum
   for (std::size_t k=0; k<_spreadsheetPanes.size(); )
     {
     SpreadsheetPane & pane = *_spreadsheetPanes[k];
+    if (_hiddenPanes.count(&pane)) { k++; continue; }   // hidden (View > Tables)
     bool open = true;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 6));
     bool visible = ImGui::Begin(pane.windowTitle().data(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) noteFocus(pane.windowTitle().data());
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { noteFocus(pane.windowTitle().data()); _currentTable = &pane; }
     if (visible) pane.render();
     ImGui::End();
     if (open) k++;

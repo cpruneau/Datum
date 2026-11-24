@@ -97,6 +97,9 @@ namespace Datum
   //! @brief Color and marker of item k of palettes. @param k index of the item @param colors color palette
   //! @param markers marker palette
   void applyDefaultStyle(int k, const ColorPalette & colors, const MarkerPalette & markers);
+  //! @brief Color, marker and line style of item k of palettes. @param k index of the item @param colors color palette
+  //! @param markers marker palette @param lines line-style palette
+  void applyDefaultStyle(int k, const ColorPalette & colors, const MarkerPalette & markers, const LinePalette & lines);
 
   Kind kind() const { return _kind; }   //!< Function or data points
   const MATH::Function   * function() const { return _function; }   //!< The function shown (kFunction), or null
@@ -528,12 +531,18 @@ namespace Datum
   void setMarkerPaletteName(const String & name) { _markerPaletteName = name; }
   const String & colorPaletteName() const { return _colorPaletteName; }   //!< Name of its color palette ("": the session's)
   const String & markerPaletteName() const { return _markerPaletteName; }   //!< Name of its marker palette ("": the session's)
+  //! @brief Line-style palette giving the line styles of the items added (empty: the current one of the session).
+  //! @param name name of a palette of Palettes::session()
+  void setLinePaletteName(const String & name) { _linePaletteName = name; }
+  const String & linePaletteName() const { return _linePaletteName; }   //!< Name of its line-style palette ("": the session's)
+  //! @brief Line-style palette used: its own, or the current one of the session. @return palette
+  const LinePalette & linePalette() const { return Palettes::session().linePaletteOr(_linePaletteName); }
   //! @brief Color palette used: its own, or the current one of the session. @return palette
   const ColorPalette & colorPalette() const { return Palettes::session().colorPaletteOr(_colorPaletteName); }
   //! @brief Marker palette used: its own, or the current one of the session. @return palette
   const MarkerPalette & markerPalette() const { return Palettes::session().markerPaletteOr(_markerPaletteName); }
   //! @brief Give the items their colors and markers again, from the palettes (after a change of palette).
-  void restyleItems() { for (std::size_t k=0; k<_items.size(); k++) _items[k].applyDefaultStyle(int(k), colorPalette(), markerPalette()); }
+  void restyleItems() { for (std::size_t k=0; k<_items.size(); k++) _items[k].applyDefaultStyle(int(k), colorPalette(), markerPalette(), linePalette()); }
   //! @}
 
   //! @brief Draw the graph (frame, axes, items, legend), then its shapes. @param painter painter
@@ -802,6 +811,7 @@ namespace Datum
   std::vector<Shape> _shapes; //!<! shapes drawn over the graph
   String _colorPaletteName;   //!< color palette of the items (empty: the current one of the session)
   String _markerPaletteName;   //!< marker palette of the items (empty: the current one of the session)
+  String _linePaletteName;   //!< line-style palette of the items (empty: the current one of the session)
   bool  _logX;   //!< logarithmic axes
   bool  _logY;   //!< logarithmic axes
   bool  _autoX;   //!< automatic ranges

@@ -445,7 +445,7 @@ namespace Datum
   if (ImGui::MenuItem("Legend", nullptr, legend)) { changing(); graph.setShowLegend(!legend); }
   if (ImGui::BeginMenu("Palettes"))
     {
-    // the palettes of this graph: "Session's" follows the current palettes of the session (Edit > Preferences)
+    // the palettes of this graph: "Session's" follows the current palettes of the session (Datum > Preferences)
     GRAPHICS::Palettes & palettes = GRAPHICS::Palettes::session();
     auto choose = [&](const char * menu, const String & current, const std::vector<String> & names, const String & sessions,
                       const std::function<void(const String &)> & set)
@@ -461,6 +461,8 @@ namespace Datum
            [&](const String & n) { changing(); graph.setColorPaletteName(n); graph.restyleItems(); });
     choose("Markers", graph.markerPaletteName(), palettes.markerPaletteNames(), palettes.markerPalette().name(),
            [&](const String & n) { changing(); graph.setMarkerPaletteName(n); graph.restyleItems(); });
+    choose("Line Styles", graph.linePaletteName(), palettes.linePaletteNames(), palettes.linePalette().name(),
+           [&](const String & n) { changing(); graph.setLinePaletteName(n); graph.restyleItems(); });
     if (graph.hasMaps() && ImGui::BeginMenu("Shading"))
       {
       for (const String & n : palettes.shadingPaletteNames())

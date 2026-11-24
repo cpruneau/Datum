@@ -109,6 +109,7 @@ namespace Datum
       keepShapes   = e->attributeBool("keepShapes", keepShapes);
       colorPalette   = e->attribute("colorPalette", colorPalette);
       markerPalette  = e->attribute("markerPalette", markerPalette);
+      linePalette    = e->attribute("linePalette", linePalette);
       shadingPalette = e->attribute("shadingPalette", shadingPalette);
       }
     if (const XmlElement * e = root.child("Files"))
@@ -168,6 +169,7 @@ namespace Datum
     graphs.setAttribute("keepShapes", keepShapes);
     graphs.setAttribute("colorPalette", colorPalette);
     graphs.setAttribute("markerPalette", markerPalette);
+    graphs.setAttribute("linePalette", linePalette);
     graphs.setAttribute("shadingPalette", shadingPalette);
     XmlElement & files = root.addChild("Files");
     files.setAttribute("directory", directory);
@@ -264,6 +266,7 @@ namespace Datum
   GRAPHICS::Palettes & palettes = GRAPHICS::Palettes::session();
   if (!palettes.setColorPalette(_configuration.colorPalette))     _configuration.colorPalette = palettes.colorPalette().name();
   if (!palettes.setMarkerPalette(_configuration.markerPalette))   _configuration.markerPalette = palettes.markerPalette().name();
+  if (!palettes.setLinePalette(_configuration.linePalette))       _configuration.linePalette = palettes.linePalette().name();
   if (!palettes.setShadingPalette(_configuration.shadingPalette)) _configuration.shadingPalette = palettes.shadingPaletteName();
   if (!FileSystem::home().isNull()) _configuration.gui.iniFile = FileSystem::join(FileSystem::home(), ".DatumGui.ini");
   if (_configuration.directory.isNull())
@@ -700,6 +703,21 @@ namespace Datum
     }
   else if (c == "file.newTree") newTree(_gui.activeBrowser());
   else if (c == "file.newWindow") _gui.newWindow();
+  else if (c == "gui.renameWindow")
+    {
+    _renameWindow = _gui.currentWindow();
+    _renameWindowText = _gui.windowTitle(_renameWindow).str();
+    _renameWindowRequested = true;
+    }
+  else if (c == "gui.closeWindow") _gui.closeWindow(_gui.currentWindow());
+  else if (c.str().compare(0, 10, "view.panes") == 0)
+    {
+    // view.panes.<browsers|tables|data>.<current|all>: shown or hidden
+    DatumGui::PaneKind kind = c.str().find(".browsers.") != std::string::npos ? DatumGui::kBrowserPanes
+                            : c.str().find(".tables.") != std::string::npos ? DatumGui::kTablePanes : DatumGui::kDataPanes;
+    bool all = c.str().find(".all") != std::string::npos;
+    _gui.setPanesShown(kind, all, !_gui.panesShown(kind, all));
+    }
   else if (c == "file.closeBrowser") requestCloseBrowser(_gui.activeBrowser());
   else if (c == "file.closeTree" || c == "file.duplicateEntry" || c == "file.saveTree" || c == "file.saveTreeAs")
     {
@@ -769,13 +787,20 @@ namespace Datum
     }
   else if (c == "edit.delete" && _gui.currentPane().hasSelectedShape()) _gui.currentPane().deleteSelectedShape();
   else if (c == "edit.delete")      { recordUndo(); _gui.currentPane().currentGraph().clearItems(); }
-  else if (c == "edit.clearCanvas")
+  else if (c == "edit.clearGraph")
+    {
+    recordUndo();
+    Graph & graph = _gui.currentPane().currentGraph();
+    graph.clearItems();
+    graph.clearShapes();
+    }
+  else if (c == "edit.clearCanvas" || c == "canvas.clear")
     {
     recordUndo();
     Canvas & canvas = _gui.currentPane().canvas();
     for (int k=0; k<canvas.nGraphs(); k++) { canvas.graph(k).clearItems(); canvas.graph(k).clearShapes(); }
     }
-  else if (c == "edit.clearAll")
+  else if (c == "edit.clearAll" || c == "canvas.clearAll")
     {
     recordUndo();
     for (int p=0; p<_gui.nPanes(); p++)
@@ -2139,6 +2164,7 @@ namespace Datum
   renderShortcuts();
   renderCustomLayout();
   renderRenameCanvas();
+  renderRenameWindow();
   renderPresentation();
   renderComparison();
   _projector.update();
@@ -2167,7 +2193,7 @@ namespace Datum
     }
   else if (!latex.available()) latex.findTools();
   if (_configuration.latex && !latex.available() && problem.isNull())
-    problem = "LaTeX: latex and dvisvgm not found, texts drawn with the fonts (see Edit > Preferences)";
+    problem = "LaTeX: latex and dvisvgm not found, texts drawn with the fonts (see Datum > Preferences)";
   return problem;
   }
 
@@ -2191,7 +2217,7 @@ namespace Datum
   ImGui::InputInt("Width", &c.gui.width);
   ImGui::InputInt("Height", &c.gui.height);
   ImGui::Checkbox("Windows can leave the main window (restart)", &c.gui.viewports);
-  ImGui::Checkbox("Each window of a plot file in a window of its own (View > Detached Windows)", &c.gui.detachedWindows);
+  ImGui::Checkbox("Each window of a plot file in a window of its own (Windows > Detached Windows)", &c.gui.detachedWindows);
 
   ImGui::SeparatorText("Canvases");
   int layout[2] = {_gui.nColumns(), _gui.nRows()};
@@ -2241,6 +2267,8 @@ namespace Datum
   ImGui::SameLine();
   if (combo("markers", c.markerPalette, palettes.markerPaletteNames(), "Markers given in turn to the objects of a graph"))
     palettes.setMarkerPalette(c.markerPalette);
+  if (combo("lines", c.linePalette, palettes.linePaletteNames(), "Line styles given in turn to the objects of a graph (solid, dashed, dotted, ...)"))
+    palettes.setLinePalette(c.linePalette);
   if (combo("shading", c.shadingPalette, palettes.shadingPaletteNames(), "Colors of the maps, contours and 3D views of new graphs"))
     palettes.setShadingPalette(c.shadingPalette);
   ImGui::SameLine();
@@ -2403,6 +2431,26 @@ namespace Datum
   if (ImGui::Button("Rename") || (enter && valid))
     {
     _gui.pane(_renamePane).setTitle(String(_renameText.c_str()));
+    ImGui::CloseCurrentPopup();
+    }
+  ImGui::EndDisabled();
+  ImGui::SameLine();
+  if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+  ImGui::EndPopup();
+  }
+
+  void DatumApp::renderRenameWindow()
+  {
+  if (_renameWindowRequested) { ImGui::OpenPopup("Rename Window##renameWindow"); _renameWindowRequested = false; }
+  if (!ImGui::BeginPopupModal("Rename Window##renameWindow", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+  if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+  ImGui::SetNextItemWidth(260);
+  bool enter = ImGui::InputText("title", &_renameWindowText, ImGuiInputTextFlags_EnterReturnsTrue);
+  bool valid = _gui.windowOpen(_renameWindow) && !_renameWindowText.empty();
+  ImGui::BeginDisabled(!valid);
+  if (ImGui::Button("Rename") || (enter && valid))
+    {
+    _gui.setWindowTitleOf(_renameWindow, String(_renameWindowText.c_str()));
     ImGui::CloseCurrentPopup();
     }
   ImGui::EndDisabled();

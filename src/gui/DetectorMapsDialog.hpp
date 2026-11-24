@@ -35,7 +35,7 @@ namespace Datum
   class FileDialog;
 
   //!
-  //! @brief The Detector Maps window of DatumGui (Edit > Detector Maps...): views and edits the particle efficiencies
+  //! @brief The Detector Maps window of DatumGui (Maps > Detector Maps...): views and edits the particle efficiencies
   //! (ParticleEfficiency) and smearers (ParticleSmear) of a maps file, the Datum file that the jobs import (Import of the
   //! efficiencies and smearers in the Filters pane of RunDatum).
   //!
@@ -49,7 +49,7 @@ namespace Datum
   //!    PerformanceDerivedCalculator or CalibrationProducer), made empty (filled with a value) with the binning of the
   //!    object, its axes assigned to variables, its bins edited in a table.
   //! "Show" puts a copy of a map in the current graph (a function of rank 1 or 2, a histogram); after it is fitted
-  //! there (Edit > Fit...), "Adopt fit" makes the fitted function the source of the map. Values outside the allowed
+  //! there (Operations > Fit), "Adopt fit" makes the fitted function the source of the map. Values outside the allowed
   //! range of a map (efficiencies in [0, 1], resolutions >= 0) are refused, with the reason shown.
   //!
   class DetectorMapsDialog
