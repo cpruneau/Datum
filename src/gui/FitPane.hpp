@@ -61,6 +61,9 @@ namespace Datum
   std::function<void(const MATH::DataPoints * data, unsigned int fit)> onResidualMap;
   //! Called by the "Projections" button of a fit of rank 2 of a histogram.
   std::function<void(const MATH::DataPoints * data)> onProjections;
+  //! Called by "Remove Fit" (context menu of the tab of a fit, or its Remove button): fit k of an item, to remove
+  //! from the object (it is not kept when the object is saved).
+  std::function<void(GRAPHICS::GraphItem & item, unsigned int k)> onRemoveFit;
 
   //! @brief A fit as tab-separated text: its function and object, quality, parameters, correlations.
   //! @param item item the fit is attached to @param fit fit @return text
@@ -70,6 +73,9 @@ namespace Datum
 
   //! @brief Draw the tab of fit k of an item. @param item item @param k index of the fit @param beforeChange undo hook
   void renderFit(GRAPHICS::GraphItem & item, unsigned int k, const std::function<void()> & beforeChange);
+  int _removeItem = -1;   //!< item whose fit is removed at the end of the frame (-2: _removeFrom), -1 none
+  unsigned int _removeFit = 0;   //!< index of that fit
+  GRAPHICS::GraphItem * _removeFrom = nullptr;   //!< item of the Remove button
   };
 
   } // namespace GUI

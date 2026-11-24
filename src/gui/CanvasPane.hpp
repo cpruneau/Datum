@@ -166,6 +166,7 @@ namespace Datum
   void renderRebinItemsMenu(int graph);   //!< Rebin: a histogram of the graph
   void renderFitMenu(int graph);          //!< Fit: an item of the graph that can be fitted
   void renderShowDataMenu(int graph);     //!< Show Data: the values of data points shown, as a table
+  void renderRemoveFitMenu(int graph);    //!< Remove Fit: a fit of an item of the graph
   //! @}
 
   //! @brief Position under the mouse in data coordinates, or empty. @return text
@@ -203,6 +204,9 @@ namespace Datum
   //! Called by Sum, Difference, Product, Ratio and Scale in the context menu of a graph, with the graph and the
   //! operation (0 to 4: as HistogramOperations::Operation).
   std::function<void(int graph, int operation)> onOperation;
+  //! Called by "Remove Fit" in the context menu of a graph (right-click on the curve of a fit, or the Remove Fit
+  //! menu): fit k of item i of graph g, to remove from its object (not kept when the object is saved).
+  std::function<void(int graph, int item, unsigned int fit)> onRemoveFit;
   //! Called by "Compare" in the context menu of a graph, for two histograms of the same rank shown in it, with the
   //! comparison chosen (see Comparison).
   std::function<void(const MATH::DataPoints * first, const MATH::DataPoints * second,
@@ -272,6 +276,8 @@ namespace Datum
   GRAPHICS::Graph _editBefore;         //!< graph when the dialog was opened (for undo)
   Tool _tool;                          //!< tool of the shape palette in use
   GRAPHICS::Shape _shapeStyle;         //!< attributes given to new shapes (those of the shape edited last)
+  int  _contextFitItem = -1;           //!< item whose fit curve was right-clicked (-1: none)
+  unsigned int _contextFit = 0;        //!< that fit
   int  _host = -1;                     //!< window holding the pane (-1: the main window)
   int  _shapeGraph;                    //!< graph of the selected shape (-1: no shape selected)
   int  _shapeIndex;                    //!< index of the selected shape in its graph
