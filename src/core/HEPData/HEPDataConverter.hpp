@@ -71,6 +71,7 @@ struct HEPDataImported
 //!
 //! @brief Conversion between HEPData tables and Datum objects: histograms (Histogram, HistogramSyst, Profile as its
 //! values) and sets of data points (DataPointsVector, DataPointColumns, any rank).
+//! The guide to HEPData in Datum: docs/HEPData.md.
 //!
 //! <b>Import</b> (toObjects()): one object per dependent variable of a table.
 //!  - Independent variables that are bins not overlapping (up to three; gaps between rows are empty bins, every

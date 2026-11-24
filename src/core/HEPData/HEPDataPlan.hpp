@@ -9,6 +9,7 @@
  * *********************************************************************/
 //! @file HEPDataPlan.hpp
 //! @brief What an import or an export of HEPData YAML files will do, shown before it is done (the preview of DatumGui).
+//! The guide: docs/HEPData.md.
 #ifndef DATUM_HEPDataPlan
 #define DATUM_HEPDataPlan
 #include <memory>

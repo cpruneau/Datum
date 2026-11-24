@@ -385,6 +385,11 @@ namespace Datum
   ImGui::BulletText("File acts on the data files (Datum) of the browser, the one selected: New, Open, Duplicate, Close,\n"
                     "Save (a new or changed file), Export (ROOT, or every histogram on a page of a PDF, LaTeX or\n"
                     "PowerPoint file).");
+#ifdef DATUM_WITH_HEPDATA
+  ImGui::BulletText("File > Import > HEPData YAML makes a data file of the tables of HEPData submissions; File > Export >\n"
+                    "HEPData YAML writes histograms, points, fits and functions as a submission. Both show a preview\n"
+                    "first (see Help > HEPData Import and Export).");
+#endif
   ImGui::BulletText("Plots acts on the plot files (XML), a tab each in the Plot Tree: New, Open, Duplicate, Close, Save,\n"
                     "Export (PDF book, LaTeX, PowerPoint, named plots). Closing a changed plot file or tree asks to save it.");
   ImGui::BulletText("Windows acts on the window shown: New (with one canvas), Open (adds the windows of a plot file),\n"
@@ -573,6 +578,9 @@ namespace Datum
   Menu & help = bar.addMenu("Help");
   help.addItem("DatumGui Help",        "plot.help",      "F1", "How the canvases, the plot files and the browser work together");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "",   "List of the keyboard shortcuts");
+#ifdef DATUM_WITH_HEPDATA
+  help.addItem("HEPData Import and Export", "help.hepdata", "", "How HEPData YAML files become histograms, points and functions, and back");
+#endif
   help.addItem("About Datum",      "help.about",     "",   "Version and components");
   help.addSeparator();
   help.addItem("ImGui Demo (developers)", "help.imguiDemo", "", "Dear ImGui's demonstration window").setCheckable(true);
@@ -1156,6 +1164,7 @@ namespace Datum
 #ifdef DATUM_WITH_HEPDATA
   else if (c == "data.importHEPData") _hepDataDialog.openImport(_configuration.directory);
   else if (c == "data.exportHEPData") openHEPDataExport();
+  else if (c == "help.hepdata") _hepDataDialog.openHelp();
 #endif
   else if (c == "data.rename")
     {

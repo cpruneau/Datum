@@ -72,3 +72,15 @@ from `DATUM_PYTHIA8_DIR`, `DATUM_HERWIG_DIR`, `DATUM_FASTJET_DIR` (or `CAP_...`)
 python3 RunDatum.py [workflow.xml]     # compose, check and run workflows
 bin/DatumGui [file.datum ...]            # histograms, plots and figures
 ```
+
+# HEPData YAML
+Datum reads and writes [HEPData](https://www.hepdata.net) submissions: histograms (with asymmetric systematic
+uncertainties, `HistogramSyst`), data points, fits and functions, to and from the YAML tables of hepdata.net.
+- In DatumGui: **File > Import > HEPData YAML** and **File > Export > HEPData YAML**, with a preview of what will be
+  read or written before OK (Help > HEPData Import and Export).
+- In a workflow: the task `Datum::HEPDataExporter` (template `DB/Templates/HEPDataExporter.xml`, example
+  `src/core/HEPData/examples/HEPDataExport.xml`).
+- In C++: `HEPDataSubmission`, `HEPDataConverter` and `HEPDataPlan` in `src/core/HEPData`.
+
+Built with `-DDATUM_WITH_YAML=ON` (the default; yaml-cpp is distributed in `external/yaml-cpp`). The guide:
+[docs/HEPData.md](docs/HEPData.md).
