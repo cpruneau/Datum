@@ -71,7 +71,7 @@ namespace Datum
   //! @{
   //! @brief The catalog used by File > New from Data. @param catalog function
   void setCatalog(const Catalog & catalog) { _catalog = catalog; }
-  //! @brief Show every window of the plot file (View > All Windows). @param v flag
+  //! @brief Show every window of the plot file (Windows > All Windows). @param v flag
   void setAllWindows(bool v) { _allWindows = v; }
   //! @brief Show every window of the plot file in a window of its own, the main window keeping the tree and the
   //! browser (when windows can leave the main window, Preferences: each is a window of the desktop). @param v choice
@@ -129,7 +129,7 @@ namespace Datum
   int _nextId = 1;   //!< identifier of the next tab
   int _untitled = 0;   //!< number of the last new file
   std::string _clipboard;   //!< XML of the element copied
-  bool _showTree = false;   //!< the Plot Tree is shown (opened by Plots > New, Open, New From Data, View > Plot Tree)
+  bool _showTree = false;   //!< the Plot Tree is shown (opened by Plots > New, Open, New From Data, View > Plot Browser)
   std::string _plotPane;   //!< window of the canvas of the plot file that was current last (where objects are shown)
   bool _showStyle = false;   //!< the elements of style are shown in the tree
   bool _showInspector = false;   //!< the inspector pane is shown (below the tree the first time)
@@ -344,7 +344,19 @@ namespace Datum
   bool saveView(bool canvas, const String & fileName);
   //! @brief Save the window shown or the current canvas: again to its file, or to a file chosen (ask).
   //! @param canvas which @param ask choose the file
-  void saveViewAs(bool canvas, bool ask);
+  void saveViewAs(bool canvas, bool ask, const std::string & extension = std::string());
+  //! @brief Write a PNG file: a PDF written by a function, converted (sips on macOS, otherwise pdftoppm or convert).
+  //! @param png file @param writePdf writes the PDF file given @return false if it cannot be written or converted
+  bool writePng(const String & png, const std::function<bool(const String & pdf)> & writePdf);
+  //! @brief Add a canvas of a plot file (XML) to the window shown (a plot file made if none is open): the only one,
+  //! the one chosen (which), or ask which one when it has several. @param fileName plot file @param which index of
+  //! the canvas among those of the file (-1: ask if it has several)
+  void openCanvas(const String & fileName, int which = -1);
+  //! @brief The dialog where the canvas to open is chosen (Canvas > Open), if open.
+  void renderCanvasChoice();
+  std::string _canvasChoiceFile;   //!< plot file whose canvas is chosen ("": the dialog is not shown)
+  std::vector<std::string> _canvasChoices;   //!< its canvases (window / canvas)
+  bool _canvasChoiceRequested = false;   //!< the dialog opens at the next frame
   //! @brief Key of the window shown or of the current canvas, for the file it was saved to ("" if none). @param canvas
   //! which @return key
   std::string viewKey(bool canvas);

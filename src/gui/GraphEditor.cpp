@@ -152,8 +152,8 @@ namespace Datum
   LatexRenderer & latex = LatexRenderer::instance();
   LatexRenderer::TextKind kind = LatexRenderer::kind(text);
   if (kind == LatexRenderer::kPlain) return;
-  if (!latex.available())  { ImGui::TextDisabled("LaTeX not found: drawn with the font (see Edit > Preferences)"); return; }
-  if (!latex.enabled())    { ImGui::TextDisabled("LaTeX off: drawn with the font (see Edit > Preferences)"); return; }
+  if (!latex.available())  { ImGui::TextDisabled("LaTeX not found: drawn with the font (see Datum > Preferences)"); return; }
+  if (!latex.enabled())    { ImGui::TextDisabled("LaTeX off: drawn with the font (see Datum > Preferences)"); return; }
   if (kind == LatexRenderer::kRoot)
     {
     if (!latex.rootSyntax()) { ImGui::TextDisabled("ROOT syntax not translated: drawn with the font"); return; }

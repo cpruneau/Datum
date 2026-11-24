@@ -383,26 +383,34 @@ namespace Datum
                      "shown in the Plot Tree; what is changed on them is written to the file, and what is changed in the "
                      "tree draws them again.");
   ImGui::Spacing();
-  ImGui::BulletText("File acts on the data files (Datum) of the browser, the one selected: New, Open, Duplicate, Close,\n"
-                    "Save (a new or changed file), Export (ROOT, or every histogram on a page of a PDF, LaTeX or\n"
-                    "PowerPoint file).");
+  ImGui::BulletText("Datum: About, Preferences (theme, fonts, palettes of colors, markers and line styles, LaTeX), New\n"
+                    "Window, Rename Window, Close Window, Quit. Panes (browsers, Plot Browser, inspector, canvases, tables)\n"
+                    "are dragged between the windows by their tab; Datum ends when its last window is closed.");
+  ImGui::BulletText("File acts on the data files (Datum) of the browser, the one selected: New (a file browser), New Data\n"
+                    "File, Open, Duplicate, Close, Save (a new or changed file), Export (ROOT, or every histogram on a page\n"
+                    "of a PDF, LaTeX or PowerPoint file).");
 #ifdef DATUM_WITH_HEPDATA
   ImGui::BulletText("File > Import > HEPData YAML makes a data file of the tables of HEPData submissions; File > Export >\n"
                     "HEPData YAML writes histograms, points, fits and functions as a submission. Both show a preview\n"
                     "first (see Help > HEPData Import and Export).");
 #endif
-  ImGui::BulletText("Plots acts on the plot files (XML), a tab each in the Plot Tree: New, Open, Duplicate, Close, Save,\n"
-                    "Export (PDF book, LaTeX, PowerPoint, named plots). Closing a changed plot file or tree asks to save it.");
+  ImGui::BulletText("Plots acts on the plot files (XML), a tab each in the Plot Browser: New, Open, Duplicate, Close, Save,\n"
+                    "Add Graph, Add Function, Regroup, Move Up and Down, Export (PDF book, LaTeX, PowerPoint, named plots).\n"
+                    "Closing a changed plot file or tree asks to save it.");
   ImGui::BulletText("Windows acts on the window shown: New (with one canvas), Open (adds the windows of a plot file),\n"
                     "Duplicate, Close, Format (its grid of canvases), Save (PDF, SVG, XML or LaTeX), Export.\n"
-                    "Canvas acts on the current canvas: New, Close, Format (its grid of graphs), Save.");
+                    "Canvas acts on the current canvas: New, Open (a canvas of a plot file), Duplicate, Rename, Close,\n"
+                    "Format (its grid of graphs), Save, Save As (PDF, SVG, PNG, LaTeX, PowerPoint, XML), Clear, Clear All.");
   ImGui::BulletText("Drag a histogram from the browser onto a graph of a canvas or onto the tree: on a graph it is\n"
                     "overlaid; on a histogram it goes after it; on a canvas it gets a new graph; on a window a new\n"
                     "canvas. A folder adds all its histograms. Clicking a histogram in the browser adds it to the\n"
                     "selected graph.");
   ImGui::BulletText("The selection is shared: click a graph on a canvas, its row is selected in the tree, and the other\n"
-                    "way around. Edit > Copy, Cut, Paste, Delete and Duplicate act on it; Copy puts its XML on the clipboard.");
-  ImGui::BulletText("View > All Windows shows every window of the plot file; otherwise the window of the selection.");
+                    "way around. Edit > Copy, Cut, Paste, Delete and Duplicate act on it; Copy puts its XML on the clipboard.\n"
+                    "Edit > Clear empties the selected graph, Clear All every graph of the current canvas.");
+  ImGui::BulletText("View shows or hides the panes: the file browser, table or data pane used last (Current) or all of\n"
+                    "them, the Plot Browser, the inspector, the fit results, the toolbars of the canvases, the legends.");
+  ImGui::BulletText("Windows > All Windows shows every window of the plot file; otherwise the window of the selection.");
   ImGui::BulletText("Right-click a map (a 2D histogram) > Project: onto x or y, over the whole range of the other axis or\n"
                     "over a range dragged across the map. The projection is shown in a canvas below, and the range is\n"
                     "marked on the map by two lines: drag a line (or its handle) and the projection follows when the mouse\n"
@@ -445,15 +453,24 @@ namespace Datum
   void DatumGuiApp::buildMenus()
   {
   MenuBar & bar = _gui.menuBar();
+  // Datum: the application and its windows
+  Menu & datum = bar.addMenu("Datum");
+  datum.addItem("About Datum",     "help.about",       "",             "Version and components");
+  datum.addItem("Preferences...",  "edit.preferences", "Ctrl+,",       "Settings of DatumGui: theme, window, fonts, graphs, palettes, LaTeX");
+  datum.addSeparator();
+  datum.addItem("New Window",      "file.newWindow",   "Ctrl+Alt+N",   "Another DatumGui window: menus, a file browser of its own; "
+                                                                       "panes (browsers, canvases, tables, tree, inspector) can be "
+                                                                       "dragged between the windows");
+  datum.addItem("Rename Window...", "gui.renameWindow", "",            "A new title for the window used last");
+  datum.addItem("Close Window",    "gui.closeWindow",  "Ctrl+Shift+W", "Close the window used last, with its panes (Datum ends with the last window)");
+  datum.addSeparator();
+  datum.addItem("Quit Datum",      "file.exit",        "Ctrl+Q",       "Quit (asks to save the changes of the plot files and data files)");
+
   // File: the Datum data files and trees of the browser (the one selected in the browser used last)
   Menu & file = bar.addMenu("File");
-  Menu & fileNew = file.addMenu("New", "A new window, a new top folder in the browser used last, or a new browser");
-  fileNew.addItem("Window",       "file.newWindow",  "Ctrl+Alt+N",   "Another DatumGui window: menus, a file browser of its own; "
-                                                                     "panes (browsers, canvases, tables, tree, inspector) can be "
-                                                                     "dragged between the windows");
-  fileNew.addItem("Top Folder",   "data.new",        "Ctrl+Shift+N", "A new data file in the browser used last: an entry with an empty "
-                                                                     "top folder; drag objects and folders onto it, save it as a Datum file");
-  fileNew.addItem("File Browser", "file.newBrowser", "",             "A new file browser, with files and folders of its own");
+  file.addItem("New",           "file.newBrowser", "",             "A new file browser, with files and folders of its own");
+  file.addItem("New Data File", "data.new",        "Ctrl+Shift+N", "A new data file in the browser used last: an entry with an empty "
+                                                                   "top folder; drag objects and folders onto it, save it as a Datum file");
   file.addItem("Open...",      "file.open",      "Ctrl+Shift+O", "Open a Datum file (or the histograms of a ROOT file) in the browser");
   file.addItem("Duplicate",    "data.duplicate", "",             "A new data file holding a copy of the folders and objects of the file selected");
   file.addItem("Rename...",    "data.rename",    "",             "A new name for the folder or histogram selected in a data file made in DatumGui (or its top folder); "
@@ -484,8 +501,6 @@ namespace Datum
                                                                   "as a HEPData submission, with the publication and the keywords: "
                                                                   "a preview shows the files before OK writes them");
 #endif
-  file.addSeparator();
-  file.addItem("Exit",         "file.exit",      "Ctrl+Q",       "Quit (asks to save the changes of the plot files)");
 
   // Plots: the plot files (XML), the tabs of the Plot Tree
   Menu & plots = bar.addMenu("Plots");
@@ -500,6 +515,13 @@ namespace Datum
   plots.addSeparator();
   plots.addItem("Save",                "plot.save",      "Ctrl+S",       "Save the plot file shown");
   plots.addItem("Save As...",          "plot.saveAs",    "Ctrl+Shift+S", "Save the plot file shown under a new name");
+  plots.addSeparator();
+  plots.addItem("Add Graph",           "plot.addGraph",    "",         "A new graph in the canvas of the selection");
+  plots.addItem("Add Function",        "plot.addFunction", "",         "A function in the graph of the selection");
+  plots.addItem("Regroup...",          "plot.regroup",     "",         "Gather the histograms and functions whose names match a pattern "
+                                                                       "(e.g. *_pt) into common graphs, after a preview");
+  plots.addItem("Move Up",             "plot.up",          "",         "Move the selection before the previous element");
+  plots.addItem("Move Down",           "plot.down",        "",         "Move the selection after the next element");
   plots.addSeparator();
   Menu & plotExport = plots.addMenu("Export", "Figures and documents of all the canvases of the plot file shown, in its output folder");
   plotExport.addItem("PDF Book",       "plot.pdf",    "", "All the canvases of the plot file, one per page, to the PDF book of the output folder");
@@ -532,18 +554,37 @@ namespace Datum
   windowExport.addItem("LaTeX...",      "win.exportLatex", "", "All the canvases of the window in a LaTeX document");
   windowExport.addItem("PowerPoint...", "win.exportPptx",  "", "All the canvases of the window, one per slide");
 
-  // Canvas: the current canvas (of the window shown)
+  // Windows of the plot file: their display (moved from View), the list of the canvases
+  windows.addSeparator();
+  windows.addItem("All Windows",      "plot.allWindows",      "", "Every window of the plot file: the first one in its DatumGui window, "
+                                                                  "the others in windows of their own (otherwise the window of the selection)").setCheckable(true);
+  windows.addItem("Detached Windows", "plot.detachedWindows", "", "Every window of the plot file in a window of its own").setCheckable(true);
+  windows.addItem("Canvases List",    "view.canvases",        "", "The canvases of the session by window, with their graphs").setCheckable(true);
+
+  // Canvas: the current canvas
   Menu & canvas = bar.addMenu("Canvas");
-  canvas.addItem("New",        "plot.newCanvas", "", "A new canvas in the window shown");
-  canvas.addItem("Rename...",  "canvas.rename",  "", "A new name (and title) for the current canvas");
-  canvas.addItem("Close",      "window.close",   "", "Remove the current canvas from the plot file, with its graphs (Undo restores it)");
+  canvas.addItem("New",        "canvas.new",       "", "A new canvas: in the window of the plot file shown, otherwise in the window used last");
+  canvas.addItem("Open...",    "canvas.open",      "", "Add a canvas of a saved plot file (XML) to the window of the plot file shown");
+  canvas.addItem("Duplicate",  "canvas.duplicate", "", "A copy of the current canvas, after it in the plot file");
+  canvas.addItem("Rename...",  "canvas.rename",    "", "A new name (and title) for the current canvas");
+  canvas.addItem("Close",      "window.close",     "", "Remove the current canvas (from the plot file, with its graphs: Undo restores it)");
   canvas.addSeparator();
   Menu & canvasFormat = canvas.addMenu("Format", "Graphs of the current canvas: columns x rows");
   canvasFormat.addWidget([this]() { gridMenu(true); });
   canvas.addSeparator();
-  canvas.addItem("Save",       "canvas.save",    "", "Save the current canvas again to the file it was saved to (PDF, SVG, XML or LaTeX)");
-  canvas.addItem("Save As...", "canvas.saveAs",  "", "Save the current canvas to a PDF or SVG file, an XML plot file or a LaTeX document");
+  canvas.addItem("Save",       "canvas.save",      "", "Save the current canvas again to the file it was saved to");
+  Menu & canvasSaveAs = canvas.addMenu("Save As", "Save the current canvas to a file of a format");
+  canvasSaveAs.addItem("PDF...",           "canvas.saveAs.pdf",  "", "The canvas as on screen, in a PDF file");
+  canvasSaveAs.addItem("SVG...",           "canvas.saveAs.svg",  "", "The canvas as on screen, in an SVG file");
+  canvasSaveAs.addItem("PNG...",           "canvas.saveAs.png",  "", "The canvas as on screen, in a PNG image (150 dpi)");
+  canvasSaveAs.addItem("LaTeX...",         "canvas.saveAs.tex",  "", "The canvas in a LaTeX document");
+  canvasSaveAs.addItem("PowerPoint...",    "canvas.saveAs.pptx", "", "The canvas on a PowerPoint slide (native shapes)");
+  canvasSaveAs.addItem("XML Plot File...", "canvas.saveAs.xml",  "", "The canvas in a plot file of its own, with its inputs");
+  canvas.addSeparator();
+  canvas.addItem("Clear",      "canvas.clear",     "", "Remove the histograms and functions of all the graphs of the current canvas");
+  canvas.addItem("Clear All",  "canvas.clearAll",  "", "Remove the histograms and functions of all the canvases shown");
 
+  // Edit: the selection (Plot Tree or canvas)
   Menu & edit = bar.addMenu("Edit");
   edit.addItem("Undo",   "plot.undo",  "Ctrl+Z",       "Undo the last change of the plot file (made on the canvases or in the tree)");
   edit.addItem("Redo",   "plot.redo",  "Ctrl+Shift+Z", "Redo the change undone last");
@@ -555,42 +596,33 @@ namespace Datum
                                                         "selected in the Plot Tree, or the entry selected in the browser if it was used last");
   edit.addItem("Delete", "plot.delete", "Delete", "Remove the shape selected on a canvas, otherwise the selection");
   edit.addSeparator();
-  edit.addItem("Clear Canvas",       "edit.clearCanvas", "", "Remove the histograms and functions of all the graphs of the current canvas");
-  edit.addItem("Clear All Canvases", "edit.clearAll",    "", "Remove the histograms and functions of all the canvases shown");
-  edit.addSeparator();
-  edit.addItem("Add Window",   "plot.addWindow",   "", "A new window of canvases");
-  edit.addItem("Add Canvas",   "plot.addCanvas",   "", "A new canvas in the window of the selection");
-  edit.addItem("Add Graph",    "plot.addGraph",    "", "A new graph in the canvas of the selection");
-  edit.addItem("Add Function", "plot.addFunction", "", "A function in the graph of the selection");
-  edit.addItem("Regroup...",   "plot.regroup",     "", "Gather the histograms and functions whose names match a pattern "
-                                                          "(e.g. *_pt) into common graphs, after a preview");
-  edit.addItem("Move Up",      "plot.up",          "", "Move the selection before the previous element");
-  edit.addItem("Move Down",    "plot.down",        "", "Move the selection after the next element");
-  edit.addSeparator();
-  edit.addItem("Fit...", "edit.fit", "", "Fit a function to data points, a histogram or a function of the selected graph (shown on screen only)");
-  edit.addItem("Detector Maps...", "edit.maps", "", "The particle efficiencies and smearers of a maps file (RunDatum: Import)");
-  edit.addItem("Preferences...", "edit.preferences", "", "Settings of DatumGui: window, fonts, graphs, LaTeX");
+  edit.addItem("Clear",     "edit.clearGraph",  "", "Remove the histograms, functions and shapes of the selected graph");
+  edit.addItem("Clear All", "edit.clearCanvas", "", "Remove the histograms, functions and shapes of all the graphs of the current canvas");
 
+  // View: panes shown or hidden
   Menu & view = bar.addMenu("View");
-  view.addItem("File Browser",   "view.browser",   "Ctrl+B", "Show or hide the file browser").setCheckable(true);
-  view.addItem("Browser in Separate Window", "view.browserWindow", "", "The file browser in a window of its own").setCheckable(true);
-  view.addItem("New File Browser",   "file.newBrowser",   "", "Another file browser, with files of its own");
-  view.addItem("Close File Browser", "file.closeBrowser", "", "Close the browser used last (the first one is hidden), asking to save its changed trees");
-  view.addItem("Plot Tree",      "plot.tree",      "Ctrl+T", "Show or hide the tree of the plot files").setCheckable(true);
-  view.addItem("Inspector",      "plot.inspector", "", "The inspector pane: all the settings of the element selected in the tree").setCheckable(true);
-  view.addItem("Style Elements", "plot.showStyle", "", "Show the elements of style (Margins, Axis, Marker, ...) in the tree").setCheckable(true);
-  view.addItem("All Windows",    "plot.allWindows", "", "Every window of the plot file: the first one here, the others in windows of their own "
-                                                        "(otherwise the window of the selection)").setCheckable(true);
-  view.addItem("Detached Windows", "plot.detachedWindows", "", "Every window of the plot file in a window of its own, which can "
-                                                        "be moved and sized on its own; the main window keeps the tree and the browser").setCheckable(true);
+  Menu & viewBrowsers = view.addMenu("File Browsers", "Show or hide the file browser used last, or all of them");
+  viewBrowsers.addItem("Current", "view.panes.browsers.current", "Ctrl+B", "Show or hide the file browser used last").setCheckable(true);
+  viewBrowsers.addItem("All",     "view.panes.browsers.all",     "",       "Show or hide all the file browsers").setCheckable(true);
+  view.addItem("Plot Browser",   "plot.tree",      "Ctrl+T", "Show or hide the Plot Tree: the plot files, their windows, canvases and graphs").setCheckable(true);
+  view.addItem("Inspector",      "plot.inspector", "",       "Show or hide the inspector: all the settings of the element selected in the tree").setCheckable(true);
+  Menu & viewTables = view.addMenu("Spreadsheets", "Show or hide the table pane used last, or all of them");
+  viewTables.addItem("Current", "view.panes.tables.current", "", "Show or hide the table pane used last").setCheckable(true);
+  viewTables.addItem("All",     "view.panes.tables.all",     "", "Show or hide all the table panes").setCheckable(true);
+  Menu & viewData = view.addMenu("Data Panes", "Show or hide the data pane used last, or all of them");
+  viewData.addItem("Current", "view.panes.data.current", "", "Show or hide the data pane used last").setCheckable(true);
+  viewData.addItem("All",     "view.panes.data.all",     "", "Show or hide all the data panes").setCheckable(true);
   view.addSeparator();
-  view.addItem("Canvases",       "view.canvases",  "", "The canvases of the session by window, with their graphs").setCheckable(true);
+  view.addItem("Style Elements", "plot.showStyle", "", "Show the elements of style (Margins, Axis, Marker, ...) in the tree").setCheckable(true);
   view.addItem("Fit Results",    "view.fits",      "", "The results of the fits of the selected graph, below the canvases").setCheckable(true);
   view.addItem("Canvas Toolbars", "view.toolbars", "", "Show the buttons above each canvas").setCheckable(true);
   view.addItem("Legends",        "view.legends",   "", "Show the legend of every graph").setCheckable(true);
-  Menu & theme = view.addMenu("Theme");
-  for (const char * t : { "light", "dark", "classic" })
-    theme.addItem(t, String("view.theme.") + t, "", String("Use the ") + t + String(" theme")).setCheckable(true);
+  if (MenuItem * item = bar.findItem("view.toolbars")) item->setChecked(_configuration.gui.toolbars);
+  if (MenuItem * item = bar.findItem("view.legends"))  item->setChecked(_configuration.legend);
+
+  // Maps: detector maps (efficiencies and smearers)
+  Menu & maps = bar.addMenu("Maps");
+  maps.addItem("Detector Maps...", "edit.maps", "", "The particle efficiencies and smearers of a maps file (RunDatum: Import)");
 
   addOperationsMenu(bar);
   Menu & help = bar.addMenu("Help");
@@ -599,7 +631,6 @@ namespace Datum
 #ifdef DATUM_WITH_HEPDATA
   help.addItem("HEPData Import and Export", "help.hepdata", "", "How HEPData YAML files become histograms, points and functions, and back");
 #endif
-  help.addItem("About Datum",      "help.about",     "",   "Version and components");
   help.addSeparator();
   help.addItem("ImGui Demo (developers)", "help.imguiDemo", "", "Dear ImGui's demonstration window").setCheckable(true);
   }
@@ -632,6 +663,10 @@ namespace Datum
   enable("win.open", any);
   enable("canvas.save", canvasOfPlot);
   enable("canvas.saveAs", canvasOfPlot);
+  enable("canvas.duplicate", canvasOfPlot);
+  for (const char * c : {"canvas.saveAs.tex", "canvas.saveAs.pptx", "canvas.saveAs.xml"}) enable(c, canvasOfPlot);
+  for (const char * c : {"canvas.saveAs.pdf", "canvas.saveAs.svg", "canvas.saveAs.png"}) enable(c, canvasOfPlot || _gui.nPanes() > 0);
+  for (const char * c : {"canvas.clear", "canvas.clearAll", "edit.clearGraph", "edit.clearCanvas"}) enable(c, _gui.nPanes() > 0);
   if (Menu * w = bar.findMenu("Windows")) if (Menu * f = w->findMenu("Format")) f->setEnabled(windows);
   if (Menu * c = bar.findMenu("Canvas")) if (Menu * f = c->findMenu("Format")) f->setEnabled(canvasOfPlot);
   String path;
@@ -670,6 +705,16 @@ namespace Datum
   if (MenuItem * item = bar.findItem("plot.showStyle"))  item->setChecked(_showStyle);
   if (MenuItem * item = bar.findItem("plot.allWindows")) item->setChecked(_allWindows);
   if (MenuItem * item = bar.findItem("plot.detachedWindows")) item->setChecked(_detachedWindows);
+  // View: the panes shown, the current one of each kind or all of them
+  const std::pair<const char *, DatumGui::PaneKind> kinds[] = { {"browsers", DatumGui::kBrowserPanes},
+                                                                {"tables", DatumGui::kTablePanes}, {"data", DatumGui::kDataPanes} };
+  for (const auto & kind : kinds)
+    for (bool all : {false, true})
+      if (MenuItem * item = bar.findItem(String("view.panes.") + String(kind.first) + String(all ? ".all" : ".current")))
+        {
+        item->setEnabled(_gui.nPanesOf(kind.second) > 0);
+        item->setChecked(_gui.panesShown(kind.second, all));
+        }
   }
 
   void DatumGuiApp::connectToPlot(FileBrowser & browser)
@@ -682,7 +727,7 @@ namespace Datum
   {
   _detachedWindows = configuration().gui.detachedWindows;
   _gui.setSideWindow(kEditorWindow, 0.40f);
-  _gui.setSideWindowVisible(_showTree);       // hidden until a plot file is made or opened, or View > Plot Tree
+  _gui.setSideWindowVisible(_showTree);       // hidden until a plot file is made or opened, or View > Plot Browser
   std::function<void()> previous = _gui.onFrame;
   _gui.onFrame = [this, previous]() { if (previous) previous(); renderFrame(); };
   for (const auto & b : _gui.browsers()) connectToPlot(*b);
@@ -755,7 +800,7 @@ namespace Datum
       if (!folders) openFolder(FileSystem::current());
       }
     }
-  _gui.setStatus(_mode == kBasic ? "Click or drag histograms or folders from the browser onto the canvas (View > Plot Tree shows the plot file)"
+  _gui.setStatus(_mode == kBasic ? "Click or drag histograms or folders from the browser onto the canvas (View > Plot Browser shows the plot file)"
                                  : "The canvases are the plot file: change them, or the tree, and save the file");
   }
 
@@ -965,6 +1010,7 @@ namespace Datum
   bool selected = t && t->hasSelection && !t->selected.empty() && d->element(t->selected);
   int columns = 0, rows = 0;
   if (c == "plot.new") { newDocument(); showTree(); }
+  else if (c == "gui.renameWindow" && _gui.currentWindow() >= 0) actionPerformed(ActionEvent{"win.rename", nullptr});   // its title: that of the window of the plot file
   else if (c == "plot.open")
     _gui.fileDialog().open(FileDialog::kOpenFile, "Open a plot file", _configuration.directory, {".xml"}, "",
                            [this](const String & path) { if (openDocument(path)) showTree(); });
@@ -1256,6 +1302,25 @@ namespace Datum
                            [this](const String & path) { openWindows(path); });
   else if (c == "win.save" || c == "win.saveAs") saveViewAs(false, c == "win.saveAs");
   else if (c == "canvas.save" || c == "canvas.saveAs") saveViewAs(true, c == "canvas.saveAs");
+  else if (c.str().compare(0, 14, "canvas.saveAs.") == 0) saveViewAs(true, true, "." + c.str().substr(14));   // canvas.saveAs.pdf, ...
+  else if (c == "canvas.new")
+    {
+    if (d) actionPerformed(ActionEvent{"plot.newCanvas", nullptr});   // a canvas of the plot file shown
+    else { recordUndo(); _gui.addPane(); }                              // no plot file: a canvas of the window
+    }
+  else if (c == "canvas.open")
+    _gui.fileDialog().open(FileDialog::kOpenFile, "Plot file with the canvas to open", _configuration.directory, {".xml"}, "",
+                           [this](const String & path) { openCanvas(path); });
+  else if (c == "canvas.duplicate")
+    {
+    Path canvas, graph;
+    if (!d || !currentCanvas(canvas, graph)) { _gui.setStatus("The current canvas is not one of a plot file"); return; }
+    Path copy = d->duplicate(canvas);
+    if (copy.empty()) return;
+    t->selected = copy;
+    t->hasSelection = true;
+    _gui.setStatus("Duplicated the canvas (Undo to remove the copy)");
+    }
   else if (c == "win.exportPdfs")
     _gui.fileDialog().open(FileDialog::kOpenFolder, "Folder of the PDF files of the canvases", _configuration.directory, {}, "",
                            [this](const String & folder) { exportWindow("pdfs", folder); });
@@ -1374,6 +1439,24 @@ namespace Datum
     DatumApp::save(path, canvas ? _gui.currentPaneIndex() : -1);         // as on screen
     return true;
     }
+  if (extension == ".png")
+    {
+    int pane = canvas ? _gui.currentPaneIndex() : -1;
+    if (!writePng(path, [this, pane](const String & pdf) { DatumApp::save(pdf, pane); return true; })) return false;
+    _gui.setStatus(String("Saved ") + path);
+    return true;
+    }
+  if (extension == ".pptx")
+    {
+    PlotSpec spec;
+    std::vector<PlotSpec::WindowState> windows;
+    PlotDocument reduced = reducedDocument(w, c);
+    if (!buildOutputs(reduced, spec, windows)) return false;
+    String written = PlotOutputs::pptx(spec, windows, path);
+    if (written.isNull()) { _gui.showMessage("Save", String("Cannot write ") + path); return false; }
+    _gui.setStatus(String("Saved ") + written);
+    return true;
+    }
   if (extension == ".xml")
     {
     PlotDocument reduced = reducedDocument(w, c);
@@ -1392,32 +1475,161 @@ namespace Datum
     _gui.setStatus(String("Saved ") + written);
     return true;
     }
-  _gui.showMessage("Save", String("Unknown type ") + String(extension.c_str()) + String(": use .pdf, .svg, .xml or .tex"));
+  _gui.showMessage("Save", String("Unknown type ") + String(extension.c_str()) + String(": use .pdf, .svg, .png, .tex, .pptx or .xml"));
   return false;
   }
 
-  void DatumGuiApp::saveViewAs(bool canvas, bool ask)
+  bool DatumGuiApp::writePng(const String & png, const std::function<bool(const String & pdf)> & writePdf)
+  {
+  // the canvas as a PDF (as on screen), converted to PNG at 150 dpi by a tool of the system
+  String pdf = png + String(".tmp.pdf");
+  if (!writePdf(pdf) || !FileSystem::isFile(pdf)) { _gui.showMessage("Save", String("Cannot write ") + pdf); return false; }
+  std::string in = "'" + pdf.str() + "'", out = "'" + png.str() + "'";
+  std::string stem = png.str().size() > 4 ? png.str().substr(0, png.str().size() - 4) : png.str();
+  std::vector<std::string> commands;
+#ifdef __APPLE__
+  commands.push_back("sips -s format png -s dpiWidth 150 -s dpiHeight 150 " + in + " --out " + out + " >/dev/null 2>&1");
+#endif
+  commands.push_back("pdftoppm -png -r 150 -singlefile " + in + " '" + stem + "' >/dev/null 2>&1");
+  commands.push_back("convert -density 150 " + in + " " + out + " >/dev/null 2>&1");
+  bool done = false;
+  for (const std::string & command : commands)
+    if (std::system(command.c_str()) == 0 && FileSystem::isFile(png)) { done = true; break; }
+  std::remove(pdf.data());
+  if (!done) _gui.showMessage("Save", String("Cannot convert the canvas to PNG (no sips, pdftoppm or convert found): ") + png);
+  return done;
+  }
+
+  void DatumGuiApp::openCanvas(const String & fileName, int which)
+  {
+  PlotDocument other;
+  String error;
+  if (!other.read(fileName, error)) { _gui.showMessage("Open Canvas", fileName + String(":\n") + error); return; }
+  // the canvases of the file, window by window
+  std::vector<const XmlElement *> canvases;
+  std::vector<std::string> labels;
+  for (const XmlElement * w : other.root().children())
+    {
+    if (!w->isNamed("Window")) continue;
+    for (const XmlElement * e : w->children())
+      {
+      if (!e->isNamed("Canvas")) continue;
+      String title = e->attribute("title", ""), name = e->attribute("name", "");
+      String label = title.isNull() || title.str().empty() ? name : title;
+      labels.push_back(w->attribute("title", "window").str() + " / " + (label.isNull() ? std::string("canvas") : label.str()));
+      canvases.push_back(e);
+      }
+    }
+  if (canvases.empty()) { _gui.setStatus(String("No canvas in ") + fileName); return; }
+  if (which < 0 && canvases.size() > 1)
+    {
+    _canvasChoiceFile = fileName.str();
+    _canvasChoices = labels;
+    _canvasChoiceRequested = true;
+    return;
+    }
+  if (which < 0) which = 0;
+  if (which >= int(canvases.size())) return;
+  // the plot file shown (a new one if none), and its window shown (a new one if it has none)
+  if (!tab()) newDocument();
+  Tab * t = tab();
+  if (!t) return;
+  PlotDocument & d = *t->document;
+  d.beginEdit();
+  std::map<std::string, String> ids;
+  String first;
+  for (const XmlElement * e : other.root().children())
+    {
+    if (!e->isNamed("Input")) continue;
+    String id = e->attribute("id", ""), file = e->attribute("file", "");
+    if (first.isNull()) first = id;
+    if (file.isNull()) continue;
+    String full = (file.str()[0] == '/' || file.str()[0] == '$' || file.str()[0] == '~') ? file
+                  : FileSystem::normalize(FileSystem::join(other.directory(), file));
+    ids[id.str()] = d.input(full);
+    }
+  Path w;
+  if (!currentWindow(w)) w = d.addWindow();
+  XmlElement canvas = *canvases[std::size_t(which)];
+  renameInputs(canvas, ids, first);
+  bool ok = false;
+  Path p = d.paste(canvas.toString(), w, ok);
+  d.endEdit();
+  if (!ok) { _gui.setStatus(String("Cannot add the canvas of ") + fileName); return; }
+  t->selected = p;
+  t->hasSelection = true;
+  _configuration.directory = FileSystem::parent(fileName);
+  _gui.setStatus(String("Canvas ") + String(labels[std::size_t(which)].c_str()) + String(" added from ") + fileName + String(" (Undo removes it)"));
+  }
+
+  void DatumGuiApp::renderCanvasChoice()
+  {
+  if (_canvasChoiceRequested) { ImGui::OpenPopup("Open Canvas##choice"); _canvasChoiceRequested = false; }
+  if (!ImGui::BeginPopupModal("Open Canvas##choice", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+  ImGui::TextUnformatted("The canvas of the plot file to add to the window shown:");
+  int chosen = -1;
+  if (ImGui::BeginListBox("##canvases", ImVec2(420, std::min(300.0f, 22.0f*float(_canvasChoices.size()) + 8.0f))))
+    {
+    for (std::size_t k=0; k<_canvasChoices.size(); k++)
+      {
+      ImGui::PushID(int(k));
+      if (ImGui::Selectable(_canvasChoices[k].c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) chosen = int(k);
+      ImGui::PopID();
+      }
+    ImGui::EndListBox();
+    }
+  if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape)) { _canvasChoiceFile.clear(); ImGui::CloseCurrentPopup(); }
+  if (chosen >= 0)
+    {
+    String file(_canvasChoiceFile.c_str());
+    _canvasChoiceFile.clear();
+    ImGui::CloseCurrentPopup();
+    openCanvas(file, chosen);
+    }
+  ImGui::EndPopup();
+  }
+
+  void DatumGuiApp::saveViewAs(bool canvas, bool ask, const std::string & extension)
   {
   std::string key = viewKey(canvas);
+  if (key.empty() && canvas && _gui.nPanes() > 0 && (extension == ".pdf" || extension == ".svg" || extension == ".png"))
+    {
+    // a canvas that is not one of a plot file: saved as shown
+    String title = _gui.currentPane().title();
+    String name = (title.isNull() || title.str().empty() ? String("canvas") : title) + String(extension.c_str());
+    int pane = _gui.currentPaneIndex();
+    _gui.fileDialog().open(FileDialog::kSaveFile, "Save the canvas", _configuration.directory, { extension }, name,
+      [this, pane, extension](const String & chosen)
+      {
+      String path = extensionOf(chosen).empty() ? chosen + String(extension.c_str()) : chosen;
+      if (extension == ".png") { if (!writePng(path, [this, pane](const String & pdf) { DatumApp::save(pdf, pane); return true; })) return; }
+      else DatumApp::save(path, pane);
+      _configuration.directory = FileSystem::parent(path);
+      });
+    return;
+    }
   if (key.empty())
     { _gui.setStatus(canvas ? "The current canvas is not one of the plot file" : "No window in the plot file"); return; }
   auto found = _viewFiles.find(key);
   if (!ask && found != _viewFiles.end()) { saveView(canvas, found->second); return; }
-  String name = canvas ? String("canvas.pdf") : String("window.pdf");
-  if (found != _viewFiles.end()) name = FileSystem::name(found->second);
+  std::string type = extension.empty() ? std::string(".pdf") : extension;
+  String name = canvas ? String("canvas") + String(type.c_str()) : String("window") + String(type.c_str());
+  if (found != _viewFiles.end() && (extension.empty() || extensionOf(found->second) == extension)) name = FileSystem::name(found->second);
   else if (canvas)
     {
     Path c, graph;
     if (currentCanvas(c, graph))
-      if (const XmlElement * e = tab()->document->element(c)) if (!e->attribute("name", "").isNull()) name = e->attribute("name") + String(".pdf");
+      if (const XmlElement * e = tab()->document->element(c)) if (!e->attribute("name", "").isNull()) name = e->attribute("name") + String(type.c_str());
     }
-  _gui.fileDialog().open(FileDialog::kSaveFile, canvas ? "Save the canvas (PDF, SVG, XML or LaTeX)" : "Save the window (PDF, SVG, XML or LaTeX)",
-                         _configuration.directory, {".pdf", ".svg", ".xml", ".tex"}, name,
-    [this, canvas, key](const String & chosen)
+  std::vector<String> types = extension.empty() ? std::vector<String>{".pdf", ".svg", ".xml", ".tex"} : std::vector<String>{ extension };
+  _gui.fileDialog().open(FileDialog::kSaveFile, canvas ? "Save the canvas" : "Save the window",
+                         _configuration.directory, types, name,
+    [this, canvas, key, type](const String & chosen)
     {
-    if (saveView(canvas, chosen))
+    String path = extensionOf(chosen).empty() ? chosen + String(type.c_str()) : chosen;
+    if (saveView(canvas, path))
       {
-      _viewFiles[key] = extensionOf(chosen).empty() ? chosen + String(".pdf") : chosen;
+      _viewFiles[key] = path;
       _configuration.directory = FileSystem::parent(chosen);
       }
     });
@@ -1833,6 +2045,7 @@ namespace Datum
   if (!_showTree && _gui.sideWindowVisible()) _gui.setSideWindowVisible(false);   // closed with its close button
   renderInspectorPane();
   renderDialogs();
+  renderCanvasChoice();
   renderTemplate();
   layoutCanvases();
   recordCanvases();
@@ -2080,11 +2293,11 @@ namespace Datum
       if (ImGui::Checkbox("log y", &logY)) d.setStyle(path, "Axis", "log", logY ? "true" : "", "y");
       next();
       if (ImGui::SmallButton("Palettes")) ImGui::OpenPopup("palettes");
-      ImGui::SetItemTooltip("color and marker palettes of the items of the graph");
+      ImGui::SetItemTooltip("color, marker and line-style palettes of the items of the graph");
       if (ImGui::BeginPopup("palettes"))
         {
         GRAPHICS::Palettes & palettes = GRAPHICS::Palettes::session();
-        String cp = e->attribute("colorPalette", ""), mp = e->attribute("markerPalette", "");
+        String cp = e->attribute("colorPalette", ""), mp = e->attribute("markerPalette", ""), lp = e->attribute("linePalette", "");
         ImGui::SetNextItemWidth(200);
         if (ImGui::BeginCombo("colors", cp.isNull() ? "default" : cp.data()))
           {
@@ -2113,11 +2326,19 @@ namespace Datum
             if (ImGui::Selectable(name.data(), name == mp)) d.setAttribute(path, "markerPalette", name);
           ImGui::EndCombo();
           }
+        ImGui::SetNextItemWidth(200);
+        if (ImGui::BeginCombo("line styles", lp.isNull() ? "default" : lp.data()))
+          {
+          for (const String & name : palettes.linePaletteNames())
+            if (ImGui::Selectable(name.data(), name == lp)) d.setAttribute(path, "linePalette", name);
+          ImGui::EndCombo();
+          }
         if (ImGui::Button("Default palettes"))
           {
           d.beginEdit();
           d.setAttribute(path, "colorPalette", "");
           d.setAttribute(path, "markerPalette", "");
+          d.setAttribute(path, "linePalette", "");
           d.endEdit();
           }
         ImGui::EndPopup();
@@ -2635,7 +2856,7 @@ namespace Datum
       char text[160];
       std::snprintf(text, sizeof(text), "Regrouped %d histograms and functions into %d graphs in %d canvases%s",
                     int(done.entries.size()), int(done.graphs.size()), int(done.canvases.size()),
-                    done.windows.empty() ? "" : " in new windows (View > Detached Windows shows them all)");
+                    done.windows.empty() ? "" : " in new windows (Windows > Detached Windows shows them all)");
       _gui.setStatus(String(text));
       r.previewed = false;
       ImGui::CloseCurrentPopup();
@@ -2936,7 +3157,7 @@ namespace Datum
   int window = _drawnTab == t->id ? _drawnWindow : 0, canvas = -1;
   if (t->hasSelection) d.locate(t->selected, window, canvas);
   if (window < 0 || window >= int(windows.size())) window = windows.empty() ? -1 : 0;
-  _detachedWindows = configuration().gui.detachedWindows;   // also set in Edit > Preferences
+  _detachedWindows = configuration().gui.detachedWindows;   // also set in Datum > Preferences
   bool all = _allWindows || _detachedWindows;
   if (all) window = windows.empty() ? -1 : 0;
   bool linksValid = true;

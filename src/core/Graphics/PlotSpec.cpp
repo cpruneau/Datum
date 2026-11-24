@@ -320,6 +320,7 @@ namespace Datum
   if (e.hasAttribute("symmetricZ"))        graph.setSymmetricZ(e.attributeBool("symmetricZ", graph.isSymmetricZ()));
   if (e.hasAttribute("colorPalette"))      graph.setColorPaletteName(e.attribute("colorPalette"));
   if (e.hasAttribute("markerPalette"))     graph.setMarkerPaletteName(e.attribute("markerPalette"));
+  if (e.hasAttribute("linePalette"))       graph.setLinePaletteName(e.attribute("linePalette"));
   read(e.child("Margins"), graph.margins());
   read(e.child("TitleText"), graph.titleAttributes());
   for (const XmlElement * a : e.children("Axis"))
@@ -367,6 +368,7 @@ namespace Datum
   e.setAttribute("symmetricZ", graph.isSymmetricZ());
   e.setAttribute("colorPalette", graph.colorPaletteName());
   e.setAttribute("markerPalette", graph.markerPaletteName());
+  if (!graph.linePaletteName().isNull() && !graph.linePaletteName().str().empty()) e.setAttribute("linePalette", graph.linePaletteName());
   write(e.addChild("Margins"), graph.margins());
   write(e.addChild("TitleText"), graph.titleAttributes());
   for (int k=0; k<4; k++) writeAxis(e, graph, k);

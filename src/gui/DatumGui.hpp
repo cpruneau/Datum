@@ -16,6 +16,7 @@
 #define DATUM__GUI__DatumGui
 #include <functional>
 #include <map>
+#include <set>
 #include <memory>
 #include <string>
 #include <vector>
@@ -52,7 +53,7 @@ namespace Datum
   float  fontSize   = 15.0f;     //!< points
   String fontFile;               //!< TrueType font; empty: the font distributed with Datum
   bool   viewports  = true;      //!< windows (e.g. the file browser) can be dragged out of the main window
-  bool   detachedWindows = true; //!< each window of a plot file in a window of its own (View > Detached Windows)
+  bool   detachedWindows = true; //!< each window of a plot file in a window of its own (Windows > Detached Windows)
   int    columns    = 1;         //!< canvas panes per row
   int    rows       = 1;         //!< rows of canvas panes
   bool   toolbars   = true;      //!< toolbar above each canvas
@@ -160,6 +161,20 @@ namespace Datum
   //! @brief Show or hide the toolbars of all the canvas panes. @param v true to show them
   void setShowToolbars(bool v);
   bool showToolbars() const { return _settings.toolbars; }   //!< Whether the toolbars of the canvas panes are shown
+  //! @name Panes shown or hidden (View menu)
+  //! File browsers, table panes and data panes can each be hidden (they stay open, where they were) and shown again:
+  //! the current one of a kind (the one used last) or all of them.
+  //! @{
+  enum PaneKind { kBrowserPanes, kTablePanes, kDataPanes };
+  //! @brief Number of panes of a kind. @param kind kind
+  int  nPanesOf(PaneKind kind) const;
+  //! @brief Whether the current pane of a kind (all: every pane of the kind) is shown. @param kind kind @param all choice
+  bool panesShown(PaneKind kind, bool all) const;
+  //! @brief Show or hide the current pane of a kind, or all of them. @param kind kind @param all all of them
+  //! @param shown choice
+  void setPanesShown(PaneKind kind, bool all, bool shown);
+  //! @}
+
   //! @name DatumGui windows
   //! A DatumGui window has a menu bar (the menus of the application), a dock space where work panes (file browsers,
   //! Plot Tree, canvases, tables, inspector, ...) are docked, and a status bar. All of them are views of the same
@@ -173,6 +188,13 @@ namespace Datum
   //! @brief Open a new DatumGui window, with a file browser of its own on the left, and make it current.
   //! @return its code
   int  newWindow();
+  //! @brief Title of a DatumGui window. @param window code
+  String windowTitle(int window) const;
+  //! @brief Change the title of a DatumGui window (the main one or a new window; the title of the window of a plot
+  //! file is that of its window in the file). @param window code @param title title
+  void setWindowTitleOf(int window, const String & title);
+  //! @brief Close a DatumGui window at the next frame, as its x does. @param window code
+  void closeWindow(int window) { _closeWindowRequests.push_back(window); }
   int  currentWindow() const { return _currentWindow; }   //!< Code of the DatumGui window used last (its menus, panes)
   //! @brief Make a DatumGui window current (its canvas becomes the current one, if it has one). @param window code
   void setCurrentWindow(int window);
@@ -451,6 +473,19 @@ namespace Datum
   };
   std::vector<GuiWindow> _windows;   //!< windows opened by File > New Window (closed ones stay, not shown)
   int  _windowCounter = 1;           //!< number of the last one
+  std::vector<int> _closeWindowRequests;   //!< windows closed by closeWindow(), at the next frame
+  std::set<const void *> _hiddenPanes;   //!< browsers (other than the first), table and data panes hidden
+  const void * _currentTable = nullptr;  //!< table pane used last
+  const void * _currentData = nullptr;   //!< data pane used last
+  //! @brief Panes of a kind, in order (the first browser included). @param kind kind @return panes
+  std::vector<const void *> panesOfKind(PaneKind kind) const;
+  //! @brief The current pane of a kind (null if none). @param kind kind
+  const void * currentOfKind(PaneKind kind) const;
+  //! @brief Whether a pane is shown. @param kind kind @param pane pane
+  bool paneShown(PaneKind kind, const void * pane) const;
+  //! @brief Show or hide a pane (shown: placed in the current window if its place was lost). @param kind kind
+  //! @param pane pane @param shown choice
+  void setPaneShown(PaneKind kind, const void * pane, bool shown);
   int  _currentWindow = kMainWindow; //!< DatumGui window used last
   bool _mainHidden = false;          //!< the main window was closed while other DatumGui windows were open
   //! ImGui windows to dock in a DatumGui window at the next frame: (name, window code, on the left)

@@ -445,7 +445,7 @@ namespace Datum
     ImGui::SameLine();
     unsigned int nFits = shown->second->nFits();
     ImGui::BeginDisabled(nFits==0);
-    std::string label = nFits ? "Adopt fit ("+std::to_string(nFits)+")" : std::string("Adopt fit (fit it: Edit > Fit...)");
+    std::string label = nFits ? "Adopt fit ("+std::to_string(nFits)+")" : std::string("Adopt fit (fit it: Operations > Fit)");
     if (ImGui::Button(label.c_str()))
       attempt([&]() {
         std::shared_ptr<const MATH::ParameterizedFunction> f = shown->second->fit(nFits-1).function;

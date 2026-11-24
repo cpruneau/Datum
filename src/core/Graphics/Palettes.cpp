@@ -41,6 +41,8 @@ namespace Datum
   add(ColorPalette("okabe-ito", okabeIto));
   add(MarkerPalette("default", { 20, 21, 22, 23, 33, 29, 34, 47 }));
   add(MarkerPalette("open", { 24, 25, 26, 32, 27, 30, 28, 46 }));
+  add(LinePalette("solid", { 1 }));
+  add(LinePalette("varied", { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }));
   for (int t=0; t<Palette::kNTypes; t++)
     add(String(Palette::name(Palette::Type(t))), Palette(Palette::Type(t), 0));
   }
@@ -68,6 +70,32 @@ namespace Datum
   std::vector<String> names;
   for (const auto & e : _colors) names.push_back(String(e.first));
   return names;
+  }
+
+  const LinePalette * Palettes::linePalette(const String & name) const
+  {
+  auto found = _lines.find(name.str());
+  return found == _lines.end() ? nullptr : &found->second;
+  }
+
+  std::vector<String> Palettes::linePaletteNames() const
+  {
+  std::vector<String> names;
+  for (const auto & e : _lines) names.push_back(String(e.first));
+  return names;
+  }
+
+  bool Palettes::setLinePalette(const String & name)
+  {
+  if (!linePalette(name)) return false;
+  _currentLines = name.str();
+  return true;
+  }
+
+  const LinePalette & Palettes::linePaletteOr(const String & name) const
+  {
+  const LinePalette * p = name.isNull() || name.str().empty() ? nullptr : linePalette(name);
+  return p ? *p : linePalette();
   }
 
   std::vector<String> Palettes::markerPaletteNames() const

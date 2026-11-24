@@ -64,6 +64,7 @@ namespace Datum
   bool   keepShapes   = true;    //!< shapes stay in a graph when its contents are replaced
   String colorPalette   = "default";   //!< current color palette of the session (see GRAPHICS::Palettes)
   String markerPalette  = "default";   //!< current marker palette of the session
+  String linePalette    = "solid";     //!< current line-style palette of the session
   String shadingPalette = "viridis";   //!< current shading palette of the session
   String directory;   //!< folder where the file dialogs start (empty: the current folder)
   std::vector<String> extensions{".datum", ".cap", ".root"};   // .root: only when DatumGui is built with ROOT files   //!< types listed by the Open dialog (only those DatumGui can open are used)
@@ -347,6 +348,9 @@ namespace Datum
   String _saveFormat;   //!< extension of the file saved last (".svg" or ".pdf")
   int  _renamePane;   //!< canvas pane renamed in the Rename Canvas dialog (-1: none)
   std::string _renameText;   //!< title edited in the Rename Canvas dialog
+  bool _renameWindowRequested = false;   //!< the Rename Window dialog opens at the next frame
+  int  _renameWindow = -1;               //!< DatumGui window renamed (see DatumGui::currentWindow())
+  std::string _renameWindowText;         //!< title edited in the Rename Window dialog
   bool _renameRequested;   //!< Rename Canvas dialog to open
   //! Values of the Presentation dialog
   struct PresentationSettings
@@ -431,6 +435,8 @@ namespace Datum
   void renderCustomLayout();
   //! @brief Rename Canvas dialog.
   void renderRenameCanvas();
+  //! @brief The Rename Window dialog (Datum > Rename Window), if open.
+  void renderRenameWindow();
   //! @brief Presentation dialog (a Beamer presentation of the canvases).
   void renderPresentation();
   //! @brief Write (and compile) the presentation of the canvases. @param texFile .tex file chosen
