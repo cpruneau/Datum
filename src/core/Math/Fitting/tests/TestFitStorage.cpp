@@ -322,10 +322,11 @@ int main()
     plain.fill(0.5);
     Histogram read;                                                         // the fits section is 2 bytes when empty, then 1 byte of common systematic and 1 of variable bins
     CHECK(readRecord(olderRecord(plain, 3, 4), read) && read.nFits() == 0 && read.binValueAtGlobal(2) == plain.binValueAtGlobal(2));
-    DataPointsVector points;
+    DataPointsVector points;                                                // the fits (2 bytes), the common systematic (1) and the empty title (1)
     points.addPoints({0.0, 1.0}, {2.0, 3.0}, {0.1, 0.1});
+    points.setTitle("");
     DataPointsVector readPoints;
-    CHECK(readRecord(olderRecord(points, 2, 3), readPoints) && readPoints.size() == 2 && readPoints.nFits() == 0);
+    CHECK(readRecord(olderRecord(points, 2, 4), readPoints) && readPoints.size() == 2 && readPoints.nFits() == 0);
     Profile profile("profile", "no fit", 4, 0.0, 1.0);
     profile.fill(0.3, 2.0, 1.0);
     BinaryWriter w;                                                         // version 1: histogram part of version 3

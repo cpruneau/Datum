@@ -10,13 +10,16 @@
 #   HEPDataConverter   tables to Datum objects (Histogram, HistogramSyst, DataPointsVector...) and back;
 #                      tables of functions and fits (HEPDataFunctions.cpp)
 #   HEPDataPlan        what an import or an export will do, as a preview tree (the HEPData dialog of DatumGui)
+#   HEPDataExporter    task writing objects of Datum files as a HEPData submission (DB/Templates/HEPDataExporter.xml)
 ################################################################################################
 add_compile_options(-Wall -Wextra -pedantic)
 add_library(HEPData SHARED
 HEPData.cpp
 HEPDataConverter.cpp
 HEPDataFunctions.cpp
-HEPDataPlan.cpp)
+HEPDataPlan.cpp
+HEPDataExporter.cpp
+HEPDataTasks.cpp)
 
 target_link_libraries(HEPData PUBLIC Base Math PRIVATE ${DATUM_YAML_TARGET})
 target_include_directories(HEPData PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -39,3 +42,6 @@ add_test(NAME HEPDataFunctions COMMAND TestHEPDataFunctions)
 add_executable(TestHEPDataPlan tests/TestHEPDataPlan.cpp)
 target_link_libraries(TestHEPDataPlan HEPData Math Base)
 add_test(NAME HEPDataPlan COMMAND TestHEPDataPlan ${CMAKE_CURRENT_SOURCE_DIR}/tests/data)
+add_executable(TestHEPDataExporter tests/TestHEPDataExporter.cpp)
+target_link_libraries(TestHEPDataExporter HEPData Math Base)
+add_test(NAME HEPDataExporter COMMAND TestHEPDataExporter)

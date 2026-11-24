@@ -250,6 +250,7 @@ set(DATUM_LINKED_MODULES Base Math Particles SubSample Global Spherocity Particl
                        ParticlePair3D NuDyn ParticleFlow PtPt Performance Spreadsheet BasicEventGen)
 set(DATUM_OPTIONAL_BUILT "")
 if(DATUM_WITH_YAML)
+  list(APPEND DATUM_LINKED_MODULES HEPData)   # the task HEPDataExporter
   list(APPEND DATUM_OPTIONAL_BUILT "HEPData (yaml-cpp: ${DATUM_YAML_SOURCE})")
 endif()
 if(DATUM_WITH_ROOT)   # ROOT files and trees: RootFileHelpers, RootConversion, RootFileConversion, RootChainManager
@@ -408,6 +409,9 @@ add_executable(TestTaskRegistry tests/TestTaskRegistry.cpp)
 target_link_libraries(TestTaskRegistry PUBLIC ${DATUM_LINKED_MODULES})
 if(DATUM_WITH_GLAUBER)   # the test expects the Glauber tasks only when they are built
   target_compile_definitions(TestTaskRegistry PRIVATE DATUM_WITH_GLAUBER)
+endif()
+if(DATUM_WITH_YAML)      # the HEPData tasks only when they are built
+  target_compile_definitions(TestTaskRegistry PRIVATE DATUM_WITH_HEPDATA)
 endif()
 add_test(NAME TaskRegistry COMMAND TestTaskRegistry)
 
