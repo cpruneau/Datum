@@ -414,7 +414,8 @@ namespace Datum
                     "(a name per histogram) or Cancel Extraction.");
   ImGui::BulletText("Operations: Sum, Difference, Product, Ratio, Scale of the histograms of the selected graph. Click\n"
                     "their names in the window (in order: A first), change the coefficients (1 by default), OK: the result\n"
-                    "is shown in a canvas below; right-click it > Save Result... or Close Result.");
+                    "is shown in a canvas below; right-click it > Save Result... or Close Result. The same operations are in the\n"
+                    "context menu of a graph (right-click), and the Operations menu has Compare, Rebin, Fit and Show Data too.");
   ImGui::BulletText("Shapes drawn on the canvases and fits are shown, not written to the plot file.");
   ImGui::BulletText("PlotHistos plots.xml opens DatumGui on a plot file; PlotHistos --all plots.xml writes its outputs.");
   }

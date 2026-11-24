@@ -380,6 +380,13 @@ namespace Datum
   pane.onDrop = [this, &pane](int graph, const ObjectReference & object) { showObject(pane, graph, object); };
   pane.onShowData = [this](const MATH::DataPoints * data, const String & label) { showDataTable(data, label); };
   pane.onFit = [this](int item) { _gui.openFitDialog(item); };
+  // Sum, Difference, Product, Ratio, Scale in the context menu of a graph: as in the Operations menu, on that graph
+  CanvasPane * operated = &pane;
+  pane.onOperation = [this, operated](int graph, int operation)
+    {
+    if (operation < int(HistogramOperations::kSum) || operation > int(HistogramOperations::kScale)) return;
+    _operations.open(HistogramOperations::Operation(operation), *operated, graph);
+    };
   pane.onResidualMap = [this](const MATH::DataPoints * data, unsigned int fit) { showResidualMap(data, fit); };
   pane.onProjections = [this](const MATH::DataPoints * data) { showProjections(data); };
   pane.onProject = [this, &pane](int graph, int item, int axis, bool whole) { _projector.request(pane, graph, item, axis, whole); };
@@ -585,6 +592,22 @@ namespace Datum
   ops.addItem("Ratio...",      "ops.ratio",      "", "(c1 A) / (c2 B), bin by bin, of two histograms shown in the selected graph");
   ops.addSeparator();
   ops.addItem("Scale...",      "ops.scale",      "", "c A: a histogram shown in the selected graph multiplied by a constant");
+  // the tools of the context menu of a graph, for the selected graph of the current canvas
+  ops.addSeparator();
+  ops.addWidget([this]()
+    {
+    if (_gui.nPanes() == 0)
+      {
+      for (const char * name : {"Compare", "Rebin", "Fit", "Show Data"}) ImGui::BeginMenu(name, false);   // disabled: no canvas
+      return;
+      }
+    CanvasPane & pane = _gui.currentPane();
+    int graph = pane.selectedGraph();
+    pane.renderCompareMenu(graph);
+    pane.renderRebinItemsMenu(graph);
+    pane.renderFitMenu(graph);
+    pane.renderShowDataMenu(graph);
+    });
   }
 
   void DatumApp::updateMenuStates()

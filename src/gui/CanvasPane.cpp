@@ -259,43 +259,10 @@ namespace Datum
     if (ImGui::BeginMenu(axisNames[a])) { entries(int(a)); ImGui::EndMenu(); }
   }
 
-  void CanvasPane::renderContextMenu()
+  void CanvasPane::renderCompareMenu(int graphIndex)
   {
-  if (!ImGui::BeginPopup("graphContext")) return;
-  if (_contextGraph < 0 || _contextGraph >= _canvas.nGraphs()) { ImGui::EndPopup(); return; }
-  Graph & graph = _canvas.graph(_contextGraph);
-  ImGui::TextDisabled("%s", graph.title().isNull() ? "Graph" : graph.title().data());
-  ImGui::Separator();
-  Graph::Pick pick;
-  if (ImGui::MenuItem("Edit Title..."))  { pick.part = Graph::kTitle;  edit(_contextGraph, pick); }
-  for (int k=0; k<graph.nAxes(); k++)
-    {
-    char label[48];
-    std::snprintf(label, sizeof(label), "Edit %s Axis...", k == 0 ? "X" : (k == 1 ? "Y" : "Z"));
-    if (ImGui::MenuItem(label)) { pick.part = Graph::kAxis; pick.axis = k; edit(_contextGraph, pick); }
-    std::snprintf(label, sizeof(label), "Edit %s Axis Title...", k == 0 ? "X" : (k == 1 ? "Y" : "Z"));
-    if (ImGui::MenuItem(label)) { pick.part = Graph::kAxisTitle; pick.axis = k; edit(_contextGraph, pick); }
-    }
-  if (ImGui::MenuItem("Edit Legend...")) { pick.part = Graph::kLegend; edit(_contextGraph, pick); }
-  if (graph.hasMaps())
-    {
-    ImGui::Separator();
-    bool view3D = graph.dimension() == Graph::k3D;
-    if (ImGui::MenuItem("3D View", nullptr, view3D)) { changing(); graph.setDimension(view3D ? Graph::k2D : Graph::k3D); }
-    if (view3D && ImGui::MenuItem("Reset View Angles")) { changing(); graph.resetViewAngles(); }
-    }
-  if (ImGui::BeginMenu("Edit Item", !graph.items().empty()))
-    {
-    for (size_t k=0; k<graph.items().size(); k++)
-      {
-      String label = graph.items()[k].label();
-      if (label.isNull()) label = "(unnamed)";
-      label += "...##"; label += int(k);
-      if (ImGui::MenuItem(label.data())) { pick.part = Graph::kDataPoint; pick.item = int(k); pick.index = -1; edit(_contextGraph, pick); }
-      }
-    ImGui::EndMenu();
-    }
-  // two histograms of the same rank: overlay, difference or ratio, compatibility tests
+  if (graphIndex < 0 || graphIndex >= _canvas.nGraphs()) return;
+  Graph & graph = _canvas.graph(graphIndex);
   std::vector<size_t> histograms;
   for (size_t k=0; k<graph.items().size(); k++)
     {
@@ -333,6 +300,18 @@ namespace Datum
     }
   if (onCompare && histograms.size() < 2 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
     ImGui::SetTooltip("Show two histograms in this graph (drag them from the browsers) to compare them");
+  }
+
+  void CanvasPane::renderRebinItemsMenu(int graphIndex)
+  {
+  if (graphIndex < 0 || graphIndex >= _canvas.nGraphs()) return;
+  Graph & graph = _canvas.graph(graphIndex);
+  std::vector<size_t> histograms;
+  for (size_t k=0; k<graph.items().size(); k++)
+    {
+    const GraphItem & item = graph.items()[k];
+    if (item.kind() == GraphItem::kData && dynamic_cast<const MATH::Histogram*>(item.data())) histograms.push_back(k);
+    }
   if (onRebin && rebinSource && ImGui::BeginMenu("Rebin", !histograms.empty()))
     {
     for (size_t k : histograms)
@@ -341,12 +320,18 @@ namespace Datum
       String entry = label + String("##rebin") + String(std::to_string(k).c_str());
       if (ImGui::BeginMenu(entry.data()))
         {
-        renderRebinMenu(_contextGraph, int(k));
+        renderRebinMenu(graphIndex, int(k));
         ImGui::EndMenu();
         }
       }
     ImGui::EndMenu();
     }
+  }
+
+  void CanvasPane::renderFitMenu(int graphIndex)
+  {
+  if (graphIndex < 0 || graphIndex >= _canvas.nGraphs()) return;
+  Graph & graph = _canvas.graph(graphIndex);
   bool fittable = false;
   for (const auto & item : graph.items()) if (item.isFittable()) fittable = true;
   if (onFit && ImGui::BeginMenu("Fit", fittable))
@@ -356,10 +341,16 @@ namespace Datum
       if (!graph.items()[k].isFittable()) continue;
       String label = graph.items()[k].label().isNull() ? String("(unnamed)") : graph.items()[k].label();
       String entry = label + String("...##fit") + String(std::to_string(k));
-      if (ImGui::MenuItem(entry.data())) { setSelectedGraph(_contextGraph); onFit(int(k)); }
+      if (ImGui::MenuItem(entry.data())) { setSelectedGraph(graphIndex); onFit(int(k)); }
       }
     ImGui::EndMenu();
     }
+  }
+
+  void CanvasPane::renderShowDataMenu(int graphIndex)
+  {
+  if (graphIndex < 0 || graphIndex >= _canvas.nGraphs()) return;
+  Graph & graph = _canvas.graph(graphIndex);
   bool hasData = false;
   for (const auto & item : graph.items()) if (item.kind() == GraphItem::kData && item.data()) hasData = true;
   if (ImGui::BeginMenu("Show Data", hasData && onShowData))
@@ -373,6 +364,68 @@ namespace Datum
       if (ImGui::MenuItem(entry.data())) onShowData(item.data(), label);
       }
     ImGui::EndMenu();
+    }
+  }
+
+  void CanvasPane::renderContextMenu()
+  {
+  if (!ImGui::BeginPopup("graphContext")) return;
+  if (_contextGraph < 0 || _contextGraph >= _canvas.nGraphs()) { ImGui::EndPopup(); return; }
+  Graph & graph = _canvas.graph(_contextGraph);
+  ImGui::TextDisabled("%s", graph.title().isNull() ? "Graph" : graph.title().data());
+  ImGui::Separator();
+  Graph::Pick pick;
+  if (ImGui::MenuItem("Edit Title..."))  { pick.part = Graph::kTitle;  edit(_contextGraph, pick); }
+  for (int k=0; k<graph.nAxes(); k++)
+    {
+    char label[48];
+    std::snprintf(label, sizeof(label), "Edit %s Axis...", k == 0 ? "X" : (k == 1 ? "Y" : "Z"));
+    if (ImGui::MenuItem(label)) { pick.part = Graph::kAxis; pick.axis = k; edit(_contextGraph, pick); }
+    std::snprintf(label, sizeof(label), "Edit %s Axis Title...", k == 0 ? "X" : (k == 1 ? "Y" : "Z"));
+    if (ImGui::MenuItem(label)) { pick.part = Graph::kAxisTitle; pick.axis = k; edit(_contextGraph, pick); }
+    }
+  if (ImGui::MenuItem("Edit Legend...")) { pick.part = Graph::kLegend; edit(_contextGraph, pick); }
+  if (graph.hasMaps())
+    {
+    ImGui::Separator();
+    bool view3D = graph.dimension() == Graph::k3D;
+    if (ImGui::MenuItem("3D View", nullptr, view3D)) { changing(); graph.setDimension(view3D ? Graph::k2D : Graph::k3D); }
+    if (view3D && ImGui::MenuItem("Reset View Angles")) { changing(); graph.resetViewAngles(); }
+    }
+  if (ImGui::BeginMenu("Edit Item", !graph.items().empty()))
+    {
+    for (size_t k=0; k<graph.items().size(); k++)
+      {
+      String label = graph.items()[k].label();
+      if (label.isNull()) label = "(unnamed)";
+      label += "...##"; label += int(k);
+      if (ImGui::MenuItem(label.data())) { pick.part = Graph::kDataPoint; pick.item = int(k); pick.index = -1; edit(_contextGraph, pick); }
+      }
+    ImGui::EndMenu();
+    }
+  // the tools of the graph (also in the Operations menu of DatumGui, for the selected graph of the current canvas)
+  renderCompareMenu(_contextGraph);
+  renderRebinItemsMenu(_contextGraph);
+  renderFitMenu(_contextGraph);
+  renderShowDataMenu(_contextGraph);
+  // operations on the histograms of the graph (as in the Operations menu)
+  if (onOperation)
+    {
+    ImGui::Separator();
+    unsigned int n = 0;
+    for (const auto & item : graph.items())
+      if (item.kind() == GraphItem::kData && dynamic_cast<const MATH::Histogram*>(item.data())) n++;
+    static const char * names[] = { "Sum...", "Difference...", "Product...", "Ratio...", "Scale..." };
+    static const char * tips[] = { "c1 A + c2 B + ... of histograms shown in this graph (two or more)",
+                                   "c1 A - c2 B of two histograms shown in this graph",
+                                   "(c1 A) x (c2 B), bin by bin, of two histograms shown in this graph",
+                                   "(c1 A) / (c2 B), bin by bin, of two histograms shown in this graph",
+                                   "c A: a histogram shown in this graph multiplied by a constant" };
+    for (int op=0; op<5; op++)
+      {
+      if (ImGui::MenuItem(names[op], nullptr, false, n >= (op == 4 ? 1u : 2u))) onOperation(_contextGraph, op);
+      ImGui::SetItemTooltip("%s", tips[op]);
+      }
     }
   if (contextMenuExtras) contextMenuExtras(_contextGraph);
   if (onSaveGraph || onSaveCanvas || onRename) ImGui::Separator();
