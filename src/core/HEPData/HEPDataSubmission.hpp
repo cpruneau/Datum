@@ -50,6 +50,7 @@ struct HEPDataPublication
 
 //!
 //! @brief A HEPData submission: submission.yaml (comment, resources, one document per table) and the data files.
+//! The guide to HEPData in Datum: docs/HEPData.md.
 //!
 //! read() accepts what hepdata.net gives and what authors prepare:
 //!  - a directory holding submission.yaml and the data files;

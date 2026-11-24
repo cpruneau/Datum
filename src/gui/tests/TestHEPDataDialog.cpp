@@ -95,6 +95,9 @@ void testImport(Dialog & d, FileDialog & files, const std::string & data, const 
   d.openImport(String(data+"/ALICE_OO_pO_pi0"));
   frame(d,files);
   CHECK(d.isOpen() && d.mode()==HEPDataDialog::kImport && !d.previewShown() && !d.canConfirm());
+  d.openHelp();                                                  // the help window, all its sections drawn
+  frame(d,files,3);
+  CHECK(d.helpShown());
   CHECK(d.preview() && d.previewShown() && d.canConfirm());
   CHECK(d.importPlan().nObjects()==8 && d.previewTree().count(HEPDataPreviewNode::kAction)==9);
   frame(d,files);

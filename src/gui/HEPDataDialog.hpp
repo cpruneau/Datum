@@ -48,6 +48,9 @@ namespace Datum
   //! green, warnings in yellow, errors in red; Expand All, Collapse All, Copy (the tree as text). A change made in the
   //! dialog after Preview makes the preview stale: OK waits for Preview again.
   //!
+  //! Help (a button of the windows, or Help > HEPData Import and Export) opens a window summarizing how HEPData files
+  //! become Datum objects and back (helpText(); the whole guide is docs/HEPData.md).
+  //!
   class HEPDataDialog
   {
   public:
@@ -69,12 +72,20 @@ namespace Datum
 
   static const char * windowName() { return "HEPData###HEPDataDialog"; }          //!< Name of the window
   static const char * previewName() { return "HEPData Preview###HEPDataPreview"; } //!< Name of the preview window
+  static const char * helpName() { return "HEPData Help###HEPDataHelp"; }          //!< Name of the help window
 
   //! @brief Open the import window. @param path folder (or file) proposed
   void openImport(const String & path);
   //! @brief Open the export window. @param files data files offered @param directory directory proposed
   void openExport(const std::vector<ExportFile> & files, const String & directory);
-  //! @brief Whether a window is open. @return true if so
+  //! @brief Open the help window (drawn by render()).
+  void openHelp() { _helpOpen = true; _helpFocus = true; }
+  //! @brief Whether the help window is open. @return true if so
+  bool helpShown() const { return _helpOpen; }
+  //! @brief Draw the help: import, export, uncertainties, functions and fits, lossless and strict files, publication,
+  //! the task HEPDataExporter (in the current ImGui window).
+  static void helpText();
+  //! @brief Whether a window is open (the help window aside). @return true if so
   bool isOpen() const { return _open || _previewOpen; }
   //! @brief Mode of the window. @return import or export
   Mode mode() const { return _mode; }
@@ -132,6 +143,8 @@ namespace Datum
   bool _focus = false;                       //!< bring the window to the front at the next frame
   bool _previewOpen = false;                 //!< the preview is open
   bool _previewFocus = false;                //!< bring the preview to the front at the next frame
+  bool _helpOpen = false;                    //!< the help window is open
+  bool _helpFocus = false;                   //!< bring the help to the front at the next frame
   bool _stale = false;                       //!< changed since the preview
   int  _expand = 0;                          //!< 1: expand all, -1: collapse all (at the next frame of the preview)
   unsigned int _rows = 3;                    //!< rows shown per table in the preview

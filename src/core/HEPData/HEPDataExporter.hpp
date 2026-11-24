@@ -53,6 +53,8 @@ class DatumFile;
 //!    FAIL_ON_PROBLEMS: stop (an exception) if hepdata.net would reject the submission or an object cannot be written,
 //!    instead of a warning.
 //!
+//! The guide, with the table of the keys and an example: docs/HEPData.md, section 9.
+//!
 //! execute() prints the preview (at report level INFO; the same tree as in DatumGui, as text), then writes the files.
 //!
 class HEPDataExporter

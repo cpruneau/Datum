@@ -255,12 +255,100 @@ namespace Datum
                           : "Show the submission planned and the files to be written (nothing is written yet)");
       ImGui::SameLine();
       if (ImGui::Button("Close", ImVec2(110, 0))) open = false;
+      ImGui::SameLine();
+      if (ImGui::Button("Help", ImVec2(80, 0))) openHelp();
+      hint("How HEPData files become Datum objects and back");
       if (_previewOpen && _stale) { ImGui::SameLine(); ImGui::TextColored(kWarningColor, "Changed since the preview"); }
       }
     ImGui::End();
     if (!open) close();
     }
   if (_previewOpen) renderPreview();
+  if (_helpOpen)
+    {
+    ImGui::SetNextWindowSize(ImVec2(720, 620), ImGuiCond_FirstUseEver);
+    if (_helpFocus) { ImGui::SetNextWindowFocus(); _helpFocus = false; }
+    if (ImGui::Begin(helpName(), &_helpOpen, ImGuiWindowFlags_NoDocking)) helpText();
+    ImGui::End();
+    }
+  }
+
+  void HEPDataDialog::helpText()
+  {
+  auto section = [](const char * title, bool open=false)
+    { return ImGui::CollapsingHeader(title, open ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None); };
+  ImGui::TextWrapped("HEPData (hepdata.net) archives published results as YAML: a submission is submission.yaml (the "
+                     "comment, then one document per table: name, description, location, keywords, data file) and one "
+                     "data file per table, with the independent variables (x: values or bins) and the dependent ones (y, "
+                     "with qualifiers such as SQRT(S), and per row symmetric or asymmetric uncertainties labelled stat, "
+                     "sys, norm, ...). Datum reads and writes them: File > Import and File > Export > HEPData YAML.");
+  ImGui::TextDisabled("The whole guide: docs/HEPData.md in the Datum directory.");
+  ImGui::Spacing();
+  if (section("Preview, OK and Cancel", true))
+    {
+    ImGui::BulletText("Preview shows what will be done, as a tree: actions (what OK does) in green, warnings in yellow,\n"
+                      "errors in red. Expand All, Collapse All; Copy puts the whole tree on the clipboard as text;\n"
+                      "right-click a line to copy it or its branch. The window can be resized; the tree scrolls.");
+    ImGui::BulletText("OK does what the preview shows. Cancel closes the preview: nothing is done.");
+    ImGui::BulletText("A change made after Preview makes the preview stale: OK waits for Preview again.");
+    }
+  if (section("Import: tables to histograms, points and functions", true))
+    {
+    ImGui::BulletText("Read a folder holding submission.yaml; or a folder of such folders, archives (.tar.gz, .zip) and\n"
+                      "YAML data files (each a table); or one archive or file. OK makes a new data file in the browser\n"
+                      "(a folder per submission when there are several); Save writes it as a Datum file.");
+    ImGui::BulletText("Each dependent variable of a table gives an object. Bins that do not overlap give a Histogram\n"
+                      "(a HistogramSyst if there are systematic uncertainties), with variable bins if their widths differ;\n"
+                      "otherwise data points (DataPointsVector).");
+    ImGui::BulletText("A histogram keeps the bins only: positions given within them (e.g. a mean pT) are dropped, unless\n"
+                      "\"Points where values are given within the bins\" is checked.");
+    ImGui::BulletText("Uncertainties labelled stat: the statistical uncertainty. Labelled norm or sys,common (the labels\n"
+                      "of the common systematic): the common systematic uncertainty of the object, relative to the value.\n"
+                      "All the others: added in quadrature, each side apart, into the systematic uncertainty of the bin.");
+    ImGui::BulletText("Names: the data file (data1, data2, ...); titles: the header \"name (units)\". Files written by\n"
+                      "Datum in lossless mode give back the original objects, with their names, axes and fits.");
+    }
+  if (section("Export: histograms, points, fits and functions to tables", true))
+    {
+    ImGui::BulletText("Check the data files whose objects are offered, then the objects. Click a row to edit its table:\n"
+                      "description, location (e.g. Figure 3a), keywords, qualifiers, names and units of x and y, the range\n"
+                      "of a function. \"All tables\" gives the keywords, qualifiers and licence of the tables that set none.");
+    ImGui::BulletText("Keywords: observables (e.g. DSIG/DPT), reactions (P P --> PI0 X), cmenergies (in GeV, e.g. 13600),\n"
+                      "phrases; values separated by commas. Qualifiers: NAME = value [units]; ... e.g. SQRT(S) = 13.6 [TEV].");
+    ImGui::BulletText("Each row gets its statistical uncertainty (stat), its systematic one (sys: symmetric, or asymmetric\n"
+                      "when the sides differ) and the common systematic uncertainty as a percentage (norm).");
+    ImGui::BulletText("Preview lists what hepdata.net would reject (missing keywords or description, a name longer than\n"
+                      "64 characters, ...), and warns before a submission or an archive is replaced.");
+    }
+  if (section("Functions and fits"))
+    {
+    ImGui::BulletText("A function of one variable is written as a table of its values over a range; its parameters are\n"
+                      "qualifiers of the table.");
+    ImGui::BulletText("A fit attached to a histogram (Fit window) is written over its range with an uncertainty band from\n"
+                      "the covariance of its parameters (labelled fit), its parameters with their errors and chi2/ndf.");
+    ImGui::BulletText("In lossless mode the function and the fit are read back exactly.");
+    }
+  if (section("Lossless and strict files"))
+    {
+    ImGui::BulletText("Lossless (default): each data file also holds a datum block with what HEPData cannot hold (class,\n"
+                      "name, binning, entries, fits, functions): Datum reads the objects back exactly; hepdata.net ignores it.");
+    ImGui::BulletText("Strict: plain HEPData files, for a submission to hepdata.net.");
+    }
+  if (section("Publication and collaboration"))
+    {
+    ImGui::BulletText("hepdata.net takes the paper and the collaboration from the INSPIRE record: submission.yaml has no\n"
+                      "field for them. Datum writes them as comment lines at the top of submission.yaml\n"
+                      "(# Collaboration: ALICE, # INSPIRE: 1234567, ...), ignored by HEPData and read back by Datum.");
+    ImGui::BulletText("\"Begin the comment with the publication\" puts them in one sentence at the start of the comment.");
+    }
+  if (section("In a workflow: the task HEPDataExporter"))
+    {
+    ImGui::BulletText("Datum::HEPDataExporter writes a submission from a job of a workflow, as the Export window does:\n"
+                      "bin/Datum HEPDataExporter <dir>/ HEPDataExport.xml <histogram dir>/  (template: DB/Templates;\n"
+                      "example: src/core/HEPData/examples/HEPDataExport.xml).");
+    ImGui::BulletText("Tables listed one by one (TABLE:N, TABLE_1, TABLE_2, ...) or all the objects matching OBJECTS;\n"
+                      "PREVIEW_ONLY prints the preview without writing; FAIL_ON_PROBLEMS stops on what hepdata.net rejects.");
+    }
   }
 
   void HEPDataDialog::renderImport(FileDialog & files)
