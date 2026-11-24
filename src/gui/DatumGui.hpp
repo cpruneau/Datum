@@ -32,6 +32,8 @@
 
 struct GLFWwindow;
 struct ImFont;
+struct ImGuiViewport;
+struct ImGuiWindow;
 
 namespace Datum
 {
@@ -56,6 +58,7 @@ namespace Datum
   bool   toolbars   = true;      //!< toolbar above each canvas
   bool   browserVisible = true;  //!< file browser shown
   bool   browserDocked  = true;  //!< file browser docked in the main window (otherwise in its own window)
+  bool   startEmpty = true;      //!< start with the file browser only, no canvas (a canvas is made when one is needed)
   String iniFile;                //!< where ImGui keeps window positions; empty: none
   };
 
@@ -118,7 +121,9 @@ namespace Datum
   //! the first one is hidden. @param browser browser
   void closeBrowser(FileBrowser & browser);
   bool browserVisible() const { return _settings.browserVisible; }   //!< Whether the file browser is shown
-  void setBrowserVisible(bool visible) { _settings.browserVisible = visible; }   //!< Show or hide the file browser
+  //! @brief Show or hide the first file browser (shown: in the current DatumGui window if its place was lost).
+  //! @param visible choice
+  void setBrowserVisible(bool visible);
   bool browserDocked() const { return _settings.browserDocked; }   //!< Whether the browser is docked in the main window
   //! @brief Dock the browser on the left of the canvases, or put it in a window of its own. @param docked choice
   void setBrowserDocked(bool docked);
@@ -146,13 +151,64 @@ namespace Datum
   int  nRows()    const { return _rows; }   //!< Rows of the last grid layout of the canvases
   int  nPanes()   const { return (int)_panes.size(); }   //!< Number of canvas panes
   CanvasPane & pane(int k) { return *_panes.at(k); }   //!< Canvas pane k
-  CanvasPane & currentPane() { return *_panes.at(_currentPane); }   //!< The current canvas pane (target of Show, Copy, ...)
+  //! @brief The current canvas pane (target of Copy, Delete, ...); one is made in the current DatumGui window if there
+  //! is no canvas at all. @return pane
+  CanvasPane & currentPane();
   int  currentPaneIndex() const { return _currentPane; }   //!< Index of the current canvas pane
   //! @brief Make canvas pane k current. @param k index @param focus give its window the keyboard focus
   void setCurrentPane(int k, bool focus=true) { if (k >= 0 && k < nPanes()) { _currentPane = k; if (focus) _focusRequested = true; } }
   //! @brief Show or hide the toolbars of all the canvas panes. @param v true to show them
   void setShowToolbars(bool v);
   bool showToolbars() const { return _settings.toolbars; }   //!< Whether the toolbars of the canvas panes are shown
+  //! @name DatumGui windows
+  //! A DatumGui window has a menu bar (the menus of the application), a dock space where work panes (file browsers,
+  //! Plot Tree, canvases, tables, inspector, ...) are docked, and a status bar. All of them are views of the same
+  //! application. They are: the main window (kMainWindow), the windows opened by File > New Window (codes -2, -3,
+  //! ...), and the first window of canvases of a plot file (code 0, see setPaneWindowGui()). Work panes are dragged
+  //! from one window to another, or out of them; closing a window (its x) closes the panes it holds. Closing the main
+  //! window while other DatumGui windows are open only hides it; the application ends when the last one is closed.
+  //! @{
+  static const int kMainWindow = -1;        //!< code of the main window
+  static const int kOutside    = -1000000;  //!< code of no DatumGui window (a pane in a window of its own)
+  //! @brief Open a new DatumGui window, with a file browser of its own on the left, and make it current.
+  //! @return its code
+  int  newWindow();
+  int  currentWindow() const { return _currentWindow; }   //!< Code of the DatumGui window used last (its menus, panes)
+  //! @brief Make a DatumGui window current (its canvas becomes the current one, if it has one). @param window code
+  void setCurrentWindow(int window);
+  //! @brief Whether a DatumGui window is open (and shown). @param window code
+  bool windowOpen(int window) const;
+  //! @brief Number of DatumGui windows open.
+  int  nOpenWindows() const;
+  //! @brief DatumGui window where canvas pane k is (by where it is on screen, otherwise where it was made).
+  //! @param k pane @return code, kOutside if in a window of its own
+  int  windowOfPane(int k) const;
+  //! @brief DatumGui window where an ImGui window is (docked or merged). @param name ImGui name of the window
+  //! @return code, kOutside if it is not in a DatumGui window (or does not exist)
+  int  windowOf(const char * name) const;
+  //! @brief Whether an ImGui window must be placed again before it is shown: it does not exist yet, or its place is in
+  //! a DatumGui window that was closed (or in the hidden main window). @param name ImGui name
+  bool needsPlace(const char * name) const;
+  //! @brief Dock an ImGui window in the current DatumGui window at the next frame (see toolWindow()). @param name ImGui name
+  //! @param left on the left of the window (as a file browser), otherwise in its canvas area
+  void dockInCurrentWindow(const std::string & name, bool left=false);
+  //! @brief The canvas where objects are shown: the current one if it is in the current DatumGui window, otherwise
+  //! one of that window, made if it has none. @return pane
+  CanvasPane & targetPane();
+  //! @brief Make window of canvases k a DatumGui window (menu bar, status bar, closed by its x: see onCloseWindow).
+  //! @param k window of canvases @param gui choice
+  void setPaneWindowGui(int k, bool gui);
+  bool mainWindowShown() const { return !_mainHidden; }   //!< Whether the main window is shown
+  //! The viewport of the current DatumGui window (dialogs open there). @return viewport
+  static ImGuiViewport * activeViewport();
+  //! Called when the user closes (x) a window of canvases of a plot file that is a DatumGui window: true to close it
+  //! now (its canvas panes are removed), false if the application closes it (e.g. closePaneWindowsFrom()).
+  std::function<bool(int window)> onCloseWindow;
+  //! Called before the panes of a DatumGui window are closed (its x, or the main window hidden): the application
+  //! closes there the panes it draws itself (e.g. the Plot Tree). @param window code
+  std::function<void(int window)> onWindowClosing;
+  //! @}
+
   //! @name Windows of canvases
   //! Separate windows (OS windows when viewports are enabled), each holding canvas panes in a grid of its own, as
   //! the main window does (e.g. the windows of PlotHistos). Their canvases are listed in the registry of the session
@@ -161,6 +217,8 @@ namespace Datum
   //! @brief Open a window of canvases. @param title title @param columns columns of the grid @param rows rows
   //! @param width width (points) @param height height (points) @return index of the window
   int  addPaneWindow(const String & title, int columns, int rows, int width, int height);
+  //! @brief Whether window of canvases k is shown (it has canvases). @param k index
+  bool paneWindowShown(int k) const;
   //! @brief Add a canvas pane to a window of canvases (laid out in its grid). @param window index of the window
   //! @return the pane
   CanvasPane & addPaneTo(int window);
@@ -375,14 +433,72 @@ namespace Datum
   bool layoutPending = true;   //!< the panes are to be docked in its grid
   int resizeColumns = 0;  //!< grid it had on screen before its grid changed (0: no resize pending): resized so that
   int resizeRows = 0;     //!< each pane keeps its size (fewer canvases: a smaller window)
+  bool gui = false;       //!< a DatumGui window (menu bar, status bar, x): the window of a plot file
   };
+  //! A DatumGui window opened by File > New Window (code -2 - its index)
+  struct GuiWindow
+  {
+  int number = 0;         //!< number (in its title and ImGui names)
+  String title;           //!< title
+  std::string label;      //!< ImGui label: "title###DatumWindow<number>"
+  int columns = 1;        //!< columns of the grid of its canvases
+  int width = 1100;       //!< size (points)
+  int height = 750;       //!< size (points)
+  bool open = true;       //!< not closed
+  bool placed = false;    //!< placed and sized on screen
+  bool layoutPending = true;   //!< its dock space is laid out at the next frame (browser on the left, canvases)
+  std::string browser;    //!< ImGui name of its file browser (docked on the left by the layout)
+  };
+  std::vector<GuiWindow> _windows;   //!< windows opened by File > New Window (closed ones stay, not shown)
+  int  _windowCounter = 1;           //!< number of the last one
+  int  _currentWindow = kMainWindow; //!< DatumGui window used last
+  bool _mainHidden = false;          //!< the main window was closed while other DatumGui windows were open
+  //! ImGui windows to dock in a DatumGui window at the next frame: (name, window code, on the left)
+  struct DockRequest { std::string name; int window; bool left; int tries; };
+  std::vector<DockRequest> _dockInto;
+  std::map<unsigned int, int> _viewportWindows;   //!< viewport id -> code of the DatumGui window shown in it (last frame)
+  //! @brief Dock space of a DatumGui window. @param window code
+  unsigned int dockspaceOf(int window) const;
+  //! @brief Viewport of a DatumGui window (null if not shown yet). @param window code
+  ImGuiViewport * viewportOf(int window) const;
+  //! @brief Code of the DatumGui window shown in a viewport, from the last frame. @param window ImGui window
+  int windowOfImGui(const ImGuiWindow * window) const;
+  //! @brief Panes laid out by setLayout() and the like: those of the current window (main or new window).
+  int layoutHost() const;
+  //! @brief Draw the windows opened by File > New Window. @param hovered set to the menu item under the mouse
+  void renderGuiWindows(const MenuItem *& hovered);
+  //! @brief Lay out a window opened by New Window: its browser on the left, its canvases in a grid. @param j index
+  void layoutGuiWindow(std::size_t j);
+  //! @brief Dock the windows asked by dockInCurrentWindow() and the like.
+  void processDockRequests();
+  //! @brief Close the panes in a DatumGui window (canvases of a plot file go back to their window). @param window code
+  //! @return false if a browser asks first to save its trees (it is closed later)
+  bool closeWindowContents(int window);
+  //! @brief Close a window opened by New Window (its x). @param j index
+  void closeGuiWindow(std::size_t j);
+  //! @brief Hide the main window (closed while other DatumGui windows are open). @return false if it stays
+  bool hideMainWindow();
+  //! @brief Show the main window again (empty, with the file browser).
+  void showMainWindow();
+  //! @brief Window where tools (browser, Plot Tree, inspector) are docked: the current one, unless it is the window of
+  //! canvases of a plot file (then the main window, or a new window). @return code
+  int toolWindow();
+  //! @brief Make sure the current window is an open one.
+  void validateCurrentWindow();
+  //! @brief Make a canvas pane in a DatumGui window. @param window code @return the pane
+  CanvasPane & addPaneIn(int window);
+  //! @brief Canvas pane of the current window to dock a new pane beside ("" if it has none).
+  std::string paneOfCurrentWindow() const;
+  //! @brief Note that the user works in an ImGui window (focused): its DatumGui window becomes current.
+  void noteFocus(const char * name);
   std::vector<PaneWindow> _paneWindows;   //!< windows of canvases
   std::string _sideWindow;   //!< window docked between the browser and the canvases ("" for none)
   float _sideFraction = 0.4f;   //!< its fraction of the width of the canvas area
   //! @brief Dock panes in a grid of a dock node. @param nodeId dock node @param panes panes @param columns columns
   void dockGrid(unsigned int nodeId, const std::vector<CanvasPane *> & panes, int columns);
   //! @brief Draw the windows of canvases (their dock spaces; the panes are drawn by renderCanvases()).
-  void renderPaneWindows();
+  //! @param hovered set to the menu item under the mouse (menu bar of the window of a plot file)
+  void renderPaneWindows(const MenuItem *& hovered);
   //! @brief Draw the fit pane, if shown (opened by itself the first time the selected graph has fits).
   void renderFitPane();
   //! @brief The Canvases window, if shown.

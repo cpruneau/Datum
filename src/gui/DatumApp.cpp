@@ -470,6 +470,8 @@ namespace Datum
   file.addItem("Open Folder...", "file.openFolder", "Ctrl+Shift+O", "Show a folder of the file system in the browser");
   file.addItem("Close All Files", "file.closeAll",  "",             "Close the Datum files open in the browsers");
   file.addSeparator();
+  file.addItem("New Window",     "file.newWindow",  "Ctrl+Alt+N",   "Open another DatumGui window (menus, a file browser of its "
+                                                                     "own); panes can be dragged between the windows");
   file.addItem("New Browser",    "file.newBrowser", "",             "Open another file browser, with files of its own");
   file.addItem("New Tree",       "file.newTree",    "",             "Make a new, empty tree in the browser used last: "
                                                                      "add folders, drag objects onto it, save it");
@@ -602,6 +604,7 @@ namespace Datum
     std::snprintf(command, sizeof(command), "window.layout.%dx%d", cr.first, cr.second);
     if (MenuItem * item = bar.findItem(command)) item->setChecked(_gui.nColumns() == cr.first && _gui.nRows() == cr.second);
     std::snprintf(command, sizeof(command), "window.graphs.%dx%d", cr.first, cr.second);
+    if (_gui.nPanes() == 0) continue;            // no canvas yet (none is made for the menus)
     const Canvas & canvas = _gui.currentPane().canvas();
     if (MenuItem * item = bar.findItem(command)) item->setChecked(canvas.nColumns() == cr.first && canvas.nRows() == cr.second);
     }
@@ -673,6 +676,7 @@ namespace Datum
     _gui.setStatus(String("New browser: ") + String(browser.windowName()));
     }
   else if (c == "file.newTree") newTree(_gui.activeBrowser());
+  else if (c == "file.newWindow") _gui.newWindow();
   else if (c == "file.closeBrowser") requestCloseBrowser(_gui.activeBrowser());
   else if (c == "file.closeTree" || c == "file.duplicateEntry" || c == "file.saveTree" || c == "file.saveTreeAs")
     {
@@ -788,6 +792,7 @@ namespace Datum
     _renameRequested = true;
     }
   else if (c == "window.close")    _gui.requestClosePane(_gui.currentPaneIndex());   // as the x of the pane
+  else if ((c == "window.next" || c == "window.previous") && _gui.nPanes() == 0) { }   // no canvas
   else if (c == "window.next")     _gui.setCurrentPane((_gui.currentPaneIndex() + 1) % _gui.nPanes());
   else if (c == "window.previous") _gui.setCurrentPane((_gui.currentPaneIndex() + _gui.nPanes() - 1) % _gui.nPanes());
   else if (c == "help.about")      _showAbout = true;
@@ -816,19 +821,19 @@ namespace Datum
   GraphItem & DatumApp::show(MATH::Function * function, float xMinimum, float xMaximum)
   {
   _functions.emplace_back(function);
-  return _gui.currentPane().show(GraphItem(function, xMinimum, xMaximum));
+  return _gui.targetPane().show(GraphItem(function, xMinimum, xMaximum));
   }
 
   GraphItem & DatumApp::show(MATH::Function * function, float xMinimum, float xMaximum, float yMinimum, float yMaximum)
   {
   _functions.emplace_back(function);
-  return _gui.currentPane().show(GraphItem(function, xMinimum, xMaximum, yMinimum, yMaximum));
+  return _gui.targetPane().show(GraphItem(function, xMinimum, xMaximum, yMinimum, yMaximum));
   }
 
   GraphItem & DatumApp::show(MATH::DataPoints * data)
   {
   _data.emplace_back(data);
-  return _gui.currentPane().show(GraphItem(data));
+  return _gui.targetPane().show(GraphItem(data));
   }
 
   namespace
@@ -1870,7 +1875,7 @@ namespace Datum
 
   bool DatumApp::showObject(const ObjectReference & object)
   {
-  CanvasPane & pane = _gui.currentPane();
+  CanvasPane & pane = _gui.targetPane();   // a canvas of the window used last (made there if it has none)
   return showObject(pane, pane.selectedGraph(), object);
   }
 
@@ -1932,7 +1937,7 @@ namespace Datum
   if (objects.size() > 36) objects.resize(36);
   int n = int(objects.size());
   recordUndo();
-  CanvasPane & pane = _gui.currentPane();
+  CanvasPane & pane = _gui.targetPane();
   pane.canvas().divideFor(n);                          // the grid of Canvas::showOnePerGraph()
   pane.divide(pane.canvas().nColumns(), pane.canvas().nRows());
   for (int k=0; k<pane.canvas().nGraphs(); k++)
@@ -2075,7 +2080,7 @@ namespace Datum
     data->addFit(fitter.record("Gaussian fit"));
     }
   catch (const Exception &) { }
-  CanvasPane & first = _gui.pane(0);
+  CanvasPane & first = _gui.targetPane();
   first.currentGraph().setTitle("Demonstration");
   first.currentGraph().xAxis().setTitle("x");
   first.currentGraph().yAxis().setTitle("f(x)");
@@ -2278,7 +2283,7 @@ namespace Datum
   void DatumApp::renderAbout()
   {
   if (!_showAbout) return;
-  ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowPos(DatumGui::activeViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
   if (ImGui::Begin("About Datum", &_showAbout, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse))
     {
     ImGui::Text("Datum graphical interface");

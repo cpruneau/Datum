@@ -45,8 +45,13 @@ namespace Datum
   //! @brief Register a listener on all the items (including those added later). Not owned.
   void addListener(ActionListener * listener);
 
-  //! @brief Draw the main menu bar and process the shortcuts. @return the item under the mouse, or nullptr
-  const MenuItem * render();
+  //! @brief Draw the main menu bar and process the shortcuts. @param opened set to true if a menu of the bar is open
+  //! (if given) @return the item under the mouse, or nullptr
+  const MenuItem * render(bool * opened=nullptr);
+  //! @brief Draw the menus inside the menu bar of the current ImGui window (a DatumGui window other than the main
+  //! one, between ImGui::BeginMenuBar() and ImGui::EndMenuBar()); the shortcuts are processed by render() only.
+  //! @param opened set to true if one of the menus is open @return the item under the mouse, or nullptr
+  const MenuItem * renderMenus(bool & opened);
 
   //! @brief Shortcut as shown in menus: "Ctrl" becomes "Cmd" on macOS. @param shortcut e.g. "Ctrl+O"
   static String displayShortcut(const String & shortcut);

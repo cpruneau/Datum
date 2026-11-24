@@ -17,6 +17,8 @@
 #include <vector>
 #include "String.hpp"
 
+struct ImGuiViewport;
+
 namespace Datum
 {
   namespace GUI
@@ -32,6 +34,8 @@ namespace Datum
   class FileDialog
   {
   public:
+  //! Viewport where the dialogs open (set every frame by DatumGui: its current window); null: the main viewport
+  static ImGuiViewport * viewport;
 
   //! @brief What the dialog chooses: a file to open, a folder, or a file to save to
   enum Mode { kOpenFile, kOpenFolder, kSaveFile };
