@@ -105,6 +105,7 @@ namespace Datum
   }
 
   const char * kEditorWindow = "Plot Tree";
+  const char * kInspectorWindow = "Inspector";   //!< ImGui name of the inspector pane
   const char * kNodePayload = "DATUM_PLOT_NODE";
 
   std::string pathKey(int tab, const Path & path)
@@ -445,7 +446,10 @@ namespace Datum
   MenuBar & bar = _gui.menuBar();
   // File: the Datum data files and trees of the browser (the one selected in the browser used last)
   Menu & file = bar.addMenu("File");
-  Menu & fileNew = file.addMenu("New", "A new top folder in the browser used last, or a new browser");
+  Menu & fileNew = file.addMenu("New", "A new window, a new top folder in the browser used last, or a new browser");
+  fileNew.addItem("Window",       "file.newWindow",  "Ctrl+Alt+N",   "Another DatumGui window: menus, a file browser of its own; "
+                                                                     "panes (browsers, canvases, tables, tree, inspector) can be "
+                                                                     "dragged between the windows");
   fileNew.addItem("Top Folder",   "data.new",        "Ctrl+Shift+N", "A new data file in the browser used last: an entry with an empty "
                                                                      "top folder; drag objects and folders onto it, save it as a Datum file");
   fileNew.addItem("File Browser", "file.newBrowser", "",             "A new file browser, with files and folders of its own");
@@ -572,7 +576,7 @@ namespace Datum
   view.addItem("New File Browser",   "file.newBrowser",   "", "Another file browser, with files of its own");
   view.addItem("Close File Browser", "file.closeBrowser", "", "Close the browser used last (the first one is hidden), asking to save its changed trees");
   view.addItem("Plot Tree",      "plot.tree",      "Ctrl+T", "Show or hide the tree of the plot files").setCheckable(true);
-  view.addItem("Inspector",      "plot.inspector", "", "All the settings of the selection, below the tree").setCheckable(true);
+  view.addItem("Inspector",      "plot.inspector", "", "The inspector pane: all the settings of the element selected in the tree").setCheckable(true);
   view.addItem("Style Elements", "plot.showStyle", "", "Show the elements of style (Margins, Axis, Marker, ...) in the tree").setCheckable(true);
   view.addItem("All Windows",    "plot.allWindows", "", "Every window of the plot file: the first one here, the others in windows of their own "
                                                         "(otherwise the window of the selection)").setCheckable(true);
@@ -684,6 +688,18 @@ namespace Datum
   std::function<void(FileBrowser &)> previousBrowser = _gui.onNewBrowser;
   _gui.onNewBrowser = [this, previousBrowser](FileBrowser & b) { if (previousBrowser) previousBrowser(b); connectToPlot(b); };
   _gui.onClosePanes = [this](const std::vector<int> & panes) { return closeCanvases(panes); };
+  // the x of the DatumGui window of the plot files: the plot file shown is closed (asked to be saved first)
+  _gui.onCloseWindow = [this](int window) -> bool
+    {
+    if (window == 0 && _current >= 0 && _current < int(_documents.size())) { requestClose(_current); return false; }
+    return true;
+    };
+  // a DatumGui window closed: the Plot Tree and the inspector go with it
+  _gui.onWindowClosing = [this](int window)
+    {
+    if (_showTree && _gui.windowOf(kEditorWindow) == window) { _showTree = false; _gui.setSideWindowVisible(false); }
+    if (_showInspector && _gui.windowOf(kInspectorWindow) == window) _showInspector = false;
+    };
   // "Rename Canvas..." of the context menu of a graph: the canvas of the plot file (its name and title)
   auto hookRename = [this](CanvasPane & pane)
     {
@@ -727,7 +743,9 @@ namespace Datum
     }
   if (_documents.empty())
     {
-    newDocument();
+    // BASIC: the window starts with the file browser only (a canvas is made when an object is shown; Plots > New makes
+    // a plot file); EDIT: a plot file to edit
+    if (_mode == kEdit) newDocument();
     if (_mode == kEdit && !_templateOpen) actionPerformed(ActionEvent{"plot.open", nullptr});
     else if (_mode == kBasic)
       {
@@ -802,7 +820,7 @@ namespace Datum
   if (_current >= int(_documents.size())) _current = int(_documents.size()) - 1;
   _selectTab = _current;
   _drawnTab = -1;
-  if (_documents.empty() && !_exitAfterClosing) newDocument();   // every session is a plot file
+  if (_documents.empty() && !_exitAfterClosing && _mode == kEdit) newDocument();   // EDIT: always a plot file (BASIC: its window closes)
   }
 
   void DatumGuiApp::save(int k, bool ask, const std::function<void()> & after)
@@ -1128,7 +1146,7 @@ namespace Datum
       });
     }
   else if (c == "plot.tree") { if (_showTree) { _showTree = false; _gui.setSideWindowVisible(false); } else showTree(); }
-  else if (c == "plot.inspector") _showInspector = !_showInspector;
+  else if (c == "plot.inspector") { _showInspector = !_showInspector; _placeInspector = true; }
   else if (c == "plot.showStyle") _showStyle = !_showStyle;
   else if (c == "plot.allWindows") { _allWindows = !_allWindows; _drawnTab = -1; }
   else if (c == "plot.detachedWindows") { setDetachedWindows(!_detachedWindows); _drawnTab = -1; }
@@ -1812,6 +1830,7 @@ namespace Datum
     }
   if (treeShown) ImGui::End();
   if (!_showTree && _gui.sideWindowVisible()) _gui.setSideWindowVisible(false);   // closed with its close button
+  renderInspectorPane();
   renderDialogs();
   renderTemplate();
   layoutCanvases();
@@ -1849,8 +1868,7 @@ namespace Datum
   ImGui::TextDisabled("%s", _mode == kBasic ? "BASIC" : "EDIT");
   ImGui::SetItemTooltip("BASIC: started from a new file; EDIT: from an existing one. The tools are the same.");
 
-  float inspectorHeight = _showInspector ? std::max(220.0f, ImGui::GetContentRegionAvail().y*0.42f) : 0.0f;
-  if (ImGui::BeginChild("##tree", ImVec2(0, -inspectorHeight), ImGuiChildFlags_Borders))
+  if (ImGui::BeginChild("##tree", ImVec2(0, 0), ImGuiChildFlags_Borders))
     {
     renderNode(t, Path());
     // below the rows: dropping there adds to the top of the document
@@ -1865,11 +1883,36 @@ namespace Datum
       }
     }
   ImGui::EndChild();
-  if (_showInspector)
+  }
+
+  void DatumGuiApp::renderInspectorPane()
+  {
+  if (!_showInspector) { _placeInspector = true; return; }
+  // the first time it is shown (or once its window was closed): below the Plot Tree, or in the current window
+  if (_placeInspector && _gui.needsPlace(kInspectorWindow))
     {
-    if (ImGui::BeginChild("##inspector", ImVec2(0, 0), ImGuiChildFlags_Borders)) renderInspector(t);
-    ImGui::EndChild();
+    ImGuiWindow * tree = _showTree ? ImGui::FindWindowByName(kEditorWindow) : nullptr;
+    if (tree && tree->DockNode && !_gui.needsPlace(kEditorWindow))
+      {
+      ImGuiID below = 0, above = 0;
+      ImGui::DockBuilderSplitNode(tree->DockNode->ID, ImGuiDir_Down, 0.42f, &below, &above);
+      ImGui::DockBuilderDockWindow(kInspectorWindow, below);
+      ImGui::DockBuilderFinish(ImGui::DockNodeGetRootNode(tree->DockNode)->ID);
+      }
+    else if (!_showTree || (tree && !_gui.needsPlace(kEditorWindow))) _gui.dockInCurrentWindow(kInspectorWindow);
+    else return;   // the Plot Tree is placed first
     }
+  _placeInspector = false;
+  ImGui::SetNextWindowSize(ImVec2(520, 420), ImGuiCond_FirstUseEver);
+  const bool shown = _showInspector;
+  if (ImGui::Begin(kInspectorWindow, &_showInspector, ImGuiWindowFlags_NoCollapse))
+    {
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { _treeFocused = true; _gui.setLastFocus(DatumGui::kFocusSide); }
+    Tab * t = tab();
+    if (t) renderInspector(*t);
+    else ImGui::TextDisabled("No plot file open: the settings of the element selected in the Plot Tree are shown here.");
+    }
+  if (shown) ImGui::End();
   }
 
   void DatumGuiApp::renderNode(Tab & t, const Path & path)
@@ -2732,6 +2775,8 @@ namespace Datum
 
   void DatumGuiApp::showTree()
   {
+  if (!_showTree && !_treeShownOnce) _showInspector = true;   // the inspector comes with the tree the first time
+  _treeShownOnce = true;
   _showTree = true;
   _gui.setSideWindowVisible(true);
   }
@@ -2780,7 +2825,7 @@ namespace Datum
   void DatumGuiApp::showObject(const ObjectReference & object)
   {
   Tab * t = tab();
-  if (!t) return;
+  if (!t) { DatumApp::showObject(object); return; }   // no plot file: a canvas of the current window
   String fileName;
   if (objectsOf(object, false, fileName).empty()) { _gui.setStatus("Nothing to plot there"); return; }
   Path target = dropTarget(), canvas, graph;
@@ -2824,7 +2869,7 @@ namespace Datum
   {
   // all the objects of a folder: a graph each, in the canvas of the selection or of the current pane (or a new canvas)
   Tab * t = tab();
-  if (!t) return;
+  if (!t) { DatumApp::showFolder(object.file, object.path); return; }   // no plot file: a canvas of the current window
   String fileName;
   if (objectsOf(object, true, fileName).empty()) { _gui.setStatus("Nothing to plot there"); return; }
   bool ok = false;
@@ -2877,6 +2922,11 @@ namespace Datum
   Tab * t = tab();
   if (!t)
     {
+    // no plot file: its windows close
+    bool shown = false;
+    for (int k=0; k<_gui.nPaneWindows(); k++) if (_gui.paneWindowShown(k)) shown = true;
+    if (shown) _gui.closePaneWindowsFrom(0);
+    _drawnTab = -1;
     _links.clear();
     return;
     }
@@ -2917,16 +2967,18 @@ namespace Datum
   String title = String("DatumGui: ") + d.displayName();
   if (window < 0 || !spec->read(d.document(), d.directory(), error))
     {
-    _gui.closePaneWindowsFrom(0);
-    _gui.setPaneCount(1);
-    CanvasPane & pane = _gui.pane(0);
+    // the DatumGui window of the plot file, with one canvas to drop histograms onto
+    _gui.closePaneWindowsFrom(1);
+    _gui.setPaneWindow(0, title, 1, 1, 1000, 700);
+    _gui.setPaneWindowGui(0, true);
+    _gui.setPaneWindowPaneCount(0, 1);
+    CanvasPane & pane = *_gui.panesOf(0)[0];
     pane.canvas() = GRAPHICS::Canvas();
     pane.divide(1, 1);
     pane.setSelectedGraph(0);
     pane.setTitle(window < 0 ? "Drop histograms here" : "Cannot draw the plot file");
     pane.onDrop = [this](int, const ObjectReference & object) { drop(Path(), object, false); };
     if (window >= 0) _gui.setStatus(String("Cannot draw the plot file: ") + error);
-    _gui.setWindowTitle(title);
     _spec = std::move(spec);
     return;
     }
@@ -2946,23 +2998,13 @@ namespace Datum
     f = id >= 0 ? file(id) : nullptr;
     if (f) spec->setInputFile(int(k), f->file);
     }
-  // the windows drawn: one (the main window), all (the first in the main window), or all detached (each in a window of
-  // its own, the main window showing a note)
+  // the windows drawn: the first one (or the one selected) in the DatumGui window of the plot file (menus, status
+  // bar), and with All Windows or Detached Windows the others in windows of canvases of their own
   std::vector<int> shown;
   if (all) for (int w=0; w<int(windows.size()); w++) shown.push_back(w);
   else shown.push_back(window);
-  int offset = _detachedWindows ? 0 : 1;   // window shown s is in the window of canvases s - offset (-1: the main window)
+  const int offset = 0;   // window shown s is in the window of canvases s (the first one: the DatumGui window of the file)
   _gui.closePaneWindowsFrom(int(shown.size()) - offset);
-  if (_detachedWindows)
-    {
-    _gui.setPaneGrid(1, 1);
-    CanvasPane & note = *_gui.panesOf(-1)[0];
-    note.canvas() = GRAPHICS::Canvas();
-    note.divide(1, 1);
-    note.setSelectedGraph(0);
-    note.setTitle("The windows of the plot file are in windows of their own (View > Detached Windows)");
-    note.onDrop = [this](int, const ObjectReference & object) { drop(Path(), object, false); };
-    }
   String hidden;
   for (std::size_t s=0; s<shown.size(); s++)
     {
@@ -2981,7 +3023,8 @@ namespace Datum
       }
     else
       {
-      _gui.setPaneWindow(host, ws.title, columns, rows, ws.width, ws.height);
+      _gui.setPaneWindow(host, host == 0 ? title + String(": ") + ws.title : ws.title, columns, rows, ws.width, ws.height);
+      _gui.setPaneWindowGui(host, host == 0);
       _gui.setPaneWindowPaneCount(host, count);
       }
     std::vector<Path> canvasPaths = d.children(windows[std::size_t(w)], PlotDocument::kCanvas);
@@ -3040,7 +3083,6 @@ namespace Datum
     }
   if (!hidden.isNull()) _gui.setStatus(String("Only the first 36 canvases of a window are shown:") + hidden
                                        + String(" (Regroup can spread canvases over several windows)"));
-  _gui.setWindowTitle(title);
   _spec = std::move(spec);   // the old specification goes after the canvases stopped using its functions
   if (!problems.isNull())
     {

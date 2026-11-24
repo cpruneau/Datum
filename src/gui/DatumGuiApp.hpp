@@ -132,7 +132,9 @@ namespace Datum
   bool _showTree = false;   //!< the Plot Tree is shown (opened by Plots > New, Open, New From Data, View > Plot Tree)
   std::string _plotPane;   //!< window of the canvas of the plot file that was current last (where objects are shown)
   bool _showStyle = false;   //!< the elements of style are shown in the tree
-  bool _showInspector = true;   //!< the inspector is shown below the tree
+  bool _showInspector = false;   //!< the inspector pane is shown (below the tree the first time)
+  bool _placeInspector = true;   //!< place the inspector pane when it is shown next
+  bool _treeShownOnce = false;   //!< the Plot Tree was shown (the inspector opens with it the first time)
   bool _allWindows = false;   //!< every window of the plot file shown
   bool _detachedWindows = true;    //!< every window of the plot file in a window of its own (none in the main window)
   bool _showHelp = false;   //!< the help window is shown
@@ -268,6 +270,8 @@ namespace Datum
   void rowDragAndDrop(Tab & t, const GRAPHICS::PlotDocument::Path & path);
   //! @brief Draw the settings of the selected element. @param t tab
   void renderInspector(Tab & t);
+  //! @brief Draw the inspector pane (the settings of the element selected in the Plot Tree), if shown.
+  void renderInspectorPane();
   //! @brief The settings of an element (inspector and ... pull-down). @param t tab @param path element
   void editElement(Tab & t, const GRAPHICS::PlotDocument::Path & path);
   //! @brief Draw the dialogs: Save Changes, help, grid, Plot Template.

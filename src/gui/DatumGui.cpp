@@ -150,7 +150,8 @@ namespace Datum
   ImGui_ImplOpenGL3_Init(glslVersion);
   // texts typeset by LaTeX in the background: wake up the event loop to draw them
   GRAPHICS::LatexRenderer::instance().setReadyCallback([]() { glfwPostEmptyEvent(); });
-  setLayout(_settings.columns, _settings.rows);
+  if (_settings.startEmpty) { _columns = _rows = _gridColumns = 1; }   // the browser only: canvases made when needed
+  else setLayout(_settings.columns, _settings.rows);
   return true;
   }
 
@@ -244,30 +245,34 @@ namespace Datum
   nColumns = nColumns < 1 ? 1 : (nColumns > 6 ? 6 : nColumns);
   nRows    = nRows    < 1 ? 1 : (nRows    > 6 ? 6 : nRows);
   int n = nColumns*nRows;
-  // the panes of the main window (those of the windows of canvases stay)
-  auto nMain = [this]() { int m = 0; for (const auto & p : _panes) if (p->host() < 0) m++; return m; };
+  // the panes of the current window (main or new window; those of the windows of canvases stay)
+  const int h = layoutHost();
+  auto nMain = [this, h]() { int m = 0; for (const auto & p : _panes) if (p->host() == h) m++; return m; };
   while (nMain() > n)
-    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() < 0) { _panes.erase(_panes.begin() + k); break; }
-  while (nMain() < n) newPane();
+    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() == h) { _panes.erase(_panes.begin() + k); break; }
+  while (nMain() < n) newPane().setHost(h);
   _columns = nColumns;
   _rows    = nRows;
   _gridColumns = nColumns;
-  _layoutRequested = true;
+  if (h == kMainWindow) _layoutRequested = true;
+  else { _windows[std::size_t(-2 - h)].columns = nColumns; _windows[std::size_t(-2 - h)].layoutPending = true; }
   if (_currentPane >= nPanes()) _currentPane = 0;
   }
 
   void DatumGui::setPaneCount(int n)
   {
-  n = n < 1 ? 1 : (n > 36 ? 36 : n);
-  auto nMain = [this]() { int m = 0; for (const auto & p : _panes) if (p->host() < 0) m++; return m; };
+  n = n < 0 ? 0 : (n > 36 ? 36 : n);
+  const int h = layoutHost();
+  auto nMain = [this, h]() { int m = 0; for (const auto & p : _panes) if (p->host() == h) m++; return m; };
   if (n == nMain()) return;
   while (nMain() > n)
-    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() < 0) { _panes.erase(_panes.begin() + k); break; }
-  while (nMain() < n) newPane();
-  _gridColumns = int(std::ceil(std::sqrt(double(n))));
+    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() == h) { _panes.erase(_panes.begin() + k); break; }
+  while (nMain() < n) newPane().setHost(h);
+  _gridColumns = std::max(1, int(std::ceil(std::sqrt(double(n)))));
   _columns = _gridColumns;
   _rows    = (n + _gridColumns - 1)/_gridColumns;
-  _layoutRequested = true;
+  if (h == kMainWindow) _layoutRequested = true;
+  else { _windows[std::size_t(-2 - h)].columns = _gridColumns; _windows[std::size_t(-2 - h)].layoutPending = true; }
   if (_currentPane >= nPanes()) _currentPane = 0;
   }
 
@@ -276,25 +281,404 @@ namespace Datum
   n = n < 1 ? 1 : (n > 36 ? 36 : n);
   nColumns = std::min(nColumns < 1 ? 1 : (nColumns > 6 ? 6 : nColumns), n);
   int rows = (n + nColumns - 1)/nColumns;
-  auto nMain = [this]() { int m = 0; for (const auto & p : _panes) if (p->host() < 0) m++; return m; };
+  const int h = layoutHost();
+  auto nMain = [this, h]() { int m = 0; for (const auto & p : _panes) if (p->host() == h) m++; return m; };
   if (n == nMain() && _gridColumns == nColumns && _columns == nColumns && _rows == rows) return;
   while (nMain() > n)
-    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() < 0) { _panes.erase(_panes.begin() + k); break; }
-  while (nMain() < n) newPane();
+    for (int k=nPanes()-1; k>=0; k--) if (_panes[k]->host() == h) { _panes.erase(_panes.begin() + k); break; }
+  while (nMain() < n) newPane().setHost(h);
   _gridColumns = nColumns;
   _columns = nColumns;
   _rows = rows;
-  _layoutRequested = true;
+  if (h == kMainWindow) _layoutRequested = true;
+  else { _windows[std::size_t(-2 - h)].columns = nColumns; _windows[std::size_t(-2 - h)].layoutPending = true; }
   if (_currentPane >= nPanes()) _currentPane = 0;
   }
 
   CanvasPane & DatumGui::addPane()
   {
-  std::string beside = _panes.empty() ? std::string() : std::string(currentPane().windowId());
+  validateCurrentWindow();
+  std::string beside = paneOfCurrentWindow();
+  if (beside.empty()) return addPaneIn(_currentWindow);
   CanvasPane & pane = newPane();
+  if (_currentWindow <= -2) pane.setHost(_currentWindow);
   _dockBeside.push_back(std::make_pair(std::string(pane.windowId()), beside));
   setCurrentPane(nPanes() - 1);
   return pane;
+  }
+
+  CanvasPane & DatumGui::currentPane()
+  {
+  if (_panes.empty()) return targetPane();
+  if (_currentPane < 0 || _currentPane >= nPanes()) _currentPane = 0;
+  return *_panes[std::size_t(_currentPane)];
+  }
+
+  // ------------------------------------------------------------------------------------------------ DatumGui windows
+
+  namespace
+  {
+  ImGuiViewport * gActiveViewport = nullptr;   //!< viewport of the current DatumGui window (this frame)
+  }
+
+  ImGuiViewport * DatumGui::activeViewport()
+  {
+  if (gActiveViewport) return gActiveViewport;
+  return ImGui::GetMainViewport();
+  }
+
+  unsigned int DatumGui::dockspaceOf(int window) const
+  {
+  if (window == kMainWindow) return ImHashStr("DatumDockSpace");
+  if (window >= 0) return ImHashStr((std::string("DatumPaneWindowDock") + std::to_string(window)).c_str());
+  std::size_t j = std::size_t(-2 - window);
+  int number = j < _windows.size() ? _windows[j].number : 0;
+  return ImHashStr((std::string("DatumWindowDock") + std::to_string(number)).c_str());
+  }
+
+  ImGuiViewport * DatumGui::viewportOf(int window) const
+  {
+  if (!ImGui::GetCurrentContext()) return nullptr;
+  if (window == kMainWindow) return ImGui::GetMainViewport();
+  ImGuiWindow * w = nullptr;
+  if (window >= 0 && window < nPaneWindows()) w = ImGui::FindWindowByName(_paneWindows[std::size_t(window)].label.c_str());
+  else if (window <= -2 && std::size_t(-2 - window) < _windows.size())
+    w = ImGui::FindWindowByName(_windows[std::size_t(-2 - window)].label.c_str());
+  return w ? w->Viewport : nullptr;
+  }
+
+  int DatumGui::windowOfImGui(const ImGuiWindow * window) const
+  {
+  if (!window || !window->Viewport) return kOutside;
+  auto found = _viewportWindows.find(window->Viewport->ID);
+  return found == _viewportWindows.end() ? kOutside : found->second;
+  }
+
+  int DatumGui::windowOf(const char * name) const
+  {
+  if (!ImGui::GetCurrentContext() || !name) return kOutside;
+  return windowOfImGui(ImGui::FindWindowByName(name));
+  }
+
+  int DatumGui::windowOfPane(int k) const
+  {
+  if (k < 0 || k >= nPanes()) return kOutside;
+  const CanvasPane & pane = *_panes[std::size_t(k)];
+  ImGuiWindow * window = ImGui::GetCurrentContext() ? ImGui::FindWindowByName(pane.windowId()) : nullptr;
+  if (!window || !window->Viewport) return pane.host();   // not drawn yet: where it was made
+  return windowOfImGui(window);
+  }
+
+  bool DatumGui::paneWindowShown(int k) const
+  {
+  for (const auto & p : _panes) if (p->host() == k) return true;
+  return false;
+  }
+
+  bool DatumGui::windowOpen(int window) const
+  {
+  if (window == kMainWindow) return !_mainHidden;
+  if (window >= 0) return window < nPaneWindows() && _paneWindows[std::size_t(window)].gui && paneWindowShown(window);
+  std::size_t j = std::size_t(-2 - window);
+  return j < _windows.size() && _windows[j].open;
+  }
+
+  int DatumGui::nOpenWindows() const
+  {
+  int n = _mainHidden ? 0 : 1;
+  for (const auto & w : _windows) if (w.open) n++;
+  for (int k=0; k<nPaneWindows(); k++) if (windowOpen(k)) n++;
+  return n;
+  }
+
+  void DatumGui::validateCurrentWindow()
+  {
+  if (windowOpen(_currentWindow)) return;
+  if (!_mainHidden) { _currentWindow = kMainWindow; return; }
+  for (std::size_t j=0; j<_windows.size(); j++) if (_windows[j].open) { _currentWindow = -2 - int(j); return; }
+  for (int k=0; k<nPaneWindows(); k++) if (windowOpen(k)) { _currentWindow = k; return; }
+  _currentWindow = kMainWindow;
+  }
+
+  void DatumGui::setCurrentWindow(int window)
+  {
+  if (!windowOpen(window)) return;
+  _currentWindow = window;
+  if (_panes.empty() || windowOfPane(_currentPane) == window) return;
+  for (int k=0; k<nPanes(); k++) if (windowOfPane(k) == window) { _currentPane = k; break; }
+  }
+
+  int DatumGui::layoutHost() const
+  {
+  if (_currentWindow <= -2 && windowOpen(_currentWindow)) return _currentWindow;
+  return kMainWindow;
+  }
+
+  std::string DatumGui::paneOfCurrentWindow() const
+  {
+  if (_currentPane >= 0 && _currentPane < nPanes() && windowOfPane(_currentPane) == _currentWindow)
+    return _panes[std::size_t(_currentPane)]->windowId();
+  for (int k=0; k<nPanes(); k++) if (windowOfPane(k) == _currentWindow) return _panes[std::size_t(k)]->windowId();
+  return std::string();
+  }
+
+  void DatumGui::noteFocus(const char * name)
+  {
+  int w = windowOf(name);
+  if (w != kOutside && windowOpen(w)) _currentWindow = w;
+  }
+
+  CanvasPane & DatumGui::addPaneIn(int window)
+  {
+  CanvasPane & pane = newPane();
+  if (window <= -2) pane.setHost(window);
+  _dockInto.push_back(DockRequest{ pane.windowId(), window, false, 0 });
+  _currentPane = nPanes() - 1;
+  _focusRequested = true;
+  return pane;
+  }
+
+  CanvasPane & DatumGui::targetPane()
+  {
+  validateCurrentWindow();
+  if (!_panes.empty() && _currentPane >= 0 && _currentPane < nPanes() && windowOfPane(_currentPane) == _currentWindow)
+    return *_panes[std::size_t(_currentPane)];
+  for (int k=0; k<nPanes(); k++) if (windowOfPane(k) == _currentWindow) { _currentPane = k; return *_panes[std::size_t(k)]; }
+  return addPaneIn(_currentWindow);
+  }
+
+  int DatumGui::toolWindow()
+  {
+  // the window of canvases of a plot file is laid out again when its canvases change: tools go elsewhere
+  validateCurrentWindow();
+  if (_currentWindow < 0) return _currentWindow;
+  if (!_mainHidden) return kMainWindow;
+  for (std::size_t j=0; j<_windows.size(); j++) if (_windows[j].open) return -2 - int(j);
+  return _currentWindow;
+  }
+
+  void DatumGui::dockInCurrentWindow(const std::string & name, bool left)
+  {
+  _dockInto.push_back(DockRequest{ name, toolWindow(), left, 0 });
+  }
+
+  bool DatumGui::needsPlace(const char * name) const
+  {
+  ImGuiWindow * w = ImGui::GetCurrentContext() ? ImGui::FindWindowByName(name) : nullptr;
+  if (!w) return true;
+  if (w->DockNode)
+    {
+    ImGuiDockNode * root = ImGui::DockNodeGetRootNode(w->DockNode);
+    if (root && root->IsDockSpace())
+      {
+      // docked in the dock space of a DatumGui window: lost if that window is closed (or the main one hidden)
+      if (root->ID == dockspaceOf(kMainWindow)) return _mainHidden;
+      for (std::size_t j=0; j<_windows.size(); j++) if (root->ID == dockspaceOf(-2 - int(j))) return !_windows[j].open;
+      for (int k=0; k<nPaneWindows(); k++) if (root->ID == dockspaceOf(k)) return !paneWindowShown(k);
+      }
+    return false;
+    }
+  return _mainHidden && w->Viewport == ImGui::GetMainViewport();   // floating over the hidden main window
+  }
+
+  void DatumGui::setPaneWindowGui(int k, bool gui)
+  {
+  if (k >= 0 && k < nPaneWindows()) _paneWindows[std::size_t(k)].gui = gui;
+  }
+
+  int DatumGui::newWindow()
+  {
+  GuiWindow window;
+  window.number = ++_windowCounter;
+  window.title = String("Datum ") + String(std::to_string(window.number));
+  window.label = window.title.str() + "###DatumWindow" + std::to_string(window.number);
+  window.width = std::max(600, int(0.8*_settings.width));
+  window.height = std::max(400, int(0.8*_settings.height));
+  FileBrowser & browser = addBrowser();
+  window.browser = browser.windowName();
+  _browsersToPlace.erase(std::remove(_browsersToPlace.begin(), _browsersToPlace.end(), window.browser), _browsersToPlace.end());
+  _windows.push_back(window);
+  _currentWindow = -2 - int(_windows.size() - 1);
+  return _currentWindow;
+  }
+
+  void DatumGui::layoutGuiWindow(std::size_t j)
+  {
+  GuiWindow & window = _windows[j];
+  int code = -2 - int(j);
+  ImGuiID dock = dockspaceOf(code);
+  ImVec2 area = ImGui::GetContentRegionAvail();
+  ImGui::DockBuilderRemoveNode(dock);
+  ImGui::DockBuilderAddNode(dock, ImGuiDockNodeFlags_DockSpace);
+  ImGui::DockBuilderSetNodeSize(dock, ImVec2(std::max(area.x, 100.0f), std::max(area.y - ImGui::GetFrameHeight(), 100.0f)));
+  ImGuiID canvases = dock;
+  bool hasBrowser = false;
+  for (const auto & b : _browsers) if (window.browser == b->windowName()) hasBrowser = true;
+  if (hasBrowser)
+    {
+    ImGuiID left = 0;
+    ImGui::DockBuilderSplitNode(dock, ImGuiDir_Left, 0.24f, &left, &canvases);
+    ImGui::DockBuilderDockWindow(window.browser.c_str(), left);
+    }
+  std::vector<CanvasPane *> panes;
+  for (const auto & p : _panes) if (p->host() == code) panes.push_back(p.get());
+  dockGrid(canvases, panes, window.columns);
+  ImGui::DockBuilderFinish(dock);
+  window.layoutPending = false;
+  }
+
+  void DatumGui::renderGuiWindows(const MenuItem *& hovered)
+  {
+  std::vector<std::size_t> closed;
+  for (std::size_t j=0; j<_windows.size(); j++)
+    {
+    GuiWindow & window = _windows[j];
+    if (!window.open) continue;
+    int code = -2 - int(j);
+    if (!window.placed)
+      {
+      // cascaded from the window used last
+      ImGuiViewport * from = activeViewport();
+      float step = 36.0f*float((window.number - 2) % 8);
+      ImGui::SetNextWindowPos(ImVec2(from->Pos.x + 60.0f + step, from->Pos.y + 50.0f + step), ImGuiCond_Always);
+      ImGui::SetNextWindowSize(ImVec2(float(window.width), float(window.height)), ImGuiCond_Always);
+      ImGui::SetNextWindowFocus();
+      window.placed = true;
+      }
+    ImGuiWindowClass windowClass;
+    windowClass.ViewportFlagsOverrideSet = ImGuiViewportFlags_NoAutoMerge;
+    ImGui::SetNextWindowClass(&windowClass);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    bool open = true;
+    bool visible = ImGui::Begin(window.label.c_str(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking
+                                | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    if (ImGui::IsWindowFocused()) _currentWindow = code;
+    bool menuOpen = false;
+    const MenuItem * item = nullptr;
+    if (visible && ImGui::BeginMenuBar())
+      {
+      item = _menuBar.renderMenus(menuOpen);
+      if (item) hovered = item;
+      ImGui::EndMenuBar();
+      }
+    if (menuOpen) setCurrentWindow(code);
+    ImVec2 size = ImGui::GetWindowSize();
+    window.width = int(size.x);
+    window.height = int(size.y);
+    if (window.layoutPending && visible) layoutGuiWindow(j);
+    float status = ImGui::GetFrameHeight();
+    if (visible)
+      {
+      ImGui::DockSpace(dockspaceOf(code), ImVec2(0, -status));
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
+      renderStatusBar(item, _hoverText);
+      }
+    else ImGui::DockSpace(dockspaceOf(code), ImVec2(0, 0), ImGuiDockNodeFlags_KeepAliveOnly);
+    ImGui::End();
+    if (!open) closed.push_back(j);
+    }
+  for (std::size_t j : closed) closeGuiWindow(j);
+  }
+
+  bool DatumGui::closeWindowContents(int window)
+  {
+  if (onWindowClosing) onWindowClosing(window);
+  bool done = true;
+  // canvases: those of a plot file go back to their window of canvases, the others are closed
+  for (int k=nPanes()-1; k>=0; k--)
+    {
+    if (windowOfPane(k) != window) continue;
+    int host = _panes[std::size_t(k)]->host();
+    if (host >= 0)
+      {
+      // a canvas of a plot file: removed with its window by the application, otherwise back to its window
+      if (host != window && host < nPaneWindows()) _paneWindows[std::size_t(host)].layoutPending = true;
+      continue;
+      }
+    _closeRequests.push_back(k);
+    }
+  // file browsers: the first one is hidden; the others are closed (after their trees are saved, if asked)
+  for (std::size_t k=0; k<_browsers.size(); k++)
+    {
+    FileBrowser & browser = *_browsers[k];
+    if (windowOf(browser.windowName()) != window) continue;
+    if (k == 0) { _settings.browserVisible = false; continue; }
+    if (onBrowserCloseRequest && !onBrowserCloseRequest(browser)) { done = false; continue; }
+    _browsersToClose.push_back(&browser);
+    }
+  for (std::size_t k=0; k<_dataPanes.size(); )
+    if (windowOf(_dataPanes[k]->windowTitle().data()) == window) _dataPanes.erase(_dataPanes.begin() + long(k)); else k++;
+  for (std::size_t k=0; k<_spreadsheetPanes.size(); )
+    if (windowOf(_spreadsheetPanes[k]->windowTitle().data()) == window) _spreadsheetPanes.erase(_spreadsheetPanes.begin() + long(k)); else k++;
+  if (windowOf(FitPane::windowName()) == window) _fitsVisible = false;
+  if (windowOf("Canvases") == window) _canvasListVisible = false;
+  return done;
+  }
+
+  void DatumGui::closeGuiWindow(std::size_t j)
+  {
+  int code = -2 - int(j);
+  if (!closeWindowContents(code)) { setStatus("Save or close the trees of its browser first: the window stays open"); return; }
+  _windows[j].open = false;
+  validateCurrentWindow();
+  if (nOpenWindows() == 0) requestExit();   // the last DatumGui window: the application ends
+  }
+
+  bool DatumGui::hideMainWindow()
+  {
+  if (!closeWindowContents(kMainWindow)) return false;
+  glfwHideWindow(_window);
+  _mainHidden = true;
+  ImGui::GetIO().ConfigViewportsNoAutoMerge = true;   // nothing goes into the hidden window
+  validateCurrentWindow();
+  return true;
+  }
+
+  void DatumGui::showMainWindow()
+  {
+  if (!_mainHidden) return;
+  _mainHidden = false;
+  ImGui::GetIO().ConfigViewportsNoAutoMerge = false;
+  glfwShowWindow(_window);
+  _settings.browserVisible = true;
+  _layoutRequested = true;
+  _currentWindow = kMainWindow;
+  }
+
+  void DatumGui::processDockRequests()
+  {
+  std::vector<DockRequest> later;
+  for (DockRequest & request : _dockInto)
+    {
+    ImGuiID dockspace = dockspaceOf(request.window);
+    ImGuiDockNode * root = windowOpen(request.window) ? ImGui::DockBuilderGetNode(dockspace) : nullptr;
+    if (!root)
+      {
+      // the window is not drawn yet (made this frame): next frame; a window closed meanwhile: the current one
+      if (!windowOpen(request.window)) { validateCurrentWindow(); request.window = _currentWindow; }
+      if (++request.tries < 5) later.push_back(request);
+      continue;
+      }
+    ImGuiDockNode * central = ImGui::DockBuilderGetCentralNode(dockspace);
+    if (!central) central = root;
+    if (request.left)
+      {
+      ImGuiID left = 0, rest = 0;
+      ImGui::DockBuilderSplitNode(central->ID, ImGuiDir_Left, 0.25f, &left, &rest);
+      ImGui::DockBuilderDockWindow(request.name.c_str(), left);
+      }
+    else if (central->Windows.Size > 0)
+      {
+      ImGuiID atDir = 0, other = 0;
+      ImGuiDir direction = central->Size.x >= central->Size.y ? ImGuiDir_Right : ImGuiDir_Down;
+      ImGui::DockBuilderSplitNode(central->ID, direction, 0.5f, &atDir, &other);
+      ImGui::DockBuilderDockWindow(request.name.c_str(), atDir);
+      }
+    else ImGui::DockBuilderDockWindow(request.name.c_str(), central->ID);
+    ImGui::DockBuilderFinish(dockspace);
+    }
+  _dockInto = later;
   }
 
   int DatumGui::addPaneWindow(const String & title, int columns, int rows, int width, int height)
@@ -346,6 +730,8 @@ namespace Datum
 
   void DatumGui::closePaneWindowsFrom(int k)
   {
+  // a DatumGui window closed (the window of a plot file): the other panes it holds are closed too
+  for (int w=std::max(0, k); w<nPaneWindows(); w++) if (windowOpen(w)) closeWindowContents(w);
   for (int j=nPanes()-1; j>=0; j--) if (_panes[std::size_t(j)]->host() >= k) _panes.erase(_panes.begin() + j);
   for (std::size_t w=std::size_t(std::max(0, k)); w<_paneWindows.size(); w++) { _paneWindows[w].placed = false; _paneWindows[w].layoutPending = true; }
   if (_currentPane >= nPanes()) _currentPane = 0;
@@ -394,7 +780,7 @@ namespace Datum
   _layoutRequested = true;
   }
 
-  void DatumGui::renderPaneWindows()
+  void DatumGui::renderPaneWindows(const MenuItem *& hovered)
   {
   ImGuiViewport * main = ImGui::GetMainViewport();
   for (std::size_t w=0; w<_paneWindows.size(); w++)
@@ -446,8 +832,26 @@ namespace Datum
     windowClass.ViewportFlagsOverrideSet = ImGuiViewportFlags_NoAutoMerge;
     ImGui::SetNextWindowClass(&windowClass);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    bool visible = ImGui::Begin(window.label.c_str(), nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking);
+    bool open = true;
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+    if (window.gui) flags |= ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    bool visible = ImGui::Begin(window.label.c_str(), window.gui ? &open : nullptr, flags);
     ImGui::PopStyleVar();
+    // a DatumGui window (the window of a plot file): the menus of the application, a status bar
+    const MenuItem * item = nullptr;
+    if (window.gui)
+      {
+      if (ImGui::IsWindowFocused()) _currentWindow = int(w);
+      bool menuOpen = false;
+      if (visible && ImGui::BeginMenuBar())
+        {
+        item = _menuBar.renderMenus(menuOpen);
+        if (item) hovered = item;
+        ImGui::EndMenuBar();
+        }
+      if (menuOpen) setCurrentWindow(int(w));
+      }
+    float status = window.gui ? ImGui::GetFrameHeight() : 0.0f;
     ImVec2 size = ImGui::GetWindowSize();
     window.width = int(size.x);
     window.height = int(size.y);
@@ -457,14 +861,30 @@ namespace Datum
       ImVec2 area = ImGui::GetContentRegionAvail();
       ImGui::DockBuilderRemoveNode(dock);
       ImGui::DockBuilderAddNode(dock, ImGuiDockNodeFlags_DockSpace);
-      ImGui::DockBuilderSetNodeSize(dock, ImVec2(std::max(area.x, 100.0f), std::max(area.y, 100.0f)));
+      ImGui::DockBuilderSetNodeSize(dock, ImVec2(std::max(area.x, 100.0f), std::max(area.y - status, 100.0f)));
       dockGrid(dock, panes, window.columns);
       ImGui::DockBuilderFinish(dock);
       window.layoutPending = false;
       }
-    if (visible) ImGui::DockSpace(dock, ImVec2(0, 0));
+    if (visible) ImGui::DockSpace(dock, ImVec2(0, -status));
     else ImGui::DockSpace(dock, ImVec2(0, 0), ImGuiDockNodeFlags_KeepAliveOnly);
+    if (visible && window.gui)
+      {
+      ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 8.0f);
+      renderStatusBar(item, _hoverText);
+      }
     ImGui::End();
+    if (!open)
+      {
+      // closed by its x: the application decides (a plot file asks to be saved), or its canvases are removed
+      if (!onCloseWindow || onCloseWindow(int(w)))
+        {
+        closeWindowContents(int(w));
+        for (int j=nPanes()-1; j>=0; j--) if (_panes[std::size_t(j)]->host() == int(w)) _panes.erase(_panes.begin() + j);
+        if (_currentPane >= nPanes()) _currentPane = 0;
+        validateCurrentWindow();
+        }
+      }
     }
   }
 
@@ -474,8 +894,9 @@ namespace Datum
   std::snprintf(name, sizeof(name), "Data %d", ++_dataCounter);
   _dataPanes.emplace_back(new DataPane(name));
   DataPane & pane = *_dataPanes.back();
-  std::string beside = _panes.empty() ? std::string() : std::string(currentPane().windowId());
-  _dockBeside.push_back(std::make_pair(std::string("###") + name, beside));
+  std::string beside = paneOfCurrentWindow();
+  if (beside.empty()) dockInCurrentWindow(pane.windowTitle().str());
+  else _dockBeside.push_back(std::make_pair(std::string("###") + name, beside));
   return pane;
   }
 
@@ -485,8 +906,9 @@ namespace Datum
   std::snprintf(name, sizeof(name), "Table %d", ++_spreadsheetCounter);
   _spreadsheetPanes.emplace_back(new SpreadsheetPane(name));
   SpreadsheetPane & pane = *_spreadsheetPanes.back();
-  std::string beside = _panes.empty() ? std::string() : std::string(currentPane().windowId());
-  _dockBeside.push_back(std::make_pair(pane.windowId(), beside));
+  std::string beside = paneOfCurrentWindow();
+  if (beside.empty()) dockInCurrentWindow(pane.windowTitle().str());
+  else _dockBeside.push_back(std::make_pair(pane.windowId(), beside));
   return pane;
   }
 
@@ -515,31 +937,19 @@ namespace Datum
   void DatumGui::closePane(int k)
   {
   if (k < 0 || k >= nPanes()) return;
-  int nMain = 0;
-  for (const auto & p : _panes) if (p->host() < 0) nMain++;
-  if (_panes[k]->host() < 0 && nMain == 1)
-    {
-    // the last canvas (moved out of the main window): an empty one takes its place in the main window
-    ImGuiWindow * window = ImGui::GetCurrentContext() ? ImGui::FindWindowByName(_panes[k]->windowId()) : nullptr;
-    if (!window || !window->Viewport || window->Viewport == ImGui::GetMainViewport())
-      {
-      // the last canvas of the main window stays, emptied
-      CanvasPane & pane = *_panes[k];
-      pane.canvas() = GRAPHICS::Canvas();
-      pane.divide(1, 1);
-      pane.setSelectedGraph(0);
-      return;
-      }
-    newPane();
-    _gridColumns = 1;
-    _layoutRequested = true;
-    }
-  // a dock space keeps its central node even when empty: lay the panes out again rather than leave a hole
+  // a dock space keeps its central node even when empty: the main window is laid out again rather than leave a hole
+  // (the canvas area stays empty when its last canvas is closed)
   ImGuiWindow * window = ImGui::GetCurrentContext() ? ImGui::FindWindowByName(_panes[k]->windowId()) : nullptr;
-  if (window && window->DockNode && window->DockNode->IsCentralNode())
+  if (window && window->DockNode && window->DockNode->IsCentralNode() && _panes[k]->host() == kMainWindow
+      && windowOfPane(k) == kMainWindow)
     {
-    _gridColumns = int(std::ceil(std::sqrt(double(nPanes() - 1))));
-    _layoutRequested = true;
+    int rest = 0;
+    for (int j=0; j<nPanes(); j++) if (j != k && _panes[std::size_t(j)]->host() == kMainWindow && windowOfPane(j) == kMainWindow) rest++;
+    if (rest > 0)
+      {
+      _gridColumns = int(std::ceil(std::sqrt(double(rest))));
+      _layoutRequested = true;
+      }
     }
   _panes.erase(_panes.begin() + k);
   if (_currentPane > k || _currentPane >= nPanes()) _currentPane = std::max(0, _currentPane - 1);
@@ -551,8 +961,7 @@ namespace Datum
   if (visible && !_fitsVisible)
     {
     // docked below the canvases the first time; afterwards where the user left it
-    ImGuiWindow * window = ImGui::GetCurrentContext() ? ImGui::FindWindowByName(FitPane::windowName()) : nullptr;
-    if (!window) _fitsDockRequested = true;
+    if (needsPlace(FitPane::windowName())) _fitsDockRequested = true;
     _fitsShownOnce = true;
     }
   _fitsVisible = visible;
@@ -560,9 +969,11 @@ namespace Datum
 
   void DatumGui::dockFitPane()
   {
-  // the node of the canvases: the largest one holding the first canvas pane but not the docked file browser
-  ImGuiID dockspace = ImHashStr("DatumDockSpace");
-  ImGuiWindow * first = _panes.empty() ? nullptr : ImGui::FindWindowByName(_panes[0]->windowId());
+  // the node of the canvases of the current window: the largest one holding its canvas but not its file browser
+  validateCurrentWindow();
+  ImGuiID dockspace = dockspaceOf(_currentWindow);
+  std::string canvas = paneOfCurrentWindow();
+  ImGuiWindow * first = canvas.empty() ? nullptr : ImGui::FindWindowByName(canvas.c_str());
   ImGuiWindow * browser = ImGui::FindWindowByName(FileBrowser::mainWindowName());
   ImGuiDockNode * browserNode = browser ? browser->DockNode : nullptr;
   auto holdsBrowser = [browserNode](ImGuiDockNode * node)
@@ -573,6 +984,7 @@ namespace Datum
   ImGuiDockNode * node = first ? first->DockNode : nullptr;
   if (!node) node = ImGui::DockBuilderGetCentralNode(dockspace);
   if (!node) return;
+  if (ImGui::DockNodeGetRootNode(node)->ID != dockspace) return;
   while (node->ParentNode && !holdsBrowser(node->ParentNode)) node = node->ParentNode;
   ImGuiID below = 0, above = 0;
   ImGui::DockBuilderSplitNode(node->ID, ImGuiDir_Down, 0.3f, &below, &above);
@@ -606,15 +1018,18 @@ namespace Datum
   bool open = true;
   // the first time: a tab beside the file browser docked in the main window, or a window of its own (never over the
   // canvases)
-  ImGuiWindow * browser = ImGui::FindWindowByName(FileBrowser::mainWindowName());
-  if (!ImGui::FindWindowByName("Canvases"))
+  if (needsPlace("Canvases"))
     {
-    if (browser && browser->DockId && browser->Viewport == ImGui::GetMainViewport()) ImGui::SetNextWindowDockID(browser->DockId);
+    ImGuiWindow * browser = nullptr;
+    for (const auto & b : _browsers)
+      if (windowOf(b->windowName()) == _currentWindow) { browser = ImGui::FindWindowByName(b->windowName()); break; }
+    if (browser && browser->DockId) ImGui::SetNextWindowDockID(browser->DockId, ImGuiCond_Always);
     else
       {
-      ImGuiViewport * main = ImGui::GetMainViewport();
-      ImGui::SetNextWindowPos(ImVec2(main->WorkPos.x + 40, main->WorkPos.y + 60));
-      ImGui::SetNextWindowSize(ImVec2(320, 420));
+      ImGuiViewport * here = activeViewport();
+      ImGui::SetNextWindowDockID(0, ImGuiCond_Always);
+      ImGui::SetNextWindowPos(ImVec2(here->WorkPos.x + 40, here->WorkPos.y + 60), ImGuiCond_Always);
+      ImGui::SetNextWindowSize(ImVec2(320, 420), ImGuiCond_Always);
       }
     }
   if (ImGui::Begin("Canvases", &open))
@@ -706,15 +1121,25 @@ namespace Datum
   ImGuiIO & io = ImGui::GetIO();
   while (true)
     {
-    if (glfwWindowShouldClose(_window) || _exitRequested)
+    if (glfwWindowShouldClose(_window) && !_exitRequested)
+      {
+      // the x of the main window: hidden if other DatumGui windows are open, otherwise the application ends
+      glfwSetWindowShouldClose(_window, GLFW_FALSE);
+      bool others = nOpenWindows() > (_mainHidden ? 0 : 1);
+      if (!others) _exitRequested = true;
+      else if (!hideMainWindow()) setStatus("Save or close the trees of the browsers of the main window first");
+      }
+    if (_exitRequested)
       {
       bool close = !onCloseRequest || onCloseRequest();
       if (close) break;
       glfwSetWindowShouldClose(_window, GLFW_FALSE);
       _exitRequested = false;
+      if (nOpenWindows() == 0) showMainWindow();          // the exit was cancelled: a window to work in
       }
     glfwWaitEventsTimeout(0.05);                       // low CPU use when idle
-    if (glfwGetWindowAttrib(_window, GLFW_ICONIFIED)) { ImGui_ImplGlfw_Sleep(10); continue; }
+    // the main window minimized (and no other DatumGui window): nothing to draw
+    if (glfwGetWindowAttrib(_window, GLFW_ICONIFIED) && nOpenWindows() <= 1) { ImGui_ImplGlfw_Sleep(10); continue; }
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -743,7 +1168,19 @@ namespace Datum
 
   void DatumGui::renderFrame()
   {
-  const MenuItem * hovered = _menuBar.render();
+  // the DatumGui windows on screen (viewports), from the last frame: where each pane is
+  _viewportWindows.clear();
+  if (!_mainHidden) _viewportWindows[ImGui::GetMainViewport()->ID] = kMainWindow;
+  for (int k=0; k<nPaneWindows(); k++)
+    if (windowOpen(k)) if (ImGuiViewport * v = viewportOf(k)) _viewportWindows[v->ID] = k;
+  for (std::size_t j=0; j<_windows.size(); j++)
+    if (_windows[j].open) if (ImGuiViewport * v = viewportOf(-2 - int(j))) _viewportWindows[v->ID] = -2 - int(j);
+  validateCurrentWindow();
+  gActiveViewport = viewportOf(_currentWindow);
+  FileDialog::viewport = gActiveViewport;
+  bool menuOpen = false;
+  const MenuItem * hovered = _menuBar.render(&menuOpen);
+  if (menuOpen && !_mainHidden) setCurrentWindow(kMainWindow);
   String hoverText;
 
   // main area: a dock space (the file browser and other tools dock around the canvases)
@@ -764,8 +1201,10 @@ namespace Datum
     }
   if (_layoutRequested) { buildDockLayout(dockspace); _layoutRequested = false; }
   ImGui::DockSpaceOverViewport(dockspace, viewport);
-  if (_sideDockRequested) { dockSideWindow(dockspace); _sideDockRequested = false; }
-  renderPaneWindows();
+  if (_sideDockRequested) { dockSideWindow(dockspaceOf(toolWindow())); _sideDockRequested = false; }
+  renderPaneWindows(hovered);
+  renderGuiWindows(hovered);
+  processDockRequests();
   renderCanvases(hoverText);
 
   renderBrowser();
@@ -773,13 +1212,21 @@ namespace Datum
   _fileDialog.render();
   renderMessage();
   if (onFrame) onFrame();
-
+  // the last DatumGui window closed otherwise (e.g. the window of a plot file): the application ends
+  if (_mainHidden && nOpenWindows() == 0) requestExit();
   }
 
   FileBrowser & DatumGui::activeBrowser()
   {
   if (_activeBrowser < 0 || _activeBrowser >= int(_browsers.size())) _activeBrowser = 0;
   return *_browsers[_activeBrowser];
+  }
+
+  void DatumGui::setBrowserVisible(bool visible)
+  {
+  if (visible && !_settings.browserVisible && needsPlace(FileBrowser::mainWindowName()))
+    dockInCurrentWindow(FileBrowser::mainWindowName(), true);
+  _settings.browserVisible = visible;
   }
 
   void DatumGui::closeBrowser(FileBrowser & browser)
@@ -834,11 +1281,18 @@ namespace Datum
   {
   if (_sideWindow.empty()) return;
   ImGuiWindow * window = ImGui::FindWindowByName(_sideWindow.c_str());
-  if (window && window->DockId != 0 && ImGui::DockBuilderGetNode(window->DockId)) return;   // its place is kept
+  if (window && window->DockId != 0 && ImGui::DockBuilderGetNode(window->DockId) && !needsPlace(_sideWindow.c_str()))
+    return;   // its place is kept
+  if (window && !window->DockId && !needsPlace(_sideWindow.c_str())) return;   // floating where the user left it
   ImGuiDockNode * area = ImGui::DockBuilderGetNode(dockspace);
-  if (!area) { _layoutRequested = true; return; }
-  // the canvases: beside the browser docked on the left, or the whole dock space
-  ImGuiWindow * browser = ImGui::FindWindowByName(FileBrowser::mainWindowName());
+  if (!area) { if (dockspace == dockspaceOf(kMainWindow)) _layoutRequested = true; return; }
+  // the canvases: beside a browser docked on the left of that window, or the whole dock space
+  ImGuiWindow * browser = nullptr;
+  for (const auto & b : _browsers)
+    {
+    ImGuiWindow * w = ImGui::FindWindowByName(b->windowName());
+    if (w && w->DockNode && ImGui::DockNodeGetRootNode(w->DockNode)->ID == dockspace) { browser = w; break; }
+    }
   if (browser && browser->DockNode && browser->DockNode->ParentNode)
     {
     ImGuiDockNode * parent = browser->DockNode->ParentNode;
@@ -854,7 +1308,8 @@ namespace Datum
   void DatumGui::buildPaneGrid(unsigned int nodeId)
   {
   std::vector<CanvasPane *> panes;
-  for (const auto & p : _panes) if (p->host() < 0) panes.push_back(p.get());
+  for (int k=0; k<nPanes(); k++)
+    if (_panes[std::size_t(k)]->host() == kMainWindow && windowOfPane(k) == kMainWindow) panes.push_back(_panes[std::size_t(k)].get());
   dockGrid(nodeId, panes, _gridColumns);
   }
 
@@ -900,45 +1355,50 @@ namespace Datum
         break;
         }
   _browsersToClose.clear();
-  if (!_settings.browserVisible) return;
-  ImGuiViewport * viewport = ImGui::GetMainViewport();
-  if (_undockRequested)
+  ImGuiViewport * viewport = activeViewport();
+  // the first browser, if shown (hiding it leaves the other browsers shown)
+  if (_settings.browserVisible)
     {
-    // a window of its own: next to the left edge of the main window, outside it if the screen allows
-    ImGui::SetNextWindowDockID(0, ImGuiCond_Always);
-    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 40, viewport->WorkPos.y + 60), ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2(380, viewport->WorkSize.y*0.75f), ImGuiCond_Always);
-    _undockRequested = false;
+    if (_undockRequested)
+      {
+      // a window of its own: next to the left edge of the main window, outside it if the screen allows
+      ImGui::SetNextWindowDockID(0, ImGuiCond_Always);
+      ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 40, viewport->WorkPos.y + 60), ImGuiCond_Always);
+      ImGui::SetNextWindowSize(ImVec2(380, viewport->WorkSize.y*0.75f), ImGuiCond_Always);
+      _undockRequested = false;
+      }
+    else
+      ImGui::SetNextWindowSize(ImVec2(380, viewport->WorkSize.y*0.75f), ImGuiCond_FirstUseEver);
+    ImGuiWindowClass browserClass;
+    if (!_settings.browserDocked) browserClass.ViewportFlagsOverrideSet = ImGuiViewportFlags_NoAutoMerge;
+    ImGui::SetNextWindowClass(&browserClass);
+    bool visible = true;
+    if (ImGui::Begin(FileBrowser::mainWindowName(), &visible))
+      {
+      // follow what the user did with the mouse (docking or undocking the window)
+      if (!_layoutRequested) _settings.browserDocked = ImGui::IsWindowDocked();
+      if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+        { _activeBrowser = 0; _lastFocus = kFocusBrowser; noteFocus(FileBrowser::mainWindowName()); }
+      _browsers.front()->render();
+      }
+    else if (!_layoutRequested) _settings.browserDocked = ImGui::IsWindowDocked();
+    ImGui::End();
+    _settings.browserVisible = visible;
     }
-  else
-    ImGui::SetNextWindowSize(ImVec2(380, viewport->WorkSize.y*0.75f), ImGuiCond_FirstUseEver);
-  ImGuiWindowClass browserClass;
-  if (!_settings.browserDocked) browserClass.ViewportFlagsOverrideSet = ImGuiViewportFlags_NoAutoMerge;
-  ImGui::SetNextWindowClass(&browserClass);
-  bool visible = true;
-  if (ImGui::Begin(FileBrowser::mainWindowName(), &visible))
-    {
-    // follow what the user did with the mouse (docking or undocking the window)
-    if (!_layoutRequested) _settings.browserDocked = ImGui::IsWindowDocked();
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { _activeBrowser = 0; _lastFocus = kFocusBrowser; }
-    _browsers.front()->render();
-    }
-  else if (!_layoutRequested) _settings.browserDocked = ImGui::IsWindowDocked();
-  ImGui::End();
-  _settings.browserVisible = visible;
 
   // the other browsers: each in a pane of its own when it is made, below the last browser (the area of that browser
   // split in two; a floating window if the browsers are not docked), then wherever they are moved
   for (const std::string & name : _browsersToPlace)
     {
+    // below the last browser of the current DatumGui window, or on the left of that window
     ImGuiWindow * last = nullptr;
     for (std::size_t k=_browsers.size(); k-- > 0 && !last; )
-      if (name != _browsers[k]->windowName())
+      if (name != _browsers[k]->windowName() && windowOf(_browsers[k]->windowName()) == _currentWindow)
         {
         ImGuiWindow * w = ImGui::FindWindowByName(_browsers[k]->windowName());
         if (w && w->DockNode) last = w;
         }
-    if (!last) continue;
+    if (!last) { dockInCurrentWindow(name, true); continue; }
     ImGuiID below = 0, above = 0;
     ImGui::DockBuilderSplitNode(last->DockNode->ID, ImGuiDir_Down, 0.5f, &below, &above);
     ImGui::DockBuilderDockWindow(name.c_str(), below);
@@ -952,7 +1412,8 @@ namespace Datum
     bool open = true;
     if (ImGui::Begin(browser.windowName(), &open))
       {
-      if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { _activeBrowser = int(k); _lastFocus = kFocusBrowser; }
+      if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+        { _activeBrowser = int(k); _lastFocus = kFocusBrowser; noteFocus(browser.windowName()); }
       browser.render();
       }
     ImGui::End();
@@ -967,7 +1428,7 @@ namespace Datum
   void DatumGui::renderCanvases(String & hoverText)
   {
   // panes added since the last frame: docked beside the pane that was current, splitting its area
-  ImGuiID dockspace = ImHashStr("DatumDockSpace");
+  ImGuiID dockspace = dockspaceOf(_currentWindow);
   for (const auto & request : _dockBeside)
     {
     ImGuiWindow * target = request.second.empty() ? nullptr : ImGui::FindWindowByName(request.second.c_str());
@@ -1008,8 +1469,11 @@ namespace Datum
     if (pane.canvas().registry())
       {
       String group = "Main window";
+      int where = windowOfPane(k);
       if (pane.host() >= 0 && pane.host() < nPaneWindows())
         group = _paneWindows[std::size_t(pane.host())].title;
+      else if (where <= -2 && std::size_t(-2 - where) < _windows.size())
+        group = _windows[std::size_t(-2 - where)].title;
       else if (outside)
         {
         auto found = _windowNumbers.find(window->Viewport->ID);
@@ -1028,11 +1492,11 @@ namespace Datum
       {
       // the pane whose window gets the focus (click, tab) becomes current
       bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-      if (focused) _lastFocus = kFocusCanvas;
+      if (focused) { _lastFocus = kFocusCanvas; noteFocus(pane.windowId()); }
       if (focused && _focusedPane != k) { _currentPane = k; _focusedPane = k; }
       ImVec2 size = ImGui::GetContentRegionAvail();
       bool clicked = pane.render(size.x, size.y, k == _currentPane, _font);
-      if (clicked) _currentPane = k;
+      if (clicked) { _currentPane = k; noteFocus(pane.windowId()); }
       if (!pane.hoverText().isNull()) hoverText = pane.hoverText();
       float x, y, w, h;
       pane.canvasRect(x, y, w, h);
@@ -1053,6 +1517,7 @@ namespace Datum
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 6));
     bool visible = ImGui::Begin(pane.windowTitle().data(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) noteFocus(pane.windowTitle().data());
     if (visible) pane.render();
     ImGui::End();
     if (open) k++;
@@ -1066,6 +1531,7 @@ namespace Datum
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 6));
     bool visible = ImGui::Begin(pane.windowTitle().data(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) noteFocus(pane.windowTitle().data());
     if (visible) pane.render();
     ImGui::End();
     if (open) k++;
@@ -1115,7 +1581,7 @@ namespace Datum
   void DatumGui::renderMessage()
   {
   if (_messageRequested) { ImGui::OpenPopup("##message"); _messageRequested = false; }
-  ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+  ImGui::SetNextWindowPos(activeViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
   if (ImGui::BeginPopupModal("##message", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
     {
     ImGui::TextUnformatted(_messageTitle.data());

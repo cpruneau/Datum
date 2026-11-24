@@ -106,7 +106,22 @@ namespace Datum
   return (chord & ~ImGuiMod_Mask_) ? int(chord) : 0;
   }
 
-  const MenuItem * MenuBar::render()
+  const MenuItem * MenuBar::renderMenus(bool & opened)
+  {
+  const MenuItem * hovered = nullptr;
+  for (auto & menu : _menus)
+    {
+    if (ImGui::BeginMenu(menu->name().data(), menu->isEnabled()))
+      {
+      opened = true;
+      menu->renderContents(hovered);
+      ImGui::EndMenu();
+      }
+    }
+  return hovered;
+  }
+
+  const MenuItem * MenuBar::render(bool * opened)
   {
   // listeners registered on the bar reach every item
   for (auto & menu : _menus)
@@ -115,21 +130,14 @@ namespace Datum
     menu->collectItems(items);
     for (auto item : items) for (auto listener : _listeners) item->addListener(listener);
     }
-
   const MenuItem * hovered = nullptr;
+  bool open = false;
   if (ImGui::BeginMainMenuBar())
     {
-    for (auto & menu : _menus)
-      {
-      if (ImGui::BeginMenu(menu->name().data(), menu->isEnabled()))
-        {
-        menu->renderContents(hovered);
-        ImGui::EndMenu();
-        }
-      }
+    hovered = renderMenus(open);
     ImGui::EndMainMenuBar();
     }
-
+  if (opened) *opened = open;
   // shortcuts: fired even when the menus are closed, unless a text field has the keyboard
   if (!ImGui::GetIO().WantTextInput)
     {

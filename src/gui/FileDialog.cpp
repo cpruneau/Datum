@@ -23,6 +23,8 @@ namespace Datum
   namespace GUI
   {
 
+  ImGuiViewport * FileDialog::viewport = nullptr;
+
   FileDialog::FileDialog()
   :
   _mode(kOpenFile),
@@ -101,7 +103,7 @@ namespace Datum
     _open = true;
     }
   if (!_open) return;
-  ImGuiViewport * viewport = ImGui::GetMainViewport();
+  ImGuiViewport * viewport = FileDialog::viewport ? FileDialog::viewport : ImGui::GetMainViewport();   // the window used last
   ImGui::SetNextWindowSize(ImVec2(std::min(760.0f, viewport->WorkSize.x*0.9f), std::min(520.0f, viewport->WorkSize.y*0.9f)), ImGuiCond_Appearing);
   ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
   bool keepOpen = true;
