@@ -502,7 +502,6 @@ namespace Datum
   {
   CanvasPane & pane = newPane();
   _dockBelow.push_back(std::make_pair(std::make_pair(std::string(pane.windowId()), windowId), fraction));
-  setCurrentPane(nPanes() - 1);
   return pane;
   }
 
@@ -765,6 +764,7 @@ namespace Datum
     }
   if (_layoutRequested) { buildDockLayout(dockspace); _layoutRequested = false; }
   ImGui::DockSpaceOverViewport(dockspace, viewport);
+  if (_sideDockRequested) { dockSideWindow(dockspace); _sideDockRequested = false; }
   renderPaneWindows();
   renderCanvases(hoverText);
 
@@ -820,7 +820,7 @@ namespace Datum
     ImGui::DockBuilderSplitNode(dockId, ImGuiDir_Left, 0.22f, &left, &canvases);
     ImGui::DockBuilderDockWindow(FileBrowser::mainWindowName(), left);
     }
-  if (!_sideWindow.empty())
+  if (!_sideWindow.empty() && _sideVisible)
     {
     ImGuiID side = 0;
     ImGui::DockBuilderSplitNode(canvases, ImGuiDir_Left, _sideFraction, &side, &canvases);
@@ -828,6 +828,27 @@ namespace Datum
     }
   buildPaneGrid(canvases);
   ImGui::DockBuilderFinish(dockId);
+  }
+
+  void DatumGui::dockSideWindow(unsigned int dockspace)
+  {
+  if (_sideWindow.empty()) return;
+  ImGuiWindow * window = ImGui::FindWindowByName(_sideWindow.c_str());
+  if (window && window->DockId != 0 && ImGui::DockBuilderGetNode(window->DockId)) return;   // its place is kept
+  ImGuiDockNode * area = ImGui::DockBuilderGetNode(dockspace);
+  if (!area) { _layoutRequested = true; return; }
+  // the canvases: beside the browser docked on the left, or the whole dock space
+  ImGuiWindow * browser = ImGui::FindWindowByName(FileBrowser::mainWindowName());
+  if (browser && browser->DockNode && browser->DockNode->ParentNode)
+    {
+    ImGuiDockNode * parent = browser->DockNode->ParentNode;
+    ImGuiDockNode * other = parent->ChildNodes[0] == browser->DockNode ? parent->ChildNodes[1] : parent->ChildNodes[0];
+    if (other) area = other;
+    }
+  ImGuiID side = 0, rest = 0;
+  ImGui::DockBuilderSplitNode(area->ID, ImGuiDir_Left, _sideFraction, &side, &rest);
+  ImGui::DockBuilderDockWindow(_sideWindow.c_str(), side);
+  ImGui::DockBuilderFinish(dockspace);
   }
 
   void DatumGui::buildPaneGrid(unsigned int nodeId)
