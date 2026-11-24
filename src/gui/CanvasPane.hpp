@@ -159,6 +159,15 @@ namespace Datum
   //! @return true if the pane was clicked (it should become the current pane)
   bool render(float width, float height, bool isCurrent, ImFont * font);
 
+  //! @name Tools of a graph (menus of the context menu, also drawn by the Operations menu of DatumGui)
+  //! Each draws a sub-menu (disabled when the graph has nothing it applies to) inside an open menu.
+  //! @{
+  void renderCompareMenu(int graph);      //!< Compare: two histograms of the same rank (difference, ratio, significance)
+  void renderRebinItemsMenu(int graph);   //!< Rebin: a histogram of the graph
+  void renderFitMenu(int graph);          //!< Fit: an item of the graph that can be fitted
+  void renderShowDataMenu(int graph);     //!< Show Data: the values of data points shown, as a table
+  //! @}
+
   //! @brief Position under the mouse in data coordinates, or empty. @return text
   const String & hoverText() const { return _hoverText; }
   //! @brief Screen rectangle of the canvas at the last render (pixels). @param x left edge
@@ -191,6 +200,9 @@ namespace Datum
   //! Called while the context menu of graph k is drawn, after the items of the pane: menu items of the application
   //! (e.g. Save Projection).
   std::function<void(int graph)> contextMenuExtras;
+  //! Called by Sum, Difference, Product, Ratio and Scale in the context menu of a graph, with the graph and the
+  //! operation (0 to 4: as HistogramOperations::Operation).
+  std::function<void(int graph, int operation)> onOperation;
   //! Called by "Compare" in the context menu of a graph, for two histograms of the same rank shown in it, with the
   //! comparison chosen (see Comparison).
   std::function<void(const MATH::DataPoints * first, const MATH::DataPoints * second,
