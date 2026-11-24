@@ -17,6 +17,7 @@
 #include "CanvasRegistry.hpp"
 #include "ParameterizedFunction.hpp"
 #include "Histogram.hpp"
+#include "Profile.hpp"
 #include "FitRecord.hpp"
 #include "ImGuiPainter.hpp"
 #include "GraphEditor.hpp"
@@ -373,6 +374,7 @@ namespace Datum
       }
     ImGui::EndMenu();
     }
+  if (contextMenuExtras) contextMenuExtras(_contextGraph);
   if (onSaveGraph || onSaveCanvas || onRename) ImGui::Separator();
   if (onSaveGraph && ImGui::MenuItem("Save Graph As...")) onSaveGraph(_contextGraph);
   if (onSaveCanvas && ImGui::MenuItem("Save Canvas As...")) onSaveCanvas();
@@ -455,6 +457,41 @@ namespace Datum
       }
     ImGui::EndMenu();
     }
+  // a histogram of rank 2 drawn as a map (plane view): projected onto x or y, over the whole range of the other axis,
+  // or over a range of it chosen with the mouse (then marked by two lines that can be dragged)
+  std::vector<size_t> projectable;
+  if (!graph.is3D())
+    for (size_t k=0; k<graph.items().size(); k++)
+      {
+      const GraphItem & item = graph.items()[k];
+      if (item.kind() == GraphItem::kData && item.isMap() && dynamic_cast<const MATH::Histogram*>(item.data())
+          && !dynamic_cast<const MATH::Profile*>(item.data())) projectable.push_back(k);
+      }
+  if (onProject && !projectable.empty() && ImGui::BeginMenu("Project"))
+    {
+    auto entries = [&](size_t k)
+      {
+      if (ImGui::MenuItem("Onto X, Whole Y Range")) onProject(_contextGraph, int(k), 0, true);
+      ImGui::SetItemTooltip("The bins of every y summed for each x, shown in a canvas below; the lines of the range of y "
+                            "can then be dragged on the map");
+      if (ImGui::MenuItem("Onto X, Y Range Chosen...")) onProject(_contextGraph, int(k), 0, false);
+      ImGui::SetItemTooltip("Then drag across the map, up or down, to choose the range of y summed");
+      if (ImGui::MenuItem("Onto Y, Whole X Range")) onProject(_contextGraph, int(k), 1, true);
+      ImGui::SetItemTooltip("The bins of every x summed for each y, shown in a canvas below; the lines of the range of x "
+                            "can then be dragged on the map");
+      if (ImGui::MenuItem("Onto Y, X Range Chosen...")) onProject(_contextGraph, int(k), 1, false);
+      ImGui::SetItemTooltip("Then drag across the map, left or right, to choose the range of x summed");
+      };
+    if (projectable.size() == 1) entries(projectable[0]);
+    else
+      for (size_t k : projectable)
+        {
+        String label = graph.items()[k].label().isNull() ? String("(unnamed)") : graph.items()[k].label();
+        String entry = label + String("##project") + String(std::to_string(k));
+        if (ImGui::BeginMenu(entry.data())) { entries(k); ImGui::EndMenu(); }
+        }
+    ImGui::EndMenu();
+    }
   if (curves)
     {
     bool residuals = graph.showResiduals();
@@ -528,6 +565,7 @@ namespace Datum
 
   drawShapeOverlay(painter);
   drawCurveKnots(painter);
+  drawRangeMarkers(painter);
 
   // drop target: an object dragged from the file browser goes to the graph under the mouse
   if (ImGui::BeginDragDropTarget())
@@ -683,6 +721,103 @@ namespace Datum
     return true;
     }
 
+  // ---- a line of a range marker dragged: the owner is told when the mouse rests, and when it is released
+  if (_drag.kind == kMoveRange)
+    {
+    if (_drag.shape < 0 || _drag.shape >= int(_markers.size()) || _drag.graph < 0 || _drag.graph >= _canvas.nGraphs())
+      {
+      _drag = Drag();
+      return false;
+      }
+    RangeMarker & m = _markers[std::size_t(_drag.shape)];
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+      {
+      m.low = _drag.initialLow;
+      m.high = _drag.initialHigh;
+      RangeMarker back = m;
+      _drag = Drag();
+      if (onRangeMoved) onRangeMoved(back.id, back.low, back.high, true);
+      return true;
+      }
+    const Graph & g = _canvas.graph(_drag.graph);
+    const Graph::View view = g.view();
+    double v = rangeValue(_drag.graph, m.axis, p);
+    double lo = view.minimum(m.axis), hi = view.maximum(m.axis);
+    if (v < lo) v = lo;
+    if (v > hi) v = hi;
+    if (_drag.vertex == 0) m.low = v; else m.high = v;
+    ImGui::SetMouseCursor(m.axis == 0 ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+    char text[160];
+    std::snprintf(text, sizeof(text), "%s from %.5g to %.5g (released or at rest: projected again)", m.axis == 0 ? "x" : "y",
+                  std::min(m.low, m.high), std::max(m.low, m.high));
+    _hoverText = text;
+    RangeMarker now = m;
+    double time = ImGui::GetTime();
+    if (std::fabs(mouse.x - _drag.restX) + std::fabs(mouse.y - _drag.restY) > 1.0f)
+      {
+      _drag.restX = mouse.x;
+      _drag.restY = mouse.y;
+      _drag.restTime = time;
+      _drag.reported = false;
+      }
+    else if (!_drag.reported && time - _drag.restTime > 0.3)
+      {
+      _drag.reported = true;
+      if (onRangeMoved) onRangeMoved(now.id, std::min(now.low, now.high), std::max(now.low, now.high), false);
+      }
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+      {
+      if (m.low > m.high) std::swap(m.low, m.high);
+      now = m;
+      _drag = Drag();
+      if (onRangeMoved) onRangeMoved(now.id, now.low, now.high, true);
+      }
+    return true;
+    }
+  // ---- a range being chosen: the band from where the drag started to the mouse
+  if (_drag.kind == kSelectRange)
+    {
+    if (_drag.graph < 0 || _drag.graph >= _canvas.nGraphs() || ImGui::IsKeyPressed(ImGuiKey_Escape))
+      {
+      cancelRangeSelection();
+      _drag = Drag();
+      _hoverText = "Range not chosen";
+      return true;
+      }
+    const Graph & g = _canvas.graph(_drag.graph);
+    float fx0, fy0, fx1, fy1;
+    painter.toScreen(Point2D(g.frameXLow(), g.frameYHigh()), fx0, fy0);
+    painter.toScreen(Point2D(g.frameXHigh(), g.frameYLow()), fx1, fy1);
+    float a = _rangeAxis == 0 ? std::min(std::max(_drag.startX, fx0), fx1) : std::min(std::max(_drag.startY, fy0), fy1);
+    float b = _rangeAxis == 0 ? std::min(std::max(mouse.x, fx0), fx1) : std::min(std::max(mouse.y, fy0), fy1);
+    if (std::fabs(b - a) > 3.0f) _drag.moved = true;
+    ImVec2 c0 = _rangeAxis == 0 ? ImVec2(std::min(a, b), fy0) : ImVec2(fx0, std::min(a, b));
+    ImVec2 c1 = _rangeAxis == 0 ? ImVec2(std::max(a, b), fy1) : ImVec2(fx1, std::max(a, b));
+    ImU32 orange = ImGui::GetColorU32(ImVec4(0.95f, 0.55f, 0.10f, 1.0f));
+    drawList->AddRectFilled(c0, c1, ImGui::GetColorU32(ImVec4(0.95f, 0.55f, 0.10f, 0.15f)));
+    drawList->AddRect(c0, c1, orange, 0.0f, 0, 1.5f);
+    ImGui::SetMouseCursor(_rangeAxis == 0 ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+    Point2D start = painter.toCanvas(_rangeAxis == 0 ? a : fx0, _rangeAxis == 0 ? fy0 : a);
+    Point2D end   = painter.toCanvas(_rangeAxis == 0 ? b : fx0, _rangeAxis == 0 ? fy0 : b);
+    double v0 = rangeValue(_drag.graph, _rangeAxis, start), v1 = rangeValue(_drag.graph, _rangeAxis, end);
+    char text[160];
+    std::snprintf(text, sizeof(text), "%s from %.5g to %.5g (release to project; Escape: cancel)", _rangeAxis == 0 ? "x" : "y",
+                  std::min(v0, v1), std::max(v0, v1));
+    _hoverText = text;
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+      {
+      bool chosen = _drag.moved && v0 != v1;
+      _drag = Drag();
+      if (chosen)
+        {
+        std::function<void(double, double)> done = _rangeDone;
+        cancelRangeSelection();
+        if (done) done(std::min(v0, v1), std::max(v0, v1));
+        }
+      }
+    return true;
+    }
+
   // ---- a drag in progress
   if (_drag.kind != kNoDrag)
     {
@@ -739,6 +874,11 @@ namespace Datum
 
   // ---- the edited curve: its knots and the curve itself, before the other parts of the graph
   if (_curve && k >= 0 && k == curveGraph() && handleCurve(painter, k)) return true;
+
+  // ---- a range being chosen; the lines of the ranges marked
+  if (_rangeGraph >= 0 && handleRangeSelection(painter, k)) return true;
+  _hoverMarker = -1;
+  if (k >= 0 && handleRangeMarkers(painter, k)) return true;
 
   // ---- shapes (over everything else): the handles of the selected one, then the shape under the mouse
   if (k >= 0)
@@ -1202,6 +1342,221 @@ namespace Datum
     bool dragged = _drag.kind == kMoveKnot && _drag.vertex == int(j);
     drawList->AddCircleFilled(ImVec2(sx, sy), dragged ? 6.0f : 5.0f, dragged ? blue : white);
     drawList->AddCircle(ImVec2(sx, sy), dragged ? 6.0f : 5.0f, blue, 0, 2.0f);
+    }
+  }
+
+  // ------------------------------------------------------------------------------------------------ ranges marked
+
+  void CanvasPane::setRangeMarker(const RangeMarker & marker)
+  {
+  if (marker.graph < 0 || marker.graph >= _canvas.nGraphs()) return;
+  for (auto & m : _markers) if (m.id == marker.id) { m = marker; return; }
+  _markers.push_back(marker);
+  }
+
+  void CanvasPane::removeRangeMarker(int id)
+  {
+  for (std::size_t k=0; k<_markers.size(); k++)
+    if (_markers[k].id == id)
+      {
+      if (_drag.kind == kMoveRange) _drag = Drag();
+      _markers.erase(_markers.begin() + long(k));
+      return;
+      }
+  }
+
+  const CanvasPane::RangeMarker * CanvasPane::rangeMarker(int id) const
+  {
+  for (const auto & m : _markers) if (m.id == id) return &m;
+  return nullptr;
+  }
+
+  void CanvasPane::selectRange(int graph, int axis, const std::function<void(double, double)> & done)
+  {
+  if (graph < 0 || graph >= _canvas.nGraphs()) return;
+  _rangeGraph = graph;
+  _rangeAxis = axis == 0 ? 0 : 1;
+  _rangeDone = done;
+  }
+
+  void CanvasPane::moveRangeLine(int id, int line, double value)
+  {
+  for (auto & m : _markers)
+    {
+    if (m.id != id) continue;
+    if (line == 0) m.low = value; else m.high = value;
+    if (m.low > m.high) std::swap(m.low, m.high);
+    RangeMarker now = m;
+    if (onRangeMoved) onRangeMoved(now.id, now.low, now.high, true);
+    return;
+    }
+  }
+
+  double CanvasPane::rangeValue(int graph, int axis, const Point2D & p) const
+  {
+  const Graph & g = _canvas.graph(graph);
+  double x, y;
+  g.fromCanvas(g.view(), p, x, y);
+  return axis == 0 ? x : y;
+  }
+
+  bool CanvasPane::rangeLine(ImGuiPainter & painter, const RangeMarker & m, int line, float & x0, float & y0, float & x1,
+                             float & y1, float & hx, float & hy) const
+  {
+  if (m.graph < 0 || m.graph >= _canvas.nGraphs()) return false;
+  const Graph & g = _canvas.graph(m.graph);
+  if (g.is3D()) return false;
+  const Graph::View view = g.view();
+  double v = line == 0 ? m.low : m.high;
+  Point2D q = m.axis == 0 ? g.toCanvas(view, v, view.yMinimum) : g.toCanvas(view, view.xMinimum, v);
+  float c = m.axis == 0 ? q.x() : q.y();
+  float lo = m.axis == 0 ? g.frameXLow() : g.frameYLow(), hi = m.axis == 0 ? g.frameXHigh() : g.frameYHigh();
+  float slack = 1.0E-4f*(hi - lo);
+  if (!std::isfinite(c) || c < lo - slack || c > hi + slack) return false;
+  if (m.axis == 0)
+    {
+    painter.toScreen(Point2D(c, g.frameYLow()), x0, y0);    // bottom
+    painter.toScreen(Point2D(c, g.frameYHigh()), x1, y1);   // top: the handle
+    }
+  else
+    {
+    painter.toScreen(Point2D(g.frameXLow(), c), x0, y0);    // left
+    painter.toScreen(Point2D(g.frameXHigh(), c), x1, y1);   // right: the handle
+    }
+  hx = x1;
+  hy = y1;
+  return true;
+  }
+
+  bool CanvasPane::handleRangeMarkers(ImGuiPainter & painter, int k)
+  {
+  ImVec2 mouse = ImGui::GetMousePos();
+  const float tolerance = 5.0f, handle = 9.0f;   // pixels
+  for (std::size_t i=0; i<_markers.size(); i++)
+    {
+    const RangeMarker & m = _markers[i];
+    if (m.graph != k) continue;
+    for (int line=0; line<2; line++)
+      {
+      float x0, y0, x1, y1, hx, hy;
+      if (!rangeLine(painter, m, line, x0, y0, x1, y1, hx, hy)) continue;
+      bool onHandle = std::fabs(mouse.x - hx) <= handle && std::fabs(mouse.y - hy) <= handle;
+      bool onLine = m.axis == 0 ? std::fabs(mouse.x - x0) <= tolerance && mouse.y >= y1 && mouse.y <= y0
+                                : std::fabs(mouse.y - y0) <= tolerance && mouse.x >= x0 && mouse.x <= x1;
+      if (!onHandle && !onLine) continue;
+      _hoverMarker = int(i);
+      _hoverLine = line;
+      ImGui::SetMouseCursor(m.axis == 0 ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+      char text[200];
+      std::snprintf(text, sizeof(text), "%s = %.5g, %s end of the range %.5g to %.5g (drag to move it)",
+                    m.axis == 0 ? "x" : "y", line == 0 ? m.low : m.high, line == 0 ? "lower" : "upper", m.low, m.high);
+      _hoverText = text;
+      if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) return false;   // the context menu of the graph
+      if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        {
+        Drag drag;
+        drag.kind = kMoveRange;
+        drag.graph = k;
+        drag.shape = int(i);
+        drag.vertex = line;
+        drag.initialLow = m.low;
+        drag.initialHigh = m.high;
+        drag.startX = drag.restX = mouse.x;
+        drag.startY = drag.restY = mouse.y;
+        drag.restTime = ImGui::GetTime();
+        drag.reported = true;
+        _drag = drag;
+        _selectedGraph = k;
+        }
+      return true;
+      }
+    }
+  return false;
+  }
+
+  bool CanvasPane::handleRangeSelection(ImGuiPainter & painter, int k)
+  {
+  if (ImGui::IsKeyPressed(ImGuiKey_Escape)) { cancelRangeSelection(); _hoverText = "Range not chosen"; return true; }
+  bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+  if (_rangeGraph >= _canvas.nGraphs()) { cancelRangeSelection(); return false; }
+  const Graph & g = _canvas.graph(_rangeGraph);
+  ImVec2 mouse = ImGui::GetMousePos();
+  Point2D p = painter.toCanvas(mouse.x, mouse.y);
+  if (k != _rangeGraph || !g.frameContains(p))
+    {
+    if (click) { cancelRangeSelection(); _hoverText = "Range not chosen"; return false; }
+    return false;
+    }
+  ImGui::SetMouseCursor(_rangeAxis == 0 ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_ResizeNS);
+  // a guide across the frame at the mouse
+  float fx0, fy0, fx1, fy1;
+  painter.toScreen(Point2D(g.frameXLow(), g.frameYHigh()), fx0, fy0);
+  painter.toScreen(Point2D(g.frameXHigh(), g.frameYLow()), fx1, fy1);
+  ImU32 orange = ImGui::GetColorU32(ImVec4(0.95f, 0.55f, 0.10f, 0.8f));
+  ImDrawList * drawList = ImGui::GetWindowDrawList();
+  if (_rangeAxis == 0) drawList->AddLine(ImVec2(mouse.x, fy0), ImVec2(mouse.x, fy1), orange, 1.0f);
+  else drawList->AddLine(ImVec2(fx0, mouse.y), ImVec2(fx1, mouse.y), orange, 1.0f);
+  char text[160];
+  std::snprintf(text, sizeof(text), "%s = %.5g: drag %s to choose the range of %s (Escape: cancel)", _rangeAxis == 0 ? "x" : "y",
+                rangeValue(k, _rangeAxis, p), _rangeAxis == 0 ? "left or right" : "up or down", _rangeAxis == 0 ? "x" : "y");
+  _hoverText = text;
+  if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) { cancelRangeSelection(); _hoverText = "Range not chosen"; return false; }
+  if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+    Drag drag;
+    drag.kind = kSelectRange;
+    drag.graph = k;
+    drag.startX = mouse.x;
+    drag.startY = mouse.y;
+    _drag = drag;
+    _selectedGraph = k;
+    }
+  return true;
+  }
+
+  void CanvasPane::drawRangeMarkers(ImGuiPainter & painter)
+  {
+  ImDrawList * drawList = ImGui::GetWindowDrawList();
+  ImU32 orange = ImGui::GetColorU32(ImVec4(0.95f, 0.55f, 0.10f, 1.0f));
+  ImU32 band   = ImGui::GetColorU32(ImVec4(0.95f, 0.55f, 0.10f, 0.10f));
+  ImU32 white  = ImGui::GetColorU32(ImVec4(1.0f, 1.0f, 1.0f, 0.85f));
+  for (std::size_t i=0; i<_markers.size(); i++)
+    {
+    const RangeMarker & m = _markers[i];
+    float x[2][6];
+    bool drawn[2];
+    for (int line=0; line<2; line++)
+      drawn[line] = rangeLine(painter, m, line, x[line][0], x[line][1], x[line][2], x[line][3], x[line][4], x[line][5]);
+    if (drawn[0] && drawn[1])   // the band between the lines
+      drawList->AddRectFilled(ImVec2(std::min(x[0][0], x[1][2]), std::min(x[0][3], x[1][1])),
+                              ImVec2(std::max(x[0][0], x[1][2]), std::max(x[0][3], x[1][1])), band);
+    for (int line=0; line<2; line++)
+      {
+      if (!drawn[line]) continue;
+      bool active = (_drag.kind == kMoveRange && _drag.shape == int(i) && _drag.vertex == line)
+                    || (_drag.kind != kMoveRange && _hoverMarker == int(i) && _hoverLine == line);
+      float x0 = x[line][0], y0 = x[line][1], x1 = x[line][2], y1 = x[line][3], hx = x[line][4], hy = x[line][5];
+      drawList->AddLine(ImVec2(x0, y0), ImVec2(x1, y1), orange, active ? 2.5f : 1.5f);
+      // the handle: a triangle on the top edge (vertical lines) or on the right edge (horizontal lines), and the value
+      float s = active ? 8.0f : 6.5f;
+      char value[32];
+      std::snprintf(value, sizeof(value), "%.4g", line == 0 ? m.low : m.high);
+      ImVec2 size = ImGui::CalcTextSize(value);
+      if (m.axis == 0)
+        {
+        drawList->AddTriangleFilled(ImVec2(hx - s, hy), ImVec2(hx + s, hy), ImVec2(hx, hy + 1.4f*s), orange);
+        ImVec2 at(line == 0 ? hx - size.x - s - 2 : hx + s + 2, hy + 1);
+        drawList->AddRectFilled(ImVec2(at.x - 1, at.y), ImVec2(at.x + size.x + 1, at.y + size.y), white);
+        drawList->AddText(at, orange, value);
+        }
+      else
+        {
+        drawList->AddTriangleFilled(ImVec2(hx, hy - s), ImVec2(hx, hy + s), ImVec2(hx - 1.4f*s, hy), orange);
+        ImVec2 at(hx - size.x - 1.4f*s - 4, line == 0 ? hy + 2 : hy - size.y - 2);
+        drawList->AddRectFilled(ImVec2(at.x - 1, at.y), ImVec2(at.x + size.x + 1, at.y + size.y), white);
+        drawList->AddText(at, orange, value);
+        }
+      }
     }
   }
 

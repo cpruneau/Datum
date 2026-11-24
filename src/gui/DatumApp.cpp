@@ -200,6 +200,7 @@ namespace Datum
   _configurationFile(),
   _configuration(),
   _gui(),
+  _projector(),
   _functions(),
   _data(),
   _files(),
@@ -269,6 +270,14 @@ namespace Datum
     }
 
   _gui.onNewPane = [this](CanvasPane & pane) { setupPane(pane); };
+  Projector::Panes panes;
+  panes.find = [this](const std::string & id) -> CanvasPane * { int k = _gui.paneIndexOfWindow(id); return k < 0 ? nullptr : &_gui.pane(k); };
+  panes.addBelow = [this](const std::string & id) -> CanvasPane & { return _gui.addPaneBelow(id); };
+  panes.close = [this](const std::string & id) { int k = _gui.paneIndexOfWindow(id); if (k >= 0) _gui.requestClosePane(k); };
+  _projector.setPanes(panes);
+  _projector.onSave = [this](const MATH::Histogram * h, const String & name, String & message)
+    { return saveProjection(h, name, message); };
+  _projector.onStatus = [this](const String & message) { _gui.setStatus(message); };
   _gui.beforePanesChange = [this]() { recordUndo(); };
   if (!_gui.initialize(_configuration.gui))
     {
@@ -365,6 +374,9 @@ namespace Datum
   pane.onFit = [this](int item) { _gui.openFitDialog(item); };
   pane.onResidualMap = [this](const MATH::DataPoints * data, unsigned int fit) { showResidualMap(data, fit); };
   pane.onProjections = [this](const MATH::DataPoints * data) { showProjections(data); };
+  pane.onProject = [this, &pane](int graph, int item, int axis, bool whole) { _projector.request(pane, graph, item, axis, whole); };
+  pane.onRangeMoved = [this](int id, double low, double high, bool final) { _projector.moved(id, low, high, final); };
+  pane.contextMenuExtras = [this, &pane](int graph) { _projector.contextMenu(pane, graph); };
   pane.onSaveGraph  = [this, &pane](int graph) { saveAs(paneIndex(pane), graph); };
   pane.onSaveCanvas = [this, &pane]() { saveAs(paneIndex(pane)); };
   pane.onRename     = [this, &pane]()
@@ -1726,6 +1738,62 @@ namespace Datum
   ImGui::End();
   }
 
+  bool DatumApp::saveProjection(const MATH::Histogram * histogram, const String & name, String & message)
+  {
+  // the folder selected in the browser used last, if it is in a data file made in DatumGui (files read from disk are
+  // not changed): the folder itself, the folder of the object selected, or the top folder of the file
+  FileBrowser & browser = _gui.activeBrowser();
+  const ObjectReference & selected = browser.selected();
+  BrowserFile * f = selected.file >= 0 ? file(selected.file) : nullptr;
+  Folder * folder = nullptr;
+  String where;
+  if (f && f->editable && f->file)
+    {
+    Folder & top = f->file->folder();
+    folder = &top;
+    if (!selected.path.isNull())
+      {
+      if (Folder * sub = top.folder(selected.path)) folder = sub;
+      else
+        {
+        std::string path = selected.path.str();
+        std::size_t slash = path.rfind('/');
+        if (slash != std::string::npos)
+          if (Folder * parent = top.folder(String(path.substr(0, slash)))) folder = parent;
+        }
+      }
+    where = folder == &top ? String("the data file ") + f->name
+                           : String("the folder ") + folder->path() + String(" of ") + f->name;
+    }
+  if (!histogram)                                              // where it would go
+    {
+    message = folder ? String("Added to ") + where
+                     : String("Added to a new data file (select a folder of a data file made in DatumGui to add it there)");
+    return true;
+    }
+  if (folder && folder->contains(name))
+    {
+    message = name + String(" is already in ") + where + String(": choose another name");
+    return false;
+    }
+  if (!folder)
+    {
+    int id = newTree(browser);
+    f = file(id);
+    if (!f || !f->file) { message = "Cannot make a new data file"; return false; }
+    folder = &f->file->folder();
+    where = String("the new data file ") + f->name;
+    }
+  try
+    {
+    folder->add(new MATH::Histogram(*histogram), name);
+    }
+  catch (const std::exception & e) { message = String("Cannot add ") + name + String(": ") + String(e.what()); return false; }
+  f->modified = true;
+  message = name + String(" added to ") + where + String(" (Save writes the file)");
+  return true;
+  }
+
   void DatumApp::showProjections(const MATH::DataPoints * data)
   {
   const MATH::Histogram * histogram = dynamic_cast<const MATH::Histogram*>(data);
@@ -1999,6 +2067,8 @@ namespace Datum
   renderRenameCanvas();
   renderPresentation();
   renderComparison();
+  _projector.update();
+  _projector.renderDialogs();
   renderTreeClosing();
   if (_showImGuiDemo) ImGui::ShowDemoWindow(&_showImGuiDemo);
   }

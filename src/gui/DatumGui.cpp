@@ -498,6 +498,14 @@ namespace Datum
   return pane;
   }
 
+  CanvasPane & DatumGui::addPaneBelow(const std::string & windowId, float fraction)
+  {
+  CanvasPane & pane = newPane();
+  _dockBelow.push_back(std::make_pair(std::make_pair(std::string(pane.windowId()), windowId), fraction));
+  setCurrentPane(nPanes() - 1);
+  return pane;
+  }
+
   int DatumGui::paneIndexOfWindow(const std::string & windowId) const
   {
   if (windowId.empty()) return -1;
@@ -952,6 +960,19 @@ namespace Datum
     ImGui::DockBuilderFinish(dockspace);
     }
   _dockBeside.clear();
+  // panes added below a window: its area split, the new pane at the bottom (beside the current pane if it is not docked)
+  for (const auto & request : _dockBelow)
+    {
+    ImGuiWindow * target = request.first.second.empty() ? nullptr : ImGui::FindWindowByName(request.first.second.c_str());
+    ImGuiDockNode * node = target ? target->DockNode : nullptr;
+    if (!node) node = ImGui::DockBuilderGetCentralNode(dockspace);
+    if (!node) continue;
+    ImGuiID below = 0, above = 0;
+    ImGui::DockBuilderSplitNode(node->ID, ImGuiDir_Down, request.second, &below, &above);
+    ImGui::DockBuilderDockWindow(request.first.first.c_str(), below);
+    ImGui::DockBuilderFinish(ImGui::DockNodeGetRootNode(node)->ID);
+    }
+  _dockBelow.clear();
 
   float areaX0 = 1e9f, areaY0 = 1e9f, areaX1 = -1e9f, areaY1 = -1e9f;
   for (int k=0; k<nPanes(); k++)

@@ -40,6 +40,9 @@ namespace Datum
   //!  - right-click the title, an axis, an axis title, the legend or a data point: dialog editing it (GraphEditor);
   //!    elsewhere: context menu of the graph
   //!  - Escape cancels a drag
+  //!  - the lines of a range marked on a graph (setRangeMarker(), e.g. the slice of a projection): drag a line, or its
+  //!    handle, to move it; the owner is told when the mouse rests and when it is released (onRangeMoved)
+  //!  - while a range is being chosen (selectRange()): drag across the graph along the axis of the range
   //!
   //! beforeChange is called before any change made from the pane, so that the application can record an undo state.
   //!
@@ -104,6 +107,45 @@ namespace Datum
   MATH::BezierCurve * editedCurve() const { return _curve; }
   //! @}
 
+  //! @name Ranges marked on a graph (the slices of projections)
+  //! A range is drawn as two lines across the frame of a graph, with a handle and the value at one end of each, and
+  //! the band between them lightly shaded. A line is dragged by itself or by its handle (Escape puts it back);
+  //! onRangeMoved is called when the mouse rests during the drag (final false) and when it is released (final true).
+  //! @{
+  //! @brief A range marked on a graph.
+  struct RangeMarker
+  {
+  int    id = 0;         //!< identifier, chosen by the owner
+  int    graph = 0;      //!< graph of the pane
+  int    axis = 1;       //!< 0: vertical lines at x = low and x = high; 1: horizontal lines at y = low and y = high
+  double low = 0.0;      //!< lower end (data coordinates)
+  double high = 1.0;     //!< upper end (data coordinates)
+  };
+  //! @brief Mark a range (replacing the marker of the same id). @param marker marker
+  void setRangeMarker(const RangeMarker & marker);
+  //! @brief Remove the marker of an id. @param id id
+  void removeRangeMarker(int id);
+  //! @brief The marker of an id, or null. @param id id @return marker
+  const RangeMarker * rangeMarker(int id) const;
+  //! @brief The markers. @return markers
+  const std::vector<RangeMarker> & rangeMarkers() const { return _markers; }
+  //!
+  //! @brief Choose a range with the mouse: the next drag of the left button across graph k, along an axis, gives the
+  //! range to done (Escape, or a click elsewhere, cancels). @param graph graph @param axis 0 (a range of x) or 1 (y)
+  //! @param done called with the range (low < high, data coordinates)
+  //!
+  void selectRange(int graph, int axis, const std::function<void(double low, double high)> & done);
+  //! @brief Stop choosing a range (done is not called).
+  void cancelRangeSelection() { _rangeGraph = -1; _rangeDone = nullptr; }
+  //! @brief Whether a range is being chosen. @return true if so
+  bool selectingRange() const { return _rangeGraph >= 0; }
+  //! @brief Move a line of a marker as a drag would (tests, programs): the line and the value, then onRangeMoved
+  //! (final). @param id marker @param line 0 the lower line, 1 the upper one @param value new value
+  void moveRangeLine(int id, int line, double value);
+  //! Called when the lines of a marker were moved: the mouse rests (final false) or was released (final true).
+  std::function<void(int id, double low, double high, bool final)> onRangeMoved;
+  //! @}
+
   //! @brief Window holding the pane: -1 for the main window, otherwise a window of canvases (DatumGui::addPaneWindow()).
   int  host() const { return _host; }
   //! @brief Set the window holding the pane. @param host -1 for the main window, or the index of a window of canvases
@@ -139,6 +181,13 @@ namespace Datum
   std::function<void(const MATH::DataPoints * data, unsigned int fit)> onResidualMap;
   //! Called by "Projections" in the context menu of a graph, for a histogram of rank 2 with fits.
   std::function<void(const MATH::DataPoints * data)> onProjections;
+  //! Called by "Project" in the context menu of a graph showing a histogram of rank 2 (2D view): item k of graph g
+  //! projected onto axis (0: onto x, the y range summed; 1: onto y), over the whole range of the other axis, or over
+  //! a range chosen with the mouse (whole false).
+  std::function<void(int graph, int item, int axis, bool whole)> onProject;
+  //! Called while the context menu of graph k is drawn, after the items of the pane: menu items of the application
+  //! (e.g. Save Projection).
+  std::function<void(int graph)> contextMenuExtras;
   //! Called by "Compare" in the context menu of a graph, for two histograms of the same rank shown in it, with the
   //! comparison chosen (see Comparison).
   std::function<void(const MATH::DataPoints * first, const MATH::DataPoints * second,
@@ -179,7 +228,7 @@ namespace Datum
 
   //! What a drag of the left mouse button does.
   enum DragKind { kNoDrag, kZoom, kZoomX, kZoomY, kMoveTitle, kMoveAxisTitle, kMoveLegend, kMoveLabels, kRotate,
-                  kMoveShape, kMoveVertex, kMoveKnot };
+                  kMoveShape, kMoveVertex, kMoveKnot, kMoveRange, kSelectRange };
   //! State of a drag of the left mouse button
   struct Drag
   {
@@ -194,6 +243,11 @@ namespace Datum
   int   shape = -1;   //!< shape moved (kMoveShape), or whose point is moved (kMoveVertex)
   int   vertex = -1;   //!< point of the shape moved (kMoveVertex)
   std::vector<GRAPHICS::Point2D> points;   //!< points of the shape before the drag
+  double initialLow = 0.0;   //!< range of the marker before the drag (kMoveRange)
+  double initialHigh = 0.0;  //!< range of the marker before the drag (kMoveRange)
+  double restTime = 0.0;     //!< time the mouse last moved (kMoveRange)
+  float  restX = 0, restY = 0;   //!< position of the mouse then
+  bool   reported = true;    //!< onRangeMoved called since the mouse last moved
   };
   Drag _drag;   //!< drag in progress (kind kNoDrag if none)
   int  _editGraph;                     //!< graph whose part is edited in the "editor" popup
@@ -213,6 +267,24 @@ namespace Datum
   bool _openShapeMenu;                 //!< open the context menu of the selected shape at the next opportunity
   MATH::BezierCurve * _curve = nullptr;   //!< curve edited with the mouse (not owned), or null
   std::function<void()> _curveChanged;     //!< called after each change of the curve
+  std::vector<RangeMarker> _markers;       //!< ranges marked on the graphs
+  int  _rangeGraph = -1;                   //!< graph where a range is being chosen (-1: none)
+  int  _rangeAxis = 1;                     //!< axis of the range being chosen
+  int  _hoverMarker = -1;                  //!< marker under the mouse at the last frame (index), or -1
+  int  _hoverLine = -1;                    //!< its line under the mouse (0 lower, 1 upper)
+  std::function<void(double, double)> _rangeDone;   //!< called with the range chosen
+  //! @brief Screen position of a line of a marker: the line from (x0, y0) to (x1, y1), its handle at (hx, hy).
+  //! @return false if the graph is not drawn as a plane or the line is outside the frame
+  bool rangeLine(ImGuiPainter & painter, const RangeMarker & marker, int line, float & x0, float & y0, float & x1,
+                 float & y1, float & hx, float & hy) const;
+  //! @brief Mouse on the lines of the markers of graph k. @return true if the mouse was used
+  bool handleRangeMarkers(ImGuiPainter & painter, int graph);
+  //! @brief Mouse while a range is chosen in graph k. @return true if the mouse was used
+  bool handleRangeSelection(ImGuiPainter & painter, int graph);
+  //! @brief Draw the markers. @param painter painter
+  void drawRangeMarkers(ImGuiPainter & painter);
+  //! @brief Value of the position p along an axis of graph k. @return value
+  double rangeValue(int graph, int axis, const GRAPHICS::Point2D & p) const;
   //! @brief Graph showing the edited curve. @return index, or -1
   int curveGraph() const;
   //! @brief Mouse on the edited curve (knots dragged, added, removed). @return true if the mouse was used

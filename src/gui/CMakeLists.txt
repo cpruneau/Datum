@@ -57,6 +57,7 @@ add_library(DatumGuiCore STATIC
   DatumGuiApp.cpp
   PlotOutputs.cpp
   CanvasPane.cpp
+  Projector.cpp
   DataPane.cpp
   SpreadsheetPane.cpp
   FitDialog.cpp
@@ -80,6 +81,14 @@ if(DATUM_WITH_LATEX)   # File > Make Presentation (Latex/CanvasPresentation)
   target_link_libraries(DatumGuiCore PUBLIC Latex)
   target_compile_definitions(DatumGuiCore PUBLIC DATUM_GUI_PRESENTATIONS)
 endif()
+# the projections of the maps (Projector, the range lines of CanvasPane) drawn without a screen, the mouse simulated
+# (the textures of LaTeX, which need OpenGL, are left out): run by ctest
+add_executable(TestProjector tests/TestProjector.cpp Projector.cpp CanvasPane.cpp ImGuiPainter.cpp GraphEditor.cpp FileBrowser.cpp)
+set_target_properties(TestProjector PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_include_directories(TestProjector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(TestProjector DatumImGui Graphics Math Base)
+add_test(NAME Projector COMMAND TestProjector)
+
 if(TARGET HEPData)    # File > Import / Export > HEPData YAML (core/HEPData, built with DATUM_WITH_YAML)
   target_sources(DatumGuiCore PRIVATE HEPDataDialog.cpp)
   target_link_libraries(DatumGuiCore PUBLIC HEPData)
