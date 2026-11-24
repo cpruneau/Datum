@@ -205,6 +205,10 @@ namespace Datum
   //! @brief Add a canvas pane docked beside a window (splitting its area), and make it current.
   //! @param windowId identifier of the window ("###name") @return the new pane
   CanvasPane & addPaneBeside(const std::string & windowId);
+  //! @brief Add a canvas pane docked below a window (splitting its area: the new pane takes the lower part), and
+  //! make it current. @param windowId identifier of the window ("###name") @param fraction fraction of the height
+  //! taken by the new pane @return the new pane
+  CanvasPane & addPaneBelow(const std::string & windowId, float fraction=0.45f);
   //! @brief Index of the canvas pane of a window. @param windowId identifier of its window ("###name") @return index, -1 if none
   int  paneIndexOfWindow(const std::string & windowId) const;
   //! @brief Show or hide the fit pane (docked below the canvases the first time it is shown). @param visible choice
@@ -315,6 +319,8 @@ namespace Datum
   bool   _undockRequested;   //!< move the browser to a window of its own
   int    _gridColumns;       //!< columns of the grid in which the panes are laid out by the next layout
   std::vector<std::pair<std::string,std::string>> _dockBeside;   //!< (added pane, pane beside which it is docked)
+  //! Panes added below a window: (added pane, window below which it is docked), fraction of the height it takes
+  std::vector<std::pair<std::pair<std::string,std::string>, float>> _dockBelow;
   std::vector<int> _closeRequests;   //!< panes closed by the user during the frame
   std::vector<std::unique_ptr<DataPane>> _dataPanes;   //!< data panes (not part of the canvas layout)
   int    _dataCounter;       //!< for the names of the data panes

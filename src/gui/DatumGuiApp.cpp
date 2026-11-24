@@ -402,6 +402,11 @@ namespace Datum
   ImGui::BulletText("The selection is shared: click a graph on a canvas, its row is selected in the tree, and the other\n"
                     "way around. Edit > Copy, Cut, Paste, Delete and Duplicate act on it; Copy puts its XML on the clipboard.");
   ImGui::BulletText("View > All Windows shows every window of the plot file; otherwise the window of the selection.");
+  ImGui::BulletText("Right-click a map (a 2D histogram) > Project: onto x or y, over the whole range of the other axis or\n"
+                    "over a range dragged across the map. The projection is shown in a canvas below, and the range is\n"
+                    "marked on the map by two lines: drag a line (or its handle) and the projection follows when the mouse\n"
+                    "rests or is released. Right-click the projection > Save Projection... adds it, under a name, to the\n"
+                    "folder selected in the browser (or to a new data file if that folder is in a file read from disk).");
   ImGui::BulletText("Shapes drawn on the canvases and fits are shown, not written to the plot file.");
   ImGui::BulletText("PlotHistos plots.xml opens DatumGui on a plot file; PlotHistos --all plots.xml writes its outputs.");
   }
