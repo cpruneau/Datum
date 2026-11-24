@@ -411,6 +411,9 @@ namespace Datum
                     "the segment of the histograms (the region of the maps) between them is shown in a canvas below and\n"
                     "follows the lines when the mouse rests or is released. Right-click the extract > Save Extraction...\n"
                     "(a name per histogram) or Cancel Extraction.");
+  ImGui::BulletText("Operations: Sum, Difference, Product, Ratio, Scale of the histograms of the selected graph. Click\n"
+                    "their names in the window (in order: A first), change the coefficients (1 by default), OK: the result\n"
+                    "is shown in a canvas below; right-click it > Save Result... or Close Result.");
   ImGui::BulletText("Shapes drawn on the canvases and fits are shown, not written to the plot file.");
   ImGui::BulletText("PlotHistos plots.xml opens DatumGui on a plot file; PlotHistos --all plots.xml writes its outputs.");
   }
@@ -584,6 +587,7 @@ namespace Datum
   for (const char * t : { "light", "dark", "classic" })
     theme.addItem(t, String("view.theme.") + t, "", String("Use the ") + t + String(" theme")).setCheckable(true);
 
+  addOperationsMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("DatumGui Help",        "plot.help",      "F1", "How the canvases, the plot files and the browser work together");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "",   "List of the keyboard shortcuts");

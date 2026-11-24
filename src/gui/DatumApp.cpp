@@ -202,6 +202,7 @@ namespace Datum
   _gui(),
   _projector(),
   _extractor(),
+  _operations(),
   _functions(),
   _data(),
   _files(),
@@ -282,6 +283,9 @@ namespace Datum
   _extractor.setPanes(panes);
   _extractor.onSave = _projector.onSave;
   _extractor.onStatus = _projector.onStatus;
+  _operations.setPanes(panes);
+  _operations.onSave = _projector.onSave;
+  _operations.onStatus = _projector.onStatus;
   _gui.beforePanesChange = [this]() { recordUndo(); };
   if (!_gui.initialize(_configuration.gui))
     {
@@ -382,7 +386,8 @@ namespace Datum
   pane.onExtract = [this, &pane](int graph) { _extractor.request(pane, graph); };
   pane.onRangeMoved = [this](int id, double low, double high, bool final)
     { if (!_extractor.moved(id, low, high, final)) _projector.moved(id, low, high, final); };
-  pane.contextMenuExtras = [this, &pane](int graph) { _projector.contextMenu(pane, graph); _extractor.contextMenu(pane, graph); };
+  pane.contextMenuExtras = [this, &pane](int graph)
+    { _projector.contextMenu(pane, graph); _extractor.contextMenu(pane, graph); _operations.contextMenu(pane, graph); };
   pane.onSaveGraph  = [this, &pane](int graph) { saveAs(paneIndex(pane), graph); };
   pane.onSaveCanvas = [this, &pane]() { saveAs(paneIndex(pane)); };
   pane.onRename     = [this, &pane]()
@@ -560,6 +565,7 @@ namespace Datum
   window.addItem("Previous Canvas", "window.previous", "Ctrl+[", "Make the previous canvas current");
 
   addMenus(bar);
+  addOperationsMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("About Datum", "help.about", "", "Version and components");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "F1", "List of the keyboard shortcuts");
@@ -567,9 +573,26 @@ namespace Datum
   help.addItem("ImGui Demo (developers)", "help.imguiDemo", "", "Dear ImGui's demonstration window: all the widgets available").setCheckable(true);
   }
 
+  void DatumApp::addOperationsMenu(MenuBar & bar)
+  {
+  Menu & ops = bar.addMenu("Operations");
+  ops.addItem("Sum...",        "ops.sum",        "", "c1 A + c2 B + ... of histograms shown in the selected graph (two or more), "
+                                                      "shown in a canvas below");
+  ops.addItem("Difference...", "ops.difference", "", "c1 A - c2 B of two histograms shown in the selected graph");
+  ops.addItem("Product...",    "ops.product",    "", "(c1 A) x (c2 B), bin by bin, of two histograms shown in the selected graph");
+  ops.addItem("Ratio...",      "ops.ratio",      "", "(c1 A) / (c2 B), bin by bin, of two histograms shown in the selected graph");
+  ops.addSeparator();
+  ops.addItem("Scale...",      "ops.scale",      "", "c A: a histogram shown in the selected graph multiplied by a constant");
+  }
+
   void DatumApp::updateMenuStates()
   {
   MenuBar & bar = _gui.menuBar();
+  // the operations: enough histograms in the selected graph of the current canvas
+  unsigned int shown = _gui.nPanes() > 0 ? HistogramOperations::histogramsIn(_gui.currentPane(), _gui.currentPane().selectedGraph()) : 0;
+  for (const char * c : {"ops.sum", "ops.difference", "ops.product", "ops.ratio"})
+    if (MenuItem * item = bar.findItem(c)) item->setEnabled(shown >= 2);
+  if (MenuItem * item = bar.findItem("ops.scale")) item->setEnabled(shown >= 1);
   if (MenuItem * item = bar.findItem("edit.undo"))  item->setEnabled(!_undo.empty());
   if (MenuItem * item = bar.findItem("edit.redo"))  item->setEnabled(!_redo.empty());
   if (MenuItem * item = bar.findItem("edit.paste")) item->setEnabled(!_clipboard.empty());
@@ -598,6 +621,18 @@ namespace Datum
   {
   const String & c = event.command;
   int columns = 0, rows = 0;
+  if (c.str().compare(0, 4, "ops.") == 0)
+    {
+    // the operations, on the histograms of the selected graph of the current canvas
+    static const std::pair<const char *, HistogramOperations::Operation> operations[] = {
+      {"ops.sum", HistogramOperations::kSum}, {"ops.difference", HistogramOperations::kDifference},
+      {"ops.product", HistogramOperations::kProduct}, {"ops.ratio", HistogramOperations::kRatio},
+      {"ops.scale", HistogramOperations::kScale} };
+    if (_gui.nPanes() == 0) return;
+    CanvasPane & pane = _gui.currentPane();
+    for (const auto & o : operations) if (c == o.first) _operations.open(o.second, pane, pane.selectedGraph());
+    return;
+    }
   if (c == "file.open")
     {
     // the configured types that can be opened (Datum and ROOT files)
@@ -2082,6 +2117,8 @@ namespace Datum
   _projector.renderDialogs();
   _extractor.update();
   _extractor.renderDialogs();
+  _operations.update();
+  _operations.render();
   renderTreeClosing();
   if (_showImGuiDemo) ImGui::ShowDemoWindow(&_showImGuiDemo);
   }

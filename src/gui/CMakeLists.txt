@@ -59,6 +59,7 @@ add_library(DatumGuiCore STATIC
   CanvasPane.cpp
   Projector.cpp
   Extractor.cpp
+  HistogramOperations.cpp
   DataPane.cpp
   SpreadsheetPane.cpp
   FitDialog.cpp
@@ -84,7 +85,7 @@ if(DATUM_WITH_LATEX)   # File > Make Presentation (Latex/CanvasPresentation)
 endif()
 # the projections of the maps (Projector, the range lines of CanvasPane) drawn without a screen, the mouse simulated
 # (the textures of LaTeX, which need OpenGL, are left out): run by ctest
-add_executable(TestProjector tests/TestProjector.cpp Projector.cpp Extractor.cpp CanvasPane.cpp ImGuiPainter.cpp GraphEditor.cpp FileBrowser.cpp)
+add_executable(TestProjector tests/TestProjector.cpp Projector.cpp Extractor.cpp HistogramOperations.cpp CanvasPane.cpp ImGuiPainter.cpp GraphEditor.cpp FileBrowser.cpp)
 set_target_properties(TestProjector PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 target_include_directories(TestProjector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(TestProjector DatumImGui Graphics Math Base)
