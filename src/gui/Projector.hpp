@@ -126,8 +126,8 @@ namespace Datum
   Projection * projectionIn(const CanvasPane & pane);
 
   //! Adds a projection to the folder chosen (OK of Save Projection): @p histogram, under @p name; sets @p message
-  //! (where it went, or why it could not be saved) and returns false on failure. Also gives, with a null histogram,
-  //! the place where it would go (message) for the dialog.
+  //! (where it went, or why it could not be saved) and returns false on failure. With a null histogram, only tells
+  //! where it would go (message), and returns false if the name is taken there.
   std::function<bool(const MATH::Histogram * histogram, const String & name, String & message)> onSave;
   //! Called with what to tell (status line).
   std::function<void(const String &)> onStatus;

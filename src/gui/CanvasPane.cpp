@@ -492,6 +492,20 @@ namespace Datum
         }
     ImGui::EndMenu();
     }
+  // histograms of rank 1, or maps in a plane view: a segment (a region) of them between lines that can be dragged
+  bool extractable = !projectable.empty();
+  for (const auto & item : graph.items())
+    if (item.kind() == GraphItem::kData && !item.isMap() && dynamic_cast<const MATH::Histogram*>(item.data())) extractable = true;
+  if (onExtract && extractable && ImGui::MenuItem("Extract"))
+    {
+    setSelectedGraph(_contextGraph);
+    onExtract(_contextGraph);
+    }
+  if (onExtract && extractable)
+    ImGui::SetItemTooltip(projectable.empty() ? "Two vertical lines to drag: the segment of the histograms between them is "
+                                                "shown in a canvas below (right-click it to save or cancel it)"
+                                              : "Vertical and horizontal lines to drag: the region of the maps between them is "
+                                                "shown in a canvas below (right-click it to save or cancel it)");
   if (curves)
     {
     bool residuals = graph.showResiduals();

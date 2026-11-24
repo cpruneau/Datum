@@ -8,8 +8,8 @@
  *
  * *********************************************************************/
 //! @file TestProjector.cpp
-//! @brief Test program of the projections of maps in DatumGui (Projector, the range lines of CanvasPane), drawn
-//! without a screen (run by ctest).
+//! @brief Test program of the projections of maps and of the extracts of histograms in DatumGui (Projector,
+//! Extractor, the range lines of CanvasPane), drawn without a screen (run by ctest).
 //
 // Dear ImGui runs without a window or renderer; canvas panes are drawn in windows of their own, and the mouse and keys
 // are simulated as a user would use them:
@@ -19,7 +19,11 @@
 //    on the edge of the bins summed; Escape puts a line back;
 //  - Project onto Y, x range chosen: the range dragged across the map (Escape cancels a choice);
 //  - the context menu of the canvas of a projection opened; Save Projection (name typed, Enter), a name already used;
-//  - the map no longer shown: the projection stays, without lines; its canvas closed: the projection dropped.
+//  - the map no longer shown: the projection stays, without lines; its canvas closed: the projection dropped;
+//  - Extract of two histograms of rank 1: the lines at a quarter and three quarters, the extracts below, a line dragged
+//    (extracted again at rest, snapped when released); Save Extraction (a name per histogram: all saved or none);
+//  - Extract of a map: vertical and horizontal lines, the region below; beside a projection of the same map (the lines
+//    of the two told apart); Cancel Extraction (lines removed, canvas closed, nothing saved).
 // No frame may show two widgets with the same identifier. Prints each failed check and exits with the number of
 // failures (0: all passed).
 //
@@ -32,6 +36,7 @@
 #include "imgui_internal.h"
 #include "CanvasPane.hpp"
 #include "Projector.hpp"
+#include "Extractor.hpp"
 #include "ImGuiPainter.hpp"
 #include "Histogram.hpp"
 #include "Folder.hpp"
@@ -65,6 +70,7 @@ struct Window
   std::vector<std::unique_ptr<CanvasPane>> panes;
   int counter = 0;
   Projector projector;
+  Extractor extractor;
   Window()
   {
     add();
@@ -73,6 +79,7 @@ struct Window
     p.addBelow = [this](const std::string &) -> CanvasPane & { return add(); };
     p.close = [this](const std::string & id) { for (std::size_t k=0; k<panes.size(); k++) if (id == panes[k]->windowId()) { panes.erase(panes.begin() + long(k)); return; } };
     projector.setPanes(p);
+    extractor.setPanes(p);
   }
   CanvasPane & add()
   {
@@ -80,8 +87,10 @@ struct Window
     CanvasPane & pane = *panes.back();
     pane.setShowToolbar(false);
     pane.onProject = [this, &pane](int graph, int item, int axis, bool whole) { projector.request(pane, graph, item, axis, whole); };
-    pane.onRangeMoved = [this](int id, double low, double high, bool final) { projector.moved(id, low, high, final); };
-    pane.contextMenuExtras = [this, &pane](int graph) { projector.contextMenu(pane, graph); };
+    pane.onExtract = [this, &pane](int graph) { extractor.request(pane, graph); };
+    pane.onRangeMoved = [this](int id, double low, double high, bool final)
+      { if (!extractor.moved(id, low, high, final)) projector.moved(id, low, high, final); };
+    pane.contextMenuExtras = [this, &pane](int graph) { projector.contextMenu(pane, graph); extractor.contextMenu(pane, graph); };
     return pane;
   }
   //! Window k: 600 x 400 at (0, 410 k).
@@ -101,6 +110,8 @@ struct Window
         }
       projector.update();
       projector.renderDialogs();
+      extractor.update();
+      extractor.renderDialogs();
       ImGui::Render();
       if (ImGui::GetCurrentContext()->DebugDrawIdConflictsId != 0) conflicts++;
       }
@@ -282,6 +293,143 @@ namespace Datum
   }
 }
 
+namespace
+{
+//! A histogram of rank 1: 20 bins in [0, 10], bin i holds scale (1 + i).
+MATH::Histogram curve(const char * name, double scale)
+{
+  MATH::Histogram h(name, "counts", 20, 0.0, 10.0);
+  h.setDimensionTitle(0, "x");
+  for (unsigned int i=0; i<20; i++) h.setBinAt(i, 1, scale*(1.0 + i), 0.1);
+  return h;
+}
+
+void testExtractComputation()
+{
+  MATH::Histogram h = curve("a", 1.0);
+  double low[2] = { 2.1, 0.0 }, high[2] = { 5.9, 0.0 }, lo[2], hi[2];
+  MATH::Histogram x = Extractor::extract(h, low, high, lo, hi);
+  CHECK(lo[0] == 2.0 && hi[0] == 6.0 && x.nBins(0) == 8 && sameValues(x, h.extract1(4, 11)) && x.name() == String("a_extract"));
+  CHECK(x.title().str().find("2 < x < 6") != std::string::npos && x.binLowEdge(0, 0) == 2.0);
+  MATH::Histogram m = map();
+  double low2[2] = { 2.9, 1.1 }, high2[2] = { 7.2, 2.4 };
+  MATH::Histogram r = Extractor::extract(m, low2, high2, lo, hi);
+  CHECK(lo[0] == 3.0 && hi[0] == 7.0 && lo[1] == 1.0 && hi[1] == 2.5 && r.rank() == 2 && r.nBins(0) == 8 && r.nBins(1) == 3);
+  CHECK(sameValues(r, m.extract2(6, 13, 2, 4)) && r.title().str().find("3 < x < 7, 1 < y < 2.5") != std::string::npos);
+}
+
+//! The extract shown agrees with the lines: each histogram extracted over the bins nearest to the ends.
+bool extractsMatch(const Extractor::Extraction & e)
+{
+  if (e.histograms.size() != e.sources.size()) return false;
+  for (std::size_t k=0; k<e.sources.size(); k++)
+    {
+    double lo[2], hi[2];
+    MATH::Histogram x = Extractor::extract(*e.sources[k], e.low, e.high, lo, hi);
+    if (!sameValues(x, *e.histograms[k])) return false;
+    }
+  return true;
+}
+
+void testExtraction()
+{
+  Window w;
+  MATH::Histogram a = curve("a", 1.0), b = curve("b", 2.0);
+  CanvasPane & source = *w.panes[0];
+  source.divide(1, 1);
+  source.canvas().graph(0).show(GraphItem(&a, "a"));
+  source.canvas().graph(0).show(GraphItem(&b, "b"));
+  w.frame(3);
+  // ---- two histograms of rank 1: two vertical lines, the two extracts below
+  CHECK(Extractor::extractable(source, 0) && w.extractor.request(source, 0));
+  w.frame(2);
+  CHECK(w.panes.size() == 2 && w.extractor.extractions().size() == 1);
+  if (w.extractor.extractions().size() != 1) return;
+  const Extractor::Extraction & e = *w.extractor.extractions()[0];
+  const Graph::View view = source.canvas().graph(0).view();
+  double quarter = view.xMinimum + 0.25*(view.xMaximum - view.xMinimum);
+  CHECK(e.rank == 1 && e.histograms.size() == 2 && std::fabs(e.low[0] - quarter) <= 0.25 && e.low[0] < e.high[0]);
+  CHECK(extractsMatch(e) && w.panes[1]->canvas().graph(0).items().size() == 2);
+  const CanvasPane::RangeMarker * m = source.rangeMarker(Extractor::markerId(e.id, 0));
+  CHECK(m && m->axis == 0 && m->low == e.low[0] && m->high == e.high[0] && !source.rangeMarker(Extractor::markerId(e.id, 1)));
+  // the upper line dragged by its handle (top) to x = 8.2, at rest, then released: snapped to 8
+  ImVec2 top = w.screen(0, e.high[0], view.yMaximum);
+  w.mouse(ImVec2(top.x, top.y + 2.0f), 2);
+  w.press(true);
+  ImVec2 to = w.screen(0, 8.2, view.yMaximum);
+  for (int s=1; s<=5; s++) w.mouse(ImVec2(top.x + (to.x - top.x)*float(s)/5.0f, top.y + 2.0f));
+  w.frame(30);
+  CHECK(near(e.high[0], 8.0) && extractsMatch(e) && e.histograms[0]->binHighEdge(e.histograms[0]->nBins(0) - 1, 0) == 8.0);
+  m = source.rangeMarker(Extractor::markerId(e.id, 0));
+  CHECK(m && std::fabs(m->high - 8.2) < 0.05);
+  w.press(false);
+  m = source.rangeMarker(Extractor::markerId(e.id, 0));
+  CHECK(m && near(m->high, 8.0));
+  // ---- Save Extraction: a name per histogram; all saved, or none
+  Folder folder("saved");
+  folder.add(new MATH::Histogram(a), "taken");
+  auto onSave = [&](const MATH::Histogram * histogram, const String & name, String & message)
+    {
+    if (folder.contains(name)) { message = name + String(" is already there"); return false; }
+    if (!histogram) { message = "Added to the folder saved"; return true; }
+    folder.add(new MATH::Histogram(*histogram), name);
+    message = name + String(" saved");
+    return true;
+    };
+  w.extractor.onSave = onSave;
+  w.projector.onSave = onSave;
+  String message;
+  CHECK(!w.extractor.save(e.id, {String("one"), String("one")}, message) && message.str().find("twice") != std::string::npos);
+  CHECK(!w.extractor.save(e.id, {String("one"), String("taken")}, message) && !folder.contains("one"));
+  CHECK(!w.extractor.save(e.id, {String("one")}, message) && !w.extractor.save(e.id, {String("one"), String(" ")}, message));
+  CHECK(w.extractor.save(e.id, {String("one"), String("two")}, message) && folder.contains("one") && folder.contains("two"));
+  CHECK(sameValues(*folder.get<MATH::Histogram>("two"), *e.histograms[1]) && folder.get<MATH::Histogram>("one")->name() == String("one"));
+  w.extractor.openSave(e.id);                                  // the dialog: the names proposed, Enter
+  w.frame(3);
+  w.key(ImGuiKey_Enter);
+  CHECK(folder.contains("a_extract") && folder.contains("b_extract"));
+  // ---- the context menu of the canvas of the extract, then Cancel Extraction: lines removed, canvas closed
+  ImVec2 inside = w.screen(1, 5.0, 0.0);
+  w.mouse(ImVec2(inside.x, inside.y - 40.0f), 2);
+  w.press(true, 1);
+  w.press(false, 1);
+  w.frame(2);
+  w.key(ImGuiKey_Escape);
+  int id = e.id;
+  w.extractor.cancel(id);
+  w.frame(2);
+  CHECK(w.extractor.extractions().empty() && w.panes.size() == 1 && !source.rangeMarker(Extractor::markerId(id, 0)));
+
+  // ---- a map: vertical and horizontal lines; a projection of the same map beside it
+  MATH::Histogram h = map();
+  source.canvas().graph(0).clearItems();
+  source.canvas().graph(0).show(GraphItem(&h, "map"));
+  w.frame(3);
+  CHECK(w.projector.request(source, 0, 0, 0, true));
+  w.frame(2);
+  CHECK(w.extractor.request(source, 0));
+  w.frame(2);
+  CHECK(w.panes.size() == 3 && w.extractor.extractions().size() == 1 && w.projector.projections().size() == 1);
+  if (w.extractor.extractions().size() != 1 || w.projector.projections().size() != 1) return;
+  const Extractor::Extraction & r = *w.extractor.extractions()[0];
+  const Projector::Projection & p = *w.projector.projections()[0];
+  CHECK(r.rank == 2 && source.rangeMarker(Extractor::markerId(r.id, 0)) && source.rangeMarker(Extractor::markerId(r.id, 1)));
+  CHECK(extractsMatch(r) && r.histograms[0]->rank() == 2 && source.rangeMarker(p.id));
+  // a line of y of the extract moved: the extract changes, not the projection
+  source.moveRangeLine(Extractor::markerId(r.id, 1), 1, 4.6);
+  CHECK(near(r.high[1], 4.5) && extractsMatch(r) && p.whole && sameValues(*p.histogram, h.project2DOnto1D(0)));
+  // a line of the projection moved: the projection changes, not the extract
+  double rLow = r.low[1];
+  source.moveRangeLine(p.id, 1, 2.6);
+  CHECK(near(p.high, 2.5) && r.low[1] == rLow && near(r.high[1], 4.5));
+  int rid = r.id, pid = p.id;                                  // r ends with the extraction
+  w.extractor.cancel(rid);
+  w.frame(2);
+  CHECK(w.extractor.extractions().empty() && w.projector.projections().size() == 1 && w.panes.size() == 2);
+  CHECK(!source.rangeMarker(Extractor::markerId(rid, 1)) && source.rangeMarker(pid));
+}
+}
+
 int main()
 {
   std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -295,6 +443,8 @@ int main()
     {
     testComputation();
     testInteraction();
+    testExtractComputation();
+    testExtraction();
     }
   catch (const std::exception & e)
     {
