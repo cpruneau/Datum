@@ -19,6 +19,7 @@
 #include "Action.hpp"
 #include "DatumGui.hpp"
 #include "Projector.hpp"
+#include "Extractor.hpp"
 #include "Graph.hpp"
 #include "Folder.hpp"
 
@@ -249,12 +250,13 @@ namespace Datum
   //!
   void showProjections(const MATH::DataPoints * data);
   //!
-  //! @brief Save a projection (Save Projection of its canvas): added under a name to the folder selected in the browser
-  //! used last when it is in a data file made in DatumGui (the folder holding the object selected, or the whole file),
-  //! otherwise to a new data file. @param histogram projection (null: only tell where it would go)
-  //! @param name name @param message set to where it went, or why not @return false if it was not added
+  //! @brief Save a histogram made in a canvas (Save Projection, Save Extraction): added under a name to the folder
+  //! selected in the browser used last when it is in a data file made in DatumGui (the folder holding the object
+  //! selected, or the whole file), otherwise to a new data file. @param histogram histogram (null: only tell where it
+  //! would go, and whether the name is free there) @param name name @param message set to where it went, or why not
+  //! @return false if it was not added (or the name is taken)
   //!
-  bool saveProjection(const MATH::Histogram * histogram, const String & name, String & message);
+  bool saveHistogram(const MATH::Histogram * histogram, const String & name, String & message);
   //!
   //! @brief Compare two histograms of the same binning (e.g. from two files): a new pane with the two histograms
   //! overlaid and their difference (second - first), ratio (second / first) or significance (difference divided by
@@ -328,6 +330,7 @@ namespace Datum
   AppConfiguration _configuration;   //!< configuration
   DatumGui _gui;   //!< the window
   Projector _projector;   //!< projections of the maps onto x or y (context menu of a graph > Project)
+  Extractor _extractor;   //!< segments of histograms, regions of maps (context menu of a graph > Extract)
   std::vector<std::unique_ptr<MATH::Function>>   _functions;   //!< functions created by the application (demo)
   std::vector<std::unique_ptr<MATH::DataPoints>> _data;   //!< data points created by the application (demo)
   //! A rebinned copy made by the application (in _data): the copy, its original histogram, the factors

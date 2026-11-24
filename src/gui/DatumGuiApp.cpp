@@ -407,6 +407,10 @@ namespace Datum
                     "marked on the map by two lines: drag a line (or its handle) and the projection follows when the mouse\n"
                     "rests or is released. Right-click the projection > Save Projection... adds it, under a name, to the\n"
                     "folder selected in the browser (or to a new data file if that folder is in a file read from disk).");
+  ImGui::BulletText("Right-click a graph of histograms > Extract: two vertical lines (and, for a map, two horizontal ones);\n"
+                    "the segment of the histograms (the region of the maps) between them is shown in a canvas below and\n"
+                    "follows the lines when the mouse rests or is released. Right-click the extract > Save Extraction...\n"
+                    "(a name per histogram) or Cancel Extraction.");
   ImGui::BulletText("Shapes drawn on the canvases and fits are shown, not written to the plot file.");
   ImGui::BulletText("PlotHistos plots.xml opens DatumGui on a plot file; PlotHistos --all plots.xml writes its outputs.");
   }

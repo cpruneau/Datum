@@ -201,6 +201,7 @@ namespace Datum
   _configuration(),
   _gui(),
   _projector(),
+  _extractor(),
   _functions(),
   _data(),
   _files(),
@@ -276,8 +277,11 @@ namespace Datum
   panes.close = [this](const std::string & id) { int k = _gui.paneIndexOfWindow(id); if (k >= 0) _gui.requestClosePane(k); };
   _projector.setPanes(panes);
   _projector.onSave = [this](const MATH::Histogram * h, const String & name, String & message)
-    { return saveProjection(h, name, message); };
+    { return saveHistogram(h, name, message); };
   _projector.onStatus = [this](const String & message) { _gui.setStatus(message); };
+  _extractor.setPanes(panes);
+  _extractor.onSave = _projector.onSave;
+  _extractor.onStatus = _projector.onStatus;
   _gui.beforePanesChange = [this]() { recordUndo(); };
   if (!_gui.initialize(_configuration.gui))
     {
@@ -375,8 +379,10 @@ namespace Datum
   pane.onResidualMap = [this](const MATH::DataPoints * data, unsigned int fit) { showResidualMap(data, fit); };
   pane.onProjections = [this](const MATH::DataPoints * data) { showProjections(data); };
   pane.onProject = [this, &pane](int graph, int item, int axis, bool whole) { _projector.request(pane, graph, item, axis, whole); };
-  pane.onRangeMoved = [this](int id, double low, double high, bool final) { _projector.moved(id, low, high, final); };
-  pane.contextMenuExtras = [this, &pane](int graph) { _projector.contextMenu(pane, graph); };
+  pane.onExtract = [this, &pane](int graph) { _extractor.request(pane, graph); };
+  pane.onRangeMoved = [this](int id, double low, double high, bool final)
+    { if (!_extractor.moved(id, low, high, final)) _projector.moved(id, low, high, final); };
+  pane.contextMenuExtras = [this, &pane](int graph) { _projector.contextMenu(pane, graph); _extractor.contextMenu(pane, graph); };
   pane.onSaveGraph  = [this, &pane](int graph) { saveAs(paneIndex(pane), graph); };
   pane.onSaveCanvas = [this, &pane]() { saveAs(paneIndex(pane)); };
   pane.onRename     = [this, &pane]()
@@ -1738,7 +1744,7 @@ namespace Datum
   ImGui::End();
   }
 
-  bool DatumApp::saveProjection(const MATH::Histogram * histogram, const String & name, String & message)
+  bool DatumApp::saveHistogram(const MATH::Histogram * histogram, const String & name, String & message)
   {
   // the folder selected in the browser used last, if it is in a data file made in DatumGui (files read from disk are
   // not changed): the folder itself, the folder of the object selected, or the top folder of the file
@@ -1765,8 +1771,13 @@ namespace Datum
     where = folder == &top ? String("the data file ") + f->name
                            : String("the folder ") + folder->path() + String(" of ") + f->name;
     }
-  if (!histogram)                                              // where it would go
+  if (!histogram)                                              // where it would go, and whether the name is free there
     {
+    if (folder && folder->contains(name))
+      {
+      message = name + String(" is already in ") + where + String(": choose another name");
+      return false;
+      }
     message = folder ? String("Added to ") + where
                      : String("Added to a new data file (select a folder of a data file made in DatumGui to add it there)");
     return true;
@@ -2069,6 +2080,8 @@ namespace Datum
   renderComparison();
   _projector.update();
   _projector.renderDialogs();
+  _extractor.update();
+  _extractor.renderDialogs();
   renderTreeClosing();
   if (_showImGuiDemo) ImGui::ShowDemoWindow(&_showImGuiDemo);
   }

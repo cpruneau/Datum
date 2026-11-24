@@ -185,6 +185,9 @@ namespace Datum
   //! projected onto axis (0: onto x, the y range summed; 1: onto y), over the whole range of the other axis, or over
   //! a range chosen with the mouse (whole false).
   std::function<void(int graph, int item, int axis, bool whole)> onProject;
+  //! Called by "Extract" in the context menu of graph k, showing histograms of rank 1, or maps in a plane view: a
+  //! segment of the histograms (or a region of the maps) between lines that can be dragged.
+  std::function<void(int graph)> onExtract;
   //! Called while the context menu of graph k is drawn, after the items of the pane: menu items of the application
   //! (e.g. Save Projection).
   std::function<void(int graph)> contextMenuExtras;
