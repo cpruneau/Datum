@@ -411,6 +411,9 @@ namespace Datum
                     "the segment of the histograms (the region of the maps) between them is shown in a canvas below and\n"
                     "follows the lines when the mouse rests or is released. Right-click the extract > Save Extraction...\n"
                     "(a name per histogram) or Cancel Extraction.");
+  ImGui::BulletText("Operations: Sum, Difference, Product, Ratio, Scale of the histograms of the selected graph. Click\n"
+                    "their names in the window (in order: A first), change the coefficients (1 by default), OK: the result\n"
+                    "is shown in a canvas below; right-click it > Save Result... or Close Result.");
   ImGui::BulletText("Shapes drawn on the canvases and fits are shown, not written to the plot file.");
   ImGui::BulletText("PlotHistos plots.xml opens DatumGui on a plot file; PlotHistos --all plots.xml writes its outputs.");
   }
@@ -584,6 +587,7 @@ namespace Datum
   for (const char * t : { "light", "dark", "classic" })
     theme.addItem(t, String("view.theme.") + t, "", String("Use the ") + t + String(" theme")).setCheckable(true);
 
+  addOperationsMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("DatumGui Help",        "plot.help",      "F1", "How the canvases, the plot files and the browser work together");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "",   "List of the keyboard shortcuts");
@@ -673,6 +677,7 @@ namespace Datum
   {
   _detachedWindows = configuration().gui.detachedWindows;
   _gui.setSideWindow(kEditorWindow, 0.40f);
+  _gui.setSideWindowVisible(_showTree);       // hidden until a plot file is made or opened, or View > Plot Tree
   std::function<void()> previous = _gui.onFrame;
   _gui.onFrame = [this, previous]() { if (previous) previous(); renderFrame(); };
   for (const auto & b : _gui.browsers()) connectToPlot(*b);
@@ -704,6 +709,7 @@ namespace Datum
     return false;
     };
   for (const String & f : _plotFiles) openDocument(f);
+  if (!_plotFiles.empty()) showTree();        // plot files given: asked for
   if (!_inputFiles.empty() && !_documents.empty())
     {
     // files replacing the inputs of the first plot file (as shown, not a change of the file)
@@ -730,7 +736,7 @@ namespace Datum
       if (!folders) openFolder(FileSystem::current());
       }
     }
-  _gui.setStatus(_mode == kBasic ? "Drag histograms or folders from the browser onto the canvas or the Plot Tree"
+  _gui.setStatus(_mode == kBasic ? "Click or drag histograms or folders from the browser onto the canvas (View > Plot Tree shows the plot file)"
                                  : "The canvases are the plot file: change them, or the tree, and save the file");
   }
 
@@ -939,10 +945,10 @@ namespace Datum
   PlotDocument * d = t ? t->document.get() : nullptr;
   bool selected = t && t->hasSelection && !t->selected.empty() && d->element(t->selected);
   int columns = 0, rows = 0;
-  if (c == "plot.new") newDocument();
+  if (c == "plot.new") { newDocument(); showTree(); }
   else if (c == "plot.open")
     _gui.fileDialog().open(FileDialog::kOpenFile, "Open a plot file", _configuration.directory, {".xml"}, "",
-                           [this](const String & path) { openDocument(path); });
+                           [this](const String & path) { if (openDocument(path)) showTree(); });
   else if (c == "plot.fromData")
     _gui.fileDialog().open(FileDialog::kOpenFile, "Datum file or RunDatum workflow (.xml) whose histograms to plot",
                            _configuration.directory, {DatumFile::extension(), DatumFile::formerExtension(), ".xml"}, "",
@@ -954,6 +960,7 @@ namespace Datum
         { _gui.showMessage("New from Data", String("No histogram found in ") + path + String("\n") + problems); return; }
       if (!problems.isNull()) _gui.setStatus(String("New from Data: ") + problems);
       startTemplate(catalog, GRAPHICS::PlotTemplate::Options(), String(""));
+      showTree();
       });
   else if (c == "plot.close") requestClose(_current);
   else if (c == "plot.duplicate" && d)
@@ -1120,7 +1127,7 @@ namespace Datum
             tt.document->setAttribute(p, "directory", PlotDocument::relativePath(folder, tt.document->directory()));
       });
     }
-  else if (c == "plot.tree") _showTree = !_showTree;
+  else if (c == "plot.tree") { if (_showTree) { _showTree = false; _gui.setSideWindowVisible(false); } else showTree(); }
   else if (c == "plot.inspector") _showInspector = !_showInspector;
   else if (c == "plot.showStyle") _showStyle = !_showStyle;
   else if (c == "plot.allWindows") { _allWindows = !_allWindows; _drawnTab = -1; }
@@ -1804,11 +1811,16 @@ namespace Datum
       }
     }
   if (treeShown) ImGui::End();
+  if (!_showTree && _gui.sideWindowVisible()) _gui.setSideWindowVisible(false);   // closed with its close button
   renderDialogs();
   renderTemplate();
   layoutCanvases();
   recordCanvases();
   syncSelection();
+  // the canvas of the plot file current last: where objects are shown when a canvas of a projection is current
+  if (_gui.nPanes() > 0)
+    for (const auto & link : _links)
+      if (link.pane == &_gui.currentPane() && !link.canvas.empty()) { _plotPane = _gui.currentPane().windowId(); break; }
   }
 
   void DatumGuiApp::renderTree(Tab & t)
@@ -2718,12 +2730,30 @@ namespace Datum
   return rest;
   }
 
+  void DatumGuiApp::showTree()
+  {
+  _showTree = true;
+  _gui.setSideWindowVisible(true);
+  }
+
+  CanvasPane * DatumGuiApp::plotPane()
+  {
+  if (_gui.nPanes() == 0) return nullptr;
+  CanvasPane & current = _gui.currentPane();
+  auto linked = [this](const CanvasPane * p) { for (const auto & link : _links) if (link.pane == p && !link.canvas.empty()) return true; return false; };
+  if (linked(&current)) return &current;
+  int k = _gui.paneIndexOfWindow(_plotPane);
+  if (k >= 0 && linked(&_gui.pane(k))) return &_gui.pane(k);
+  for (const auto & link : _links) if (!link.canvas.empty() && paneIndexOf(link.pane) >= 0) return link.pane;
+  return &current;
+  }
+
   bool DatumGuiApp::currentCanvas(Path & canvas, Path & graph)
   {
   canvas.clear();
   graph.clear();
   if (_gui.nPanes() == 0) return false;
-  CanvasPane & pane = _gui.currentPane();
+  CanvasPane & pane = *plotPane();
   for (const auto & link : _links)
     {
     if (link.pane != &pane || link.canvas.empty()) continue;
@@ -2754,7 +2784,8 @@ namespace Datum
   String fileName;
   if (objectsOf(object, false, fileName).empty()) { _gui.setStatus("Nothing to plot there"); return; }
   Path target = dropTarget(), canvas, graph;
-  bool replace = _gui.nPanes() > 0 && _gui.currentPane().mode() == CanvasPane::kReplace;
+  CanvasPane * pane = plotPane();
+  bool replace = pane && pane->mode() == CanvasPane::kReplace;
   if (currentCanvas(canvas, graph) && !graph.empty())
     {
     // the graph selected on the current canvas, unless an element of it is selected in the tree (Add: added there)
@@ -2763,7 +2794,8 @@ namespace Datum
     if (replace || !inGraph) target = graph;
     }
   else replace = false;    // no graph of the plot file shown: a new canvas
-  if (replace) { replaceGraph(graph, object, &_gui.currentPane(), _gui.currentPane().selectedGraph()); return; }
+  if (pane && pane != &_gui.currentPane()) _gui.setCurrentPane(paneIndexOf(pane), false);   // shown there: it is current again
+  if (replace) { replaceGraph(graph, object, pane, pane->selectedGraph()); return; }
   drop(target, object, false);
   }
 
@@ -2799,7 +2831,8 @@ namespace Datum
   Path canvas = t->hasSelection ? t->document->enclosing(t->selected, PlotDocument::kCanvas, ok) : Path();
   Path paneCanvas, graph;
   if (!ok && currentCanvas(paneCanvas, graph)) { canvas = paneCanvas; ok = true; }
-  bool replace = ok && _gui.nPanes() > 0 && _gui.currentPane().mode() == CanvasPane::kReplace;
+  CanvasPane * shown = plotPane();
+  bool replace = ok && shown && shown->mode() == CanvasPane::kReplace;
   PlotDocument & d = *t->document;
   d.beginEdit();
   if (replace)
@@ -2807,8 +2840,8 @@ namespace Datum
     // Replace: the graphs of the canvas go, the folder takes their place
     std::vector<Path> graphs = d.children(canvas, PlotDocument::kGraph);
     for (auto p = graphs.rbegin(); p != graphs.rend(); ++p) d.remove(*p);
-    if (!_gui.currentPane().keepShapes())
-      for (int k=0; k<_gui.currentPane().canvas().nGraphs(); k++) _gui.currentPane().canvas().graph(k).clearShapes();
+    if (!shown->keepShapes())
+      for (int k=0; k<shown->canvas().nGraphs(); k++) shown->canvas().graph(k).clearShapes();
     }
   drop(ok ? canvas : Path(), object, true);
   d.endEdit();

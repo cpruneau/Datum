@@ -186,6 +186,11 @@ namespace Datum
   //! taking a fraction of the width beside the browser; kept docked when the canvases are laid out again.
   //! @param windowName name of the ImGui window @param fraction fraction of the width of the canvas area
   void setSideWindow(const String & windowName, float fraction) { _sideWindow = windowName.str(); _sideFraction = fraction; _layoutRequested = true; }
+  //! @brief Whether the side window is shown (by the program: setSideWindowVisible()); hidden, the layout of the
+  //! canvases leaves no room for it. @param visible shown: docked beside the canvases when it has no place (the first
+  //! time), the canvases staying as they are
+  void setSideWindowVisible(bool visible) { if (visible && !_sideVisible) _sideDockRequested = true; _sideVisible = visible; }
+  bool sideWindowVisible() const { return _sideVisible; }   //!< Whether the side window is shown
   //! @brief Set the title of the main window (the window of the operating system). @param title title
   void setWindowTitle(const String & title);
   //! @brief Size of the main window. @param width width @param height height
@@ -205,9 +210,9 @@ namespace Datum
   //! @brief Add a canvas pane docked beside a window (splitting its area), and make it current.
   //! @param windowId identifier of the window ("###name") @return the new pane
   CanvasPane & addPaneBeside(const std::string & windowId);
-  //! @brief Add a canvas pane docked below a window (splitting its area: the new pane takes the lower part), and
-  //! make it current. @param windowId identifier of the window ("###name") @param fraction fraction of the height
-  //! taken by the new pane @return the new pane
+  //! @brief Add a canvas pane docked below a window (splitting its area: the new pane takes the lower part); the
+  //! current pane stays current (showing an object still goes to it). @param windowId identifier of the window
+  //! ("###name") @param fraction fraction of the height taken by the new pane @return the new pane
   CanvasPane & addPaneBelow(const std::string & windowId, float fraction=0.45f);
   //! @brief Index of the canvas pane of a window. @param windowId identifier of its window ("###name") @return index, -1 if none
   int  paneIndexOfWindow(const std::string & windowId) const;
@@ -321,6 +326,11 @@ namespace Datum
   std::vector<std::pair<std::string,std::string>> _dockBeside;   //!< (added pane, pane beside which it is docked)
   //! Panes added below a window: (added pane, window below which it is docked), fraction of the height it takes
   std::vector<std::pair<std::pair<std::string,std::string>, float>> _dockBelow;
+  bool _sideVisible = true;          //!< the side window is shown (see setSideWindowVisible())
+  bool _sideDockRequested = false;   //!< dock the side window at the next frame, if it has no place
+  //! @brief Dock the side window beside the canvases (left of them, right of the browser), unless it has a place.
+  //! @param dockspace dock space of the main window
+  void dockSideWindow(unsigned int dockspace);
   std::vector<int> _closeRequests;   //!< panes closed by the user during the frame
   std::vector<std::unique_ptr<DataPane>> _dataPanes;   //!< data panes (not part of the canvas layout)
   int    _dataCounter;       //!< for the names of the data panes

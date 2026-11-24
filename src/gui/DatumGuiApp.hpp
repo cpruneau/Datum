@@ -129,7 +129,8 @@ namespace Datum
   int _nextId = 1;   //!< identifier of the next tab
   int _untitled = 0;   //!< number of the last new file
   std::string _clipboard;   //!< XML of the element copied
-  bool _showTree = true;   //!< the Plot Tree is shown
+  bool _showTree = false;   //!< the Plot Tree is shown (opened by Plots > New, Open, New From Data, View > Plot Tree)
+  std::string _plotPane;   //!< window of the canvas of the plot file that was current last (where objects are shown)
   bool _showStyle = false;   //!< the elements of style are shown in the tree
   bool _showInspector = true;   //!< the inspector is shown below the tree
   bool _allWindows = false;   //!< every window of the plot file shown
@@ -290,6 +291,11 @@ namespace Datum
   GRAPHICS::PlotDocument::Path dropTarget();
   //! @brief The canvas of the plot file shown by the current pane and the Graph element of its selected graph.
   //! @param canvas set to the canvas @param graph set to the graph (empty if the cell has none) @return false if the
+  //! @brief The pane where objects are shown: the current pane if it shows a canvas of the plot file, otherwise the
+  //! canvas of the plot file that was current last (a canvas of a projection or an extract, say, is current). @return pane
+  CanvasPane * plotPane();
+  //! @brief Show the Plot Tree (docked beside the canvases the first time).
+  void showTree();
   //! current pane shows no canvas of the plot file
   bool currentCanvas(GRAPHICS::PlotDocument::Path & canvas, GRAPHICS::PlotDocument::Path & graph);
   //! @brief Show an object of the browser (a click on it): in the graph selected on the current canvas, added to its

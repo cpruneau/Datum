@@ -8,8 +8,8 @@
  *
  * *********************************************************************/
 //! @file TestProjector.cpp
-//! @brief Test program of the projections of maps and of the extracts of histograms in DatumGui (Projector,
-//! Extractor, the range lines of CanvasPane), drawn without a screen (run by ctest).
+//! @brief Test program of the projections of maps, the extracts and the operations on histograms in DatumGui
+//! (Projector, Extractor, HistogramOperations, the range lines of CanvasPane), drawn without a screen (run by ctest).
 //
 // Dear ImGui runs without a window or renderer; canvas panes are drawn in windows of their own, and the mouse and keys
 // are simulated as a user would use them:
@@ -23,7 +23,11 @@
 //  - Extract of two histograms of rank 1: the lines at a quarter and three quarters, the extracts below, a line dragged
 //    (extracted again at rest, snapped when released); Save Extraction (a name per histogram: all saved or none);
 //  - Extract of a map: vertical and horizontal lines, the region below; beside a projection of the same map (the lines
-//    of the two told apart); Cancel Extraction (lines removed, canvas closed, nothing saved).
+//    of the two told apart); Cancel Extraction (lines removed, canvas closed, nothing saved);
+//  - operations: sum (three histograms, coefficients), difference, product, ratio (empty bins, a zero divisor),
+//    scale, of histograms and of a HistogramSyst (systematic uncertainties propagated); binnings that differ; the
+//    window (histograms clicked, in order; two at most for a difference), the result in a canvas below, Save Result,
+//    the canvas closed.
 // No frame may show two widgets with the same identifier. Prints each failed check and exits with the number of
 // failures (0: all passed).
 //
@@ -37,6 +41,8 @@
 #include "CanvasPane.hpp"
 #include "Projector.hpp"
 #include "Extractor.hpp"
+#include "HistogramOperations.hpp"
+#include "HistogramSyst.hpp"
 #include "ImGuiPainter.hpp"
 #include "Histogram.hpp"
 #include "Folder.hpp"
@@ -71,6 +77,7 @@ struct Window
   int counter = 0;
   Projector projector;
   Extractor extractor;
+  HistogramOperations operations;
   Window()
   {
     add();
@@ -80,6 +87,7 @@ struct Window
     p.close = [this](const std::string & id) { for (std::size_t k=0; k<panes.size(); k++) if (id == panes[k]->windowId()) { panes.erase(panes.begin() + long(k)); return; } };
     projector.setPanes(p);
     extractor.setPanes(p);
+    operations.setPanes(p);
   }
   CanvasPane & add()
   {
@@ -90,7 +98,8 @@ struct Window
     pane.onExtract = [this, &pane](int graph) { extractor.request(pane, graph); };
     pane.onRangeMoved = [this](int id, double low, double high, bool final)
       { if (!extractor.moved(id, low, high, final)) projector.moved(id, low, high, final); };
-    pane.contextMenuExtras = [this, &pane](int graph) { projector.contextMenu(pane, graph); extractor.contextMenu(pane, graph); };
+    pane.contextMenuExtras = [this, &pane](int graph)
+      { projector.contextMenu(pane, graph); extractor.contextMenu(pane, graph); operations.contextMenu(pane, graph); };
     return pane;
   }
   //! Window k: 600 x 400 at (0, 410 k).
@@ -112,6 +121,8 @@ struct Window
       projector.renderDialogs();
       extractor.update();
       extractor.renderDialogs();
+      operations.update();
+      operations.render();
       ImGui::Render();
       if (ImGui::GetCurrentContext()->DebugDrawIdConflictsId != 0) conflicts++;
       }
@@ -430,6 +441,133 @@ void testExtraction()
 }
 }
 
+namespace
+{
+typedef HistogramOperations Ops;
+//! Values of histograms of floats (single precision).
+bool nearf(double x, double y) { return std::fabs(x - y) <= 1.0E-6*(std::fabs(x) + std::fabs(y) + 1.0); }
+
+void testOperationComputation()
+{
+  MATH::Histogram a = curve("a", 1.0), b = curve("b", 2.0), c = curve("c", 3.0);
+  b.setBinAt(3u, 0L, 0.0, 0.0);                                // an empty bin
+  String error;
+  std::unique_ptr<MATH::Histogram> r = Ops::compute(Ops::kSum, {&a, &b, &c}, {1.0, 2.0, -0.5}, {"a", "b", "c"}, error);
+  bool ok = r != nullptr;
+  for (unsigned int i=0; i<20 && ok; i++)
+    ok = nearf(r->binValueAt(i), a.binValueAt(i) + 2.0*b.binValueAt(i) - 0.5*c.binValueAt(i))
+         && nearf(r->binUncertaintyAt(i), std::sqrt(0.01 + 4.0*b.binUncertaintyAt(i)*b.binUncertaintyAt(i) + 0.25*0.01));
+  CHECK(ok && r->name() == String("sum_a_b_c") && r->title() == String("a + 2 b - 0.5 c"));
+  r = Ops::compute(Ops::kDifference, {&c, &a}, {1.0, 1.0}, {"c", "a"}, error);
+  CHECK(r && nearf(r->binValueAt(5), 3.0*6 - 6) && r->title() == String("c - a"));
+  r = Ops::compute(Ops::kProduct, {&a, &c}, {2.0, 1.0}, {"a", "c"}, error);
+  CHECK(r && nearf(r->binValueAt(2), 2.0*3*9) && r->title() == String("(2 a) x c"));
+  r = Ops::compute(Ops::kRatio, {&c, &b}, {1.0, 1.0}, {"c", "b"}, error);
+  CHECK(r && nearf(r->binValueAt(4), 1.5) && r->binEntriesAt(3) == 0 && r->title() == String("c / b"));   // b empty in bin 3
+  r = Ops::compute(Ops::kScale, {&a}, {-3.0}, {"a"}, error);
+  CHECK(r && nearf(r->binValueAt(7), -24.0) && nearf(r->binUncertaintyAt(7), 0.3) && r->title() == String("-3 a"));
+  // what cannot be done
+  CHECK(!Ops::compute(Ops::kRatio, {&a, &b}, {1.0, 0.0}, {"a", "b"}, error) && error.str().find("divisor") != std::string::npos);
+  CHECK(!Ops::compute(Ops::kSum, {&a}, {1.0}, {"a"}, error) && !Ops::compute(Ops::kDifference, {&a, &b, &c}, {1, 1, 1}, {"a", "b", "c"}, error));
+  MATH::Histogram other("other", "", 10, 0.0, 10.0);
+  CHECK(!Ops::compute(Ops::kSum, {&a, &other}, {1.0, 1.0}, {"a", "other"}, error) && error.str().find("binning") != std::string::npos);
+  CHECK(!Ops::compute(Ops::kScale, {nullptr}, {1.0}, {"x"}, error));
+  // a HistogramSyst first: the result is one, its systematic uncertainties propagated
+  MATH::HistogramSyst s("s", "", 20, 0.0, 10.0);
+  for (unsigned int i=0; i<20; i++) { s.setBinAt(i, 1, 10.0, 1.0); s.setBinSystAt(i, 2.0, 1.0); }
+  r = Ops::compute(Ops::kScale, {&s}, {2.0}, {"s"}, error);
+  MATH::HistogramSyst * rs = dynamic_cast<MATH::HistogramSyst *>(r.get());
+  CHECK(rs && nearf(rs->binSystPlusAt(4), 4.0) && nearf(rs->binSystMinusAt(4), 2.0));
+  r = Ops::compute(Ops::kSum, {&s, &a}, {1.0, 1.0}, {"s", "a"}, error);
+  rs = dynamic_cast<MATH::HistogramSyst *>(r.get());
+  CHECK(rs && nearf(rs->binValueAt(0), 11.0) && nearf(rs->binSystPlusAt(0), 2.0));
+  // expressions
+  CHECK(Ops::expression(Ops::kRatio, {"A", "B"}, {2.0, 0.5}) == String("(2 A) / (0.5 B)"));
+  CHECK(Ops::expression(Ops::kDifference, {"A", "B"}, {1.0, -2.0}) == String("A + 2 B"));
+}
+
+void testOperationWindow()
+{
+  Window w;
+  MATH::Histogram a = curve("a", 1.0), b = curve("b", 2.0), c = curve("c", 3.0);
+  CanvasPane & source = *w.panes[0];
+  source.divide(1, 1);
+  for (MATH::Histogram * h : {&a, &b, &c}) source.canvas().graph(0).show(GraphItem(h, h->name()));
+  w.frame(2);
+  CHECK(Ops::histogramsIn(source, 0) == 3 && Ops::histogramsIn(source, 5) == 0);
+  // a sum of three, one coefficient changed
+  w.operations.open(Ops::kSum, source, 0);
+  w.frame(2);
+  CHECK(w.operations.isOpen() && w.operations.labels().size() == 3 && w.operations.chosen().empty());
+  w.operations.toggle(2);
+  w.operations.toggle(0);
+  w.operations.toggle(1);
+  w.operations.toggle(0);                                      // unselected
+  w.operations.toggle(0);                                      // chosen again: last
+  CHECK(w.operations.chosen() == std::vector<unsigned int>({2, 1, 0}));
+  w.operations.setCoefficient(1, 2.0);
+  w.frame(2);
+  CHECK(w.operations.confirm() && !w.operations.isOpen());
+  w.frame(2);
+  CHECK(w.panes.size() == 2 && w.operations.results().size() == 1);
+  if (w.operations.results().size() != 1) return;
+  const Ops::Result & r = *w.operations.results()[0];
+  CHECK(r.expression == String("c + 2 b + a") && nearf(r.histogram->binValueAt(1), 3.0*2 + 2*2.0*2 + 2.0));
+  CHECK(w.panes[1]->canvas().graph(0).items().size() == 1 && w.panes[1]->canvas().graph(0).items()[0].data() == r.histogram.get());
+  // a difference: two at most
+  w.operations.open(Ops::kDifference, source, 0);
+  w.operations.toggle(0);
+  w.operations.toggle(1);
+  w.operations.toggle(2);
+  CHECK(w.operations.chosen().size() == 2 && w.operations.message().str().find("unselect") != std::string::npos);
+  w.frame(2);
+  w.operations.cancel();
+  CHECK(!w.operations.isOpen() && w.operations.results().size() == 1);
+  // scale: the histogram clicked replaces the one chosen
+  w.operations.open(Ops::kScale, source, 0);
+  w.operations.toggle(0);
+  w.operations.toggle(2);
+  CHECK(w.operations.chosen() == std::vector<unsigned int>({2}));
+  w.operations.setCoefficient(2, 0.5);
+  CHECK(w.operations.confirm() && w.operations.results().size() == 2 && w.panes.size() == 3);
+  // the context menu of a result; Save Result
+  w.frame(2);
+  ImVec2 inside = w.screen(1, 5.0, 0.0);
+  w.mouse(ImVec2(inside.x, inside.y - 40.0f), 2);
+  w.press(true, 1);
+  w.press(false, 1);
+  w.frame(2);
+  w.key(ImGuiKey_Escape);
+  Folder folder("saved");
+  w.operations.onSave = [&](const MATH::Histogram * histogram, const String & name, String & message)
+    {
+    if (folder.contains(name)) { message = name + String(" is already there"); return false; }
+    if (!histogram) { message = "Added to the folder saved"; return true; }
+    folder.add(new MATH::Histogram(*histogram), name);
+    message = name + String(" saved");
+    return true;
+    };
+  String message;
+  int id = r.id;
+  CHECK(w.operations.save(id, "total", message) && folder.contains("total") && !w.operations.save(id, "total", message));
+  w.operations.openSave(w.operations.results()[1]->id);
+  w.frame(3);
+  w.key(ImGuiKey_Enter);
+  CHECK(folder.contains("scale_c"));
+  // a histogram no longer shown cannot be an operand; a result whose canvas is closed is dropped
+  w.operations.open(Ops::kRatio, source, 0);
+  w.operations.toggle(0);
+  w.operations.toggle(1);
+  source.canvas().graph(0).clearItems();
+  CHECK(!w.operations.confirm() && w.operations.message().str().find("no longer shown") != std::string::npos);
+  w.frame(2);
+  w.operations.cancel();
+  w.panes.erase(w.panes.begin() + 1);
+  w.frame(2);
+  CHECK(w.operations.results().size() == 1 && w.operations.results()[0]->expression == String("0.5 c"));
+}
+}
+
 int main()
 {
   std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -445,6 +583,8 @@ int main()
     testInteraction();
     testExtractComputation();
     testExtraction();
+    testOperationComputation();
+    testOperationWindow();
     }
   catch (const std::exception & e)
     {

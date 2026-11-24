@@ -20,6 +20,7 @@
 #include "DatumGui.hpp"
 #include "Projector.hpp"
 #include "Extractor.hpp"
+#include "HistogramOperations.hpp"
 #include "Graph.hpp"
 #include "Folder.hpp"
 
@@ -331,6 +332,7 @@ namespace Datum
   DatumGui _gui;   //!< the window
   Projector _projector;   //!< projections of the maps onto x or y (context menu of a graph > Project)
   Extractor _extractor;   //!< segments of histograms, regions of maps (context menu of a graph > Extract)
+  HistogramOperations _operations;   //!< menu Operations: sum, difference, product, ratio, scaling of histograms
   std::vector<std::unique_ptr<MATH::Function>>   _functions;   //!< functions created by the application (demo)
   std::vector<std::unique_ptr<MATH::DataPoints>> _data;   //!< data points created by the application (demo)
   //! A rebinned copy made by the application (in _data): the copy, its original histogram, the factors
@@ -391,6 +393,9 @@ namespace Datum
   String findConfigurationFile() const;
   //! @brief Create the menus of the menu bar (a program built on the application can make its own).
   virtual void buildMenus();
+  //! @brief Add the menu Operations (sum, difference, product, ratio, scaling of the histograms of the selected graph
+  //! of the current canvas; see HistogramOperations). @param bar menu bar
+  void addOperationsMenu(MenuBar & bar);
   //! @brief Add menus of a program built on the application, before the Help menu (nothing here). @param bar menu bar
   virtual void addMenus(MenuBar & bar) { (void)bar; }
   //! @brief Called once the window is open, the menus made and the files of the command line opened, before the
