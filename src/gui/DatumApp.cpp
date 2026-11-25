@@ -1170,6 +1170,7 @@ namespace Datum
   FileBrowser * b = &browser;
   browser.setFiles(&_files);
   browser.onOpenFile   = [this, b](const String & path) { return openFile(path, b); };
+  browser.onOpenTable  = [this](const String & path) { return openTable(path); };
   browser.onShowObject = [this](const ObjectReference & object) { showObject(object); };
   browser.onShowData   = [this](const ObjectReference & object) { showData(object); };
   browser.onShowFolder = [this](int file, const String & folder) { showFolder(file, folder); };
@@ -1688,10 +1689,21 @@ namespace Datum
   {
   std::unique_ptr<MATH::Table2D> table(new MATH::Table2D());
   TableReader::Report report;
-  try { report = TableReader().read(fileName, *table); }
-  catch (const std::exception & e)
+  // a table: an optional first row of names, then rows of numbers (blank, tab or comma separated)
+  String problem;
+  try
     {
-    _gui.showMessage("Open Table", String("Cannot read ") + fileName + String(":\n") + String(e.what()));
+    report = TableReader().read(fileName, *table);
+    if (report.rows == 0 || report.columns == 0) problem = "No row of numbers in the file.";
+    else if (report.nonNumeric > 0)
+      problem = String("Only the first row may hold names; the other rows must hold numbers (") + String(std::to_string(report.nonNumeric).c_str())
+                + String(report.nonNumeric == 1 ? " entry is not a number: " : " entries are not numbers; the first: ") + report.firstNonNumeric + String(").");
+    }
+  catch (const std::exception & e) { problem = String(e.what()); }
+  if (!problem.isNull() && !problem.isEmpty())
+    {
+    _gui.showMessage("Table not read", String("The file ") + fileName + String(" could not be read as a table.\n\n") + problem);
+    _gui.setStatus(String("Not a table: ") + fileName);
     return false;
     }
   String label = table->name();
