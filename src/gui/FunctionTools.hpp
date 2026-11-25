@@ -132,6 +132,9 @@ namespace Datum
   void makePrototype(const String & className, unsigned int nParameters);
   //! @brief Fill the editor with a function shown. @param shown function and its range @param name name given
   void load(const Shown & shown, const std::string & name);
+  //! @brief Whether the function of the window differs from a function shown (class, parameters, range or name).
+  //! @param shown function shown @return true if Update would change it
+  bool differs(const Shown & shown) const;
 
   // the editor (New, Duplicate)
   bool _editorOpen = false;                                   //!< the window is open
@@ -144,6 +147,8 @@ namespace Datum
   String _editorMessage;                                      //!< why Add cannot be done
   int _added = 0;                                             //!< functions added (for the default names)
   int _target = -1;                                           //!< item of the selected graph changed by Update (-1: none)
+  int _targetAdded = 0;                                       //!< frames left to take the function just added as the target
+  std::size_t _shownBeforeAdd = 0;                            //!< functions of the selected graph before Add
 
   // the functions of a file (Open)
   bool _fileOpen = false;
