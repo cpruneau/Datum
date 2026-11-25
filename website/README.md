@@ -7,9 +7,12 @@ reference made by Doxygen from the sources of Datum.
 ## Setup (once)
 
 ```
-pip3 install "mkdocs<2" "mkdocs-material<10"   # the pages (MkDocs 1.x: Material does not support MkDocs 2)
 brew install doxygen graphviz         # the API reference and its diagrams (macOS)
 ```
+
+MkDocs needs nothing more: the first `./build_site.sh` makes a Python virtual environment, `website/.venv`, and
+installs MkDocs 1.x and the Material theme in it (Homebrew's Python does not allow `pip install` outside of one).
+`./build_site.sh --setup` makes it again.
 
 ## Build
 
