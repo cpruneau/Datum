@@ -8,7 +8,7 @@
  *
  * *********************************************************************/
 //! @file HistogramOperations.hpp
-//! @brief HistogramOperations: the Operations menu of DatumGui (sum, difference, product, ratio, scaling of histograms).
+//! @brief HistogramOperations: the Histograms menu of DatumGui (sum, difference, product, ratio, scaling of histograms).
 #ifndef DATUM__GUI__HistogramOperations
 #define DATUM__GUI__HistogramOperations
 #include <functional>
@@ -26,7 +26,7 @@ namespace Datum
   class CanvasPane;
 
   //!
-  //! @brief Operations on the histograms shown in a graph of DatumGui (menu Operations): sum, difference, product,
+  //! @brief Operations on the histograms shown in a graph of DatumGui (menu Histograms): sum, difference, product,
   //! ratio, scaling by a constant.
   //!
   //! Choosing an operation opens a window listing the histograms of the selected graph of the current canvas. The

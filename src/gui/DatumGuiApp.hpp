@@ -175,6 +175,10 @@ namespace Datum
   Tab * tab() { return _current >= 0 && _current < int(_documents.size()) ? &_documents[std::size_t(_current)] : nullptr; }
   //! @brief Menus: File, Edit, View, Window, Help.
   void buildMenus() override;
+  //! @brief A function of the Functions menu: on a canvas of the plot file, a function of a registered class goes into
+  //! the plot file (the selected graph), any other function (a composite) into a canvas below it; otherwise as
+  //! DatumApp. @param f function @param xMin range @param xMax range @param yMin range @param yMax range
+  void showFunction(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax) override;
   //! @brief Enable and check the items of the menus.
   void updateMenuStates() override;
   //! @brief The rebinned copy of a histogram: made and owned by the plot file (GRAPHICS::PlotSpec::rebinned(), written

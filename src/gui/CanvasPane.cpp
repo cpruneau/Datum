@@ -437,13 +437,13 @@ namespace Datum
       }
     ImGui::EndMenu();
     }
-  // the tools of the graph (also in the Operations menu of DatumGui, for the selected graph of the current canvas)
+  // the tools of the graph (also in the Histograms menu of DatumGui, for the selected graph of the current canvas)
   renderCompareMenu(_contextGraph);
   renderRebinItemsMenu(_contextGraph);
   renderFitMenu(_contextGraph);
   renderShowDataMenu(_contextGraph);
   renderRemoveFitMenu(_contextGraph);
-  // operations on the histograms of the graph (as in the Operations menu)
+  // operations on the histograms of the graph (as in the Histograms menu)
   if (onOperation)
     {
     ImGui::Separator();

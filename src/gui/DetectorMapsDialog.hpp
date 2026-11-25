@@ -49,7 +49,7 @@ namespace Datum
   //!    PerformanceDerivedCalculator or CalibrationProducer), made empty (filled with a value) with the binning of the
   //!    object, its axes assigned to variables, its bins edited in a table.
   //! "Show" puts a copy of a map in the current graph (a function of rank 1 or 2, a histogram); after it is fitted
-  //! there (Operations > Fit), "Adopt fit" makes the fitted function the source of the map. Values outside the allowed
+  //! there (Histograms > Fit), "Adopt fit" makes the fitted function the source of the map. Values outside the allowed
   //! range of a map (efficiencies in [0, 1], resolutions >= 0) are refused, with the reason shown.
   //!
   class DetectorMapsDialog

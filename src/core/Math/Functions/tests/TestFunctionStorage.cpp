@@ -302,6 +302,44 @@ int main()
     CHECK(ParameterizedFunction::readBinary(empty) == nullptr);
   }
 
+  // ---- composites with coefficients: difference, scaled function, pointwise product, ratio; stored and read back
+  {
+    Linear line(1.0, 2.0);                       // 1 + 2x
+    Exponential decay(2.0, -0.5);                // 2 exp(-x/2)
+    ParameterizedComposite difference;           // 3 line - 2 decay
+    difference.add("a", line, 3.0);
+    difference.add("b", decay, -2.0);
+    double x = 1.3;
+    CHECK(std::fabs(difference.evaluateAt(x) - (3*line.evaluateAt(x) - 2*decay.evaluateAt(x))) < 1E-12);
+    CHECK(std::fabs(difference.integralInRange(0.0, 2.0) - (3*line.integralInRange(0.0, 2.0) - 2*decay.integralInRange(0.0, 2.0))) < 1E-9);
+    ParameterizedComposite scaled;               // 0.5 decay
+    scaled.add("a", decay, 0.5);
+    CHECK(std::fabs(scaled.evaluateAt(x) - 0.5*decay.evaluateAt(x)) < 1E-12);
+    ParameterizedComposite product(ParameterizedComposite::kPointwiseProduct);
+    product.add("a", line, 2.0);
+    product.add("b", decay);
+    CHECK(product.rank() == 1 && std::fabs(product.evaluateAt(x) - 2*line.evaluateAt(x)*decay.evaluateAt(x)) < 1E-12);
+    CHECK(std::fabs(product.derivativeAt(x) - 2*(2*decay.evaluateAt(x) + line.evaluateAt(x)*decay.derivativeAt(x))) < 1E-5);
+    ParameterizedComposite ratio(ParameterizedComposite::kRatio);
+    ratio.add("a", line);
+    ratio.add("b", decay, 4.0);
+    CHECK(std::fabs(ratio.evaluateAt(x) - line.evaluateAt(x)/(4*decay.evaluateAt(x))) < 1E-12);
+    bool thrown = false;
+    try { ratio.add("c", line); } catch (const MathException &) { thrown = true; }
+    CHECK(thrown);                               // a ratio has two components
+    // stored and read back: operation and coefficients kept
+    for (const ParameterizedComposite * c : { &difference, &product, &ratio })
+      {
+      std::stringstream stream(std::ios::in | std::ios::out | std::ios::binary);
+      writeBinaryObject(stream, *c);
+      stream.seekg(0);
+      std::unique_ptr<ParameterizedFunction> read(ParameterizedFunction::readBinary(stream));
+      const ParameterizedComposite * back = dynamic_cast<const ParameterizedComposite *>(read.get());
+      CHECK(back && back->operation() == c->operation() && back->nComponents() == c->nComponents()
+            && back->coefficient(1) == c->coefficient(1) && std::fabs(back->evaluateAt(x) - c->evaluateAt(x)) < 1E-12);
+      }
+  }
+
   std::printf("TestFunctionStorage: %d checks, %d failed\n", nChecks, nFailures);
   return nFailures;
 }
