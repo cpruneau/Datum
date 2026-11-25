@@ -125,6 +125,7 @@ namespace Datum
   //! @name What the browser asks the application to do
   //! @{
   std::function<int(const String & path)>                      onOpenFile;    //!< open a Datum file: id, or -1
+  std::function<bool(const String & path)>                     onOpenTable;   //!< read a table of data (.csv, .txt, .dat, ...) and show it; false if it cannot be read
   std::function<void(const ObjectReference & object)>          onShowObject;  //!< show an object
   std::function<void(const ObjectReference & object)>          onShowData;    //!< show the values of an object as a table
   std::function<void(int file, const String & folderPath)>     onShowFolder;  //!< show all the objects of a folder
@@ -210,6 +211,11 @@ namespace Datum
   void renderFile(const BrowserFile & file, const String & label);
   //! @brief Draw a folder of the file system and, if expanded, its contents. @param directory path @param label text shown @param isRoot whether it is one of the folders added
   void renderDirectory(const std::string & directory, const std::string & label, bool isRoot);
+  //! @brief Draw a table file (.csv, .tsv, .tab, .ssv, .txt, .dat, .dtb) in the tree: clicking it reads and shows it.
+  //! @param path path @param label name shown
+  void renderTableFileInTree(const std::string & path, const std::string & label);
+  //! @brief Whether a file name is that of a table of data. @param name name @return true if so
+  static bool isTableName(const std::string & name);
   //! @brief Draw a Datum file of a folder: opened when first expanded. @param path path @param label text shown
   void renderDatumFileInTree(const std::string & path, const std::string & label);
   //! @brief Draw the entries of a folder of objects. @param fileId file @param folder folder @param prefix path of the folder in the file

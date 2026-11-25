@@ -66,6 +66,7 @@ namespace Datum
   FileBrowser::FileBrowser(int number)
   :
   onOpenFile(),
+  onOpenTable(),
   onShowObject(),
   onShowFolder(),
   onCloseFile(),
@@ -161,9 +162,9 @@ namespace Datum
   // see DatumApp::openTable()), directories first, by name (case-insensitive); hidden entries left out
   FileSystem::ListOptions options;
 #ifdef DATUM_WITH_ROOT
-  options.extensions = { DatumFile::extension(), DatumFile::formerExtension(), ".root", ".csv", ".tsv", ".tab", ".ssv", ".dtb" };
+  options.extensions = { DatumFile::extension(), DatumFile::formerExtension(), ".root", ".csv", ".tsv", ".tab", ".ssv", ".txt", ".dat", ".dtb" };
 #else
-  options.extensions = { DatumFile::extension(), DatumFile::formerExtension(), ".csv", ".tsv", ".tab", ".ssv", ".dtb" };
+  options.extensions = { DatumFile::extension(), DatumFile::formerExtension(), ".csv", ".tsv", ".tab", ".ssv", ".txt", ".dat", ".dtb" };
 #endif
   try
     {
@@ -381,11 +382,48 @@ namespace Datum
     {
     const Listing & l = listing(directory);
     if (!l.error.empty()) ImGui::TextDisabled("%s", l.error.c_str());
-    else if (l.directories.empty() && l.files.empty()) ImGui::TextDisabled("(no Datum files)");
+    else if (l.directories.empty() && l.files.empty()) ImGui::TextDisabled("(no Datum files or tables)");
     Listing copy = l;                                   // the cache may change while rendering the children
     for (const auto & d : copy.directories) renderDirectory(FileSystem::join(String(directory), String(d)).str(), d, false);
-    for (const auto & f : copy.files)       renderDatumFileInTree(FileSystem::join(String(directory), String(f)).str(), f);
+    for (const auto & f : copy.files)
+      {
+      std::string path = FileSystem::join(String(directory), String(f)).str();
+      if (isTableName(f)) renderTableFileInTree(path, f);
+      else renderDatumFileInTree(path, f);
+      }
     ImGui::TreePop();
+    }
+  ImGui::PopID();
+  }
+
+  bool FileBrowser::isTableName(const std::string & name)
+  {
+  std::string n = name;
+  for (char & c : n) c = char(std::tolower((unsigned char)c));
+  for (const char * e : { ".csv", ".tsv", ".tab", ".ssv", ".txt", ".dat", ".dtb" })
+    {
+    std::string x(e);
+    if (n.size() > x.size() && n.compare(n.size() - x.size(), x.size(), x) == 0) return true;
+    }
+  return false;
+  }
+
+  void FileBrowser::renderTableFileInTree(const std::string & path, const std::string & label)
+  {
+  // a table of data: a leaf, read and shown in a table pane when clicked
+  ImGui::PushID(path.c_str());
+  bool failed = _openFailed.count(path) > 0;
+  if (failed) ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+  ImGui::TreeNodeEx("##table", ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen | ImGuiTreeNodeFlags_SpanAvailWidth
+                    | ImGuiTreeNodeFlags_Bullet, "%s", label.c_str());
+  if (failed) ImGui::PopStyleColor();
+  if (!ImGui::IsDragDropActive())
+    ImGui::SetItemTooltip("%s\n%s", path.c_str(), failed ? "could not be read as a table (click to try again)"
+                                                          : "table: click to read it and show it in a table pane");
+  if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && onOpenTable)
+    {
+    if (onOpenTable(String(path))) _openFailed.erase(path);
+    else _openFailed.insert(path);
     }
   ImGui::PopID();
   }
