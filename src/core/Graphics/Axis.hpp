@@ -67,6 +67,11 @@ namespace Datum
   //! @brief Displacement of the title from its automatic position (canvas units; fractions of the cell for the axis
   //! of a Graph).
   void setTitleOffset(float dx, float dy) { _titleOffsetX = dx; _titleOffsetY = dy; }
+  //! @brief Placement of the title along the axis: at its start (kLeft: left of an x axis, bottom of a y axis), its
+  //! middle (kCenter, the default) or its end (kRight). @param alignment placement
+  void setTitleAlignment(TextAttributes::Justification alignment) { _titleAlignment = alignment; }
+  //! @brief Placement of the title along the axis (see setTitleAlignment()). @return placement
+  TextAttributes::Justification titleAlignment() const { return _titleAlignment; }
   //! @brief Size of the labels and of the title in device units (0: automatic; used by Graph).
   void setLabelPointSize(float size) { _labelPointSize = size < 0 ? 0 : size; }
   void setTitlePointSize(float size) { _titlePointSize = size < 0 ? 0 : size; }
@@ -158,6 +163,7 @@ namespace Datum
   float _labelPointSize;
   float _titlePointSize;
   float _labelGap;
+  TextAttributes::Justification _titleAlignment = TextAttributes::kCenter;   //!< placement of the title along the axis
   mutable Rect2D _titleRect; //! not streamed (set when drawn)
   mutable Rect2D _bodyRect;  //! not streamed (set when drawn)
 

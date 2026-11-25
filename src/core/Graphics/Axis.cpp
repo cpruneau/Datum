@@ -77,6 +77,7 @@ namespace Datum
   _labelPointSize(src._labelPointSize),
   _titlePointSize(src._titlePointSize),
   _labelGap(src._labelGap),
+  _titleAlignment(src._titleAlignment),
   _titleRect(src._titleRect),
   _bodyRect(src._bodyRect)
   { }
@@ -109,6 +110,7 @@ namespace Datum
     _labelPointSize = rhs._labelPointSize;
     _titlePointSize = rhs._titlePointSize;
     _labelGap       = rhs._labelGap;
+    _titleAlignment = rhs._titleAlignment;
     _titleRect      = rhs._titleRect;
     _bodyRect       = rhs._bodyRect;
     }
@@ -139,6 +141,7 @@ namespace Datum
   _labelPointSize = 0.0;
   _titlePointSize = 0.0;
   _labelGap       = 1.0;
+  _titleAlignment = TextAttributes::kCenter;
   }
 
   void Axis::setEndPoints(const Point2D & start, const Point2D & end)

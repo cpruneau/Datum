@@ -228,6 +228,11 @@ namespace Datum
   if (e.hasAttribute("showMinorTicks")) axis.setShowMinorTicks(e.attributeBool("showMinorTicks", axis.showMinorTicks()));
   if (e.hasAttribute("showLabels"))     axis.setShowLabels(e.attributeBool("showLabels", axis.showLabels()));
   if (e.hasAttribute("nMajorTicks"))    axis.setNMajorTicks(int(e.attributeInt("nMajorTicks", axis.nMajorTicks())));
+  if (e.hasAttribute("titlePlacement"))
+    {
+    String p = e.attribute("titlePlacement");
+    axis.setTitleAlignment(p == "left" ? TextAttributes::kLeft : (p == "right" ? TextAttributes::kRight : TextAttributes::kCenter));
+    }
   if (e.hasAttribute("nMinorTicks"))    axis.setNMinorTicks(int(e.attributeInt("nMinorTicks", axis.nMinorTicks())));
   if (e.hasAttribute("majorTickSize"))  axis.setMajorTickSize(float(e.attributeDouble("majorTickSize", axis.majorTickSize())));
   if (e.hasAttribute("minorTickSize"))  axis.setMinorTickSize(float(e.attributeDouble("minorTickSize", axis.minorTickSize())));
@@ -276,6 +281,7 @@ namespace Datum
   e.setAttribute("showMinorTicks", axis.showMinorTicks());
   e.setAttribute("showLabels", axis.showLabels());
   e.setAttribute("nMajorTicks", axis.nMajorTicks());
+  e.setAttribute("titlePlacement", justificationName(axis.titleAlignment()));
   e.setAttribute("nMinorTicks", axis.nMinorTicks());
   e.setAttribute("majorTickSize", num(axis.majorTickSize()));
   e.setAttribute("minorTickSize", num(axis.minorTickSize()));
@@ -342,6 +348,7 @@ namespace Datum
     if (legend->hasAttribute("pointSize")) graph.setLegendPointSize(float(legend->attributeDouble("pointSize", graph.legendPointSize())));
     read(legend->child("Fill"), graph.legendFill());
     read(legend->child("Line"), graph.legendLine());
+    read(legend->child("Text"), graph.legendTextAttributes());
     }
   // the title last: adding the items gives the graph the title of the first one
   if (e.hasAttribute("title")) graph.setTitle(e.attribute("title"));
@@ -382,6 +389,7 @@ namespace Datum
   legend.setAttribute("pointSize", num(graph.legendPointSize()));
   write(legend.addChild("Fill"), graph.legendFill());
   write(legend.addChild("Line"), graph.legendLine());
+  write(legend.addChild("Text"), graph.legendTextAttributes());
   }
 
   void readItem(const XmlElement & e, GraphItem & item)

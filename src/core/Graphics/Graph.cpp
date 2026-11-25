@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <limits>
 #include "Graph.hpp"
+#include "GraphDefaults.hpp"
 #include "GraphRenderer.hpp"
 #include "Function.hpp"
 #include "DataPoints.hpp"
@@ -271,6 +272,7 @@ namespace Datum
   _frameLine(*LineAttributes::defaultLineAttributes()),
   _titleAttributes(*TextAttributes::defaultTextAttributes()),
   _showLegend(true),
+  _legendText(*TextAttributes::defaultTextAttributes()),
   _titleOffsetX(0.0), _titleOffsetY(0.0),
   _titlePointSize(0.0),
   _autoLegend(true),
@@ -293,6 +295,8 @@ namespace Datum
   _zAxis.setTickSide(1);            // along the right edge of the color scale: ticks into it, labels to the right
   _residualAxis.setTitle("");       // automatic: "data - fit" or "pull"
   _residualAxis.setTickSide(-1);
+  _legendText.setJustification(TextAttributes::kLeft);
+  GraphDefaults::session().apply(*this);   // fonts, sizes, axes and legend box of the session
   setRenderer(GraphRenderer::defaultRenderer());
   }
 
@@ -320,6 +324,7 @@ namespace Datum
   _frameLine(src._frameLine),
   _titleAttributes(src._titleAttributes),
   _showLegend(src._showLegend),
+  _legendText(src._legendText),
   _showFits(src._showFits),
   _showFitStatistics(src._showFitStatistics),
   _showResiduals(src._showResiduals),
@@ -381,6 +386,7 @@ namespace Datum
     _frameLine = rhs._frameLine;
     _titleAttributes = rhs._titleAttributes;
     _showLegend = rhs._showLegend;
+    _legendText = rhs._legendText;
     _showFits = rhs._showFits;
     _showFitStatistics = rhs._showFitStatistics;
     _showResiduals = rhs._showResiduals;

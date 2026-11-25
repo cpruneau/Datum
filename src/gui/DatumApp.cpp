@@ -23,6 +23,7 @@
 #include "RootFileConversion.hpp"
 #endif
 #include "DatumApp.hpp"
+#include "GraphDefaults.hpp"
 #include "CanvasRegistry.hpp"
 #ifdef DATUM_GUI_PRESENTATIONS
 #include "CanvasPresentation.hpp"
@@ -112,6 +113,7 @@ namespace Datum
       linePalette    = e->attribute("linePalette", linePalette);
       shadingPalette = e->attribute("shadingPalette", shadingPalette);
       }
+    if (const XmlElement * e = root.child("GraphDefaults")) GRAPHICS::GraphDefaults::session().read(*e);
     if (const XmlElement * e = root.child("Directories"))
       {
       dataDirectory        = e->attribute("data", dataDirectory);
@@ -176,6 +178,7 @@ namespace Datum
     graphs.setAttribute("markerPalette", markerPalette);
     graphs.setAttribute("linePalette", linePalette);
     graphs.setAttribute("shadingPalette", shadingPalette);
+    GRAPHICS::GraphDefaults::session().write(root.addChild("GraphDefaults"));
     XmlElement & directories = root.addChild("Directories");
     directories.setAttribute("data", dataDirectory);
     directories.setAttribute("calibration", calibrationDirectory);
@@ -2471,6 +2474,76 @@ namespace Datum
       ImGui::Checkbox("Keep shapes", &c.keepShapes);
       ImGui::SetItemTooltip("Shapes and texts stay in a graph when its contents are replaced");
         });
+      GRAPHICS::GraphDefaults & defaults = GRAPHICS::GraphDefaults::session();
+      subPane("Texts of the graphs", [&]()
+        {
+        ImGui::TextDisabled("Font, size (points; 0: automatic, with the canvas) and color of the new graphs");
+        auto textRow = [](const char * name, GRAPHICS::GraphDefaults::Text & t)
+          {
+          ImGui::PushID(name);
+          ImGui::AlignTextToFramePadding();
+          ImGui::TextUnformatted(name);
+          ImGui::SameLine(100);
+          const GRAPHICS::TextAttributes & standard = *GRAPHICS::TextAttributes::defaultTextAttributes();
+          int font = t.font > 0 ? t.font : standard.font();
+          if (GraphEditor::fontEdit("##font", font)) t.font = font;
+          ImGui::SameLine();
+          float size = t.size;
+          ImGui::SetNextItemWidth(60);
+          if (ImGui::InputFloat("pt##size", &size, 0, 0, "%.1f")) t.size = size < 0 ? 0 : size;
+          ImGui::SetItemTooltip("Size in points (0: automatic, proportional to the canvas)");
+          ImGui::SameLine();
+          int color = t.color >= 0 ? t.color : standard.color();
+          if (GraphEditor::colorEdit("##color", color)) t.color = color;
+          ImGui::PopID();
+          };
+        textRow("Graph title", defaults.title);
+        textRow("Axis titles", defaults.axisTitles);
+        textRow("Axis labels", defaults.axisLabels);
+        textRow("Legend", defaults.legend);
+        });
+      subPane("Axes", [&]()
+        {
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::InputInt("divisions", &defaults.nDivisions)) defaults.nDivisions = std::max(1, std::min(50, defaults.nDivisions));
+        ImGui::SetItemTooltip("About how many intervals between labelled ticks (round values are chosen); 5 by default");
+        static const char * placements[] = { "left (bottom of a y axis)", "center", "right (top of a y axis)" };
+        int placement = int(defaults.axisTitleAlignment);
+        ImGui::SetNextItemWidth(200);
+        if (ImGui::Combo("title placement", &placement, placements, 3)) defaults.axisTitleAlignment = GRAPHICS::TextAttributes::Justification(placement);
+        ImGui::SetItemTooltip("Where the titles of the axes go along them");
+        });
+      subPane("Legend box", [&]()
+        {
+        ImGui::Checkbox("background", &defaults.legendBackground);
+        ImGui::SetItemTooltip("Otherwise transparent");
+        if (defaults.legendBackground) { ImGui::SameLine(); GraphEditor::colorEdit("##background", defaults.legendFillColor); }
+        ImGui::Checkbox("border", &defaults.legendBorder);
+        if (defaults.legendBorder)
+          {
+          ImGui::SameLine();
+          GraphEditor::lineStyleEdit("style##border", defaults.legendLineStyle, false);
+          ImGui::SameLine();
+          ImGui::SetNextItemWidth(70);
+          if (ImGui::InputFloat("width##border", &defaults.legendLineWidth, 0, 0, "%.1f"))
+            defaults.legendLineWidth = std::max(0.1f, std::min(10.0f, defaults.legendLineWidth));
+          ImGui::SameLine();
+          GraphEditor::colorEdit("##border color", defaults.legendLineColor);
+          }
+        static const char * justifications[] = { "left", "center", "right" };
+        int justification = int(defaults.legendJustification);
+        ImGui::SetNextItemWidth(100);
+        if (ImGui::Combo("justification of the labels", &justification, justifications, 3))
+          defaults.legendJustification = GRAPHICS::TextAttributes::Justification(justification);
+        });
+      if (ImGui::Button("Apply to all graphs##defaults"))
+        {
+        recordUndo();
+        for (int p=0; p<_gui.nPanes(); p++)
+          for (int k=0; k<_gui.pane(p).canvas().nGraphs(); k++) defaults.apply(_gui.pane(p).canvas().graph(k));
+        }
+      ImGui::SetItemTooltip("Give the graphs shown these fonts, sizes, axes and legend box (Edit > Undo to go back); "
+                            "new graphs get them anyway");
       ImGui::EndTabItem();
       }
     if (ImGui::BeginTabItem("Palettes"))

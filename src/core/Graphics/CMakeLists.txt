@@ -76,6 +76,7 @@ MarkerVector.cpp
 Painter.cpp
 Palette.cpp
 Palettes.cpp
+GraphDefaults.cpp
 Polygon.cpp
 Shape.cpp
 Projection3D.cpp
@@ -129,6 +130,9 @@ add_test(NAME CanvasRegistry COMMAND TestCanvasRegistry)
 add_executable(TestColors tests/TestColors.cpp)
 target_link_libraries(TestColors Graphics Math Base)
 add_test(NAME Colors COMMAND TestColors)
+add_executable(TestGraphDefaults tests/TestGraphDefaults.cpp)
+target_link_libraries(TestGraphDefaults Graphics Math Base)
+add_test(NAME GraphDefaults COMMAND TestGraphDefaults)
 add_executable(TestShapes tests/TestShapes.cpp)
 target_link_libraries(TestShapes Graphics Math Base)
 add_test(NAME Shapes COMMAND TestShapes)

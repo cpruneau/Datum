@@ -883,9 +883,9 @@ namespace Datum
   bool loneMap = graph->items().size() == 1 && graph->items()[0].isMap() && !graph->hasFits(2);   // its fits are listed
   if (graph->showLegend() && !graph->items().empty() && !loneMap)
     {
-    TextAttributes legendText = *TextAttributes::defaultTextAttributes();
+    TextAttributes legendText = graph->legendTextAttributes();   // font, color and justification of the graph
     legendText.setSize(sized(graph->legendPointSize(), 0.9*textSize));
-    legendText.setJustification(TextAttributes::kLeft);
+    const TextAttributes::Justification justification = legendText.justification();
     const float lineHeight = 1.4f*legendText.size();                 // fractions of the canvas height
     const float sample     = 2.2f*legendText.size()*H/W;             // sample length, fractions of the width
     const float gap        = 0.6f*legendText.size()*H/W;
@@ -930,6 +930,20 @@ namespace Datum
       painter.drawPolygon(frame, graph->legendFill(), graph->legendLine());
     float x0 = left + padX;
     float y  = top - padY - 0.5f*lineHeight;
+    // the labels, in their column: from its left edge, centered in it, or to its right edge
+    auto drawLabel = [&](const String & label, const String & statistics)
+      {
+      float column = x0 + sample + gap;
+      if (justification == TextAttributes::kLeft)
+        {
+        painter.drawText(Point2D(column, y), label, legendText);
+        if (!statistics.isNull())
+          painter.drawText(Point2D(column + painter.textWidth(label, legendText)/W + space, y), statistics, legendText);
+        return;
+        }
+      String text = statistics.isNull() ? label : label + String("  ") + statistics;
+      painter.drawText(Point2D(justification == TextAttributes::kCenter ? column + 0.5f*maxLabel : column + maxLabel, y), text, legendText);
+      };
     for (const auto & entry : entries)
       {
       const GraphItem & item = *entry.item;
@@ -937,10 +951,7 @@ namespace Datum
       if (entry.fit >= 0)
         {
         painter.drawLine({l, r}, item.fitLineAttributes(unsigned(entry.fit)));
-        painter.drawText(Point2D(x0 + sample + gap, y), entry.label, legendText);
-        if (!entry.statistics.isNull())
-          painter.drawText(Point2D(x0 + sample + gap + painter.textWidth(entry.label, legendText)/W + space, y),
-                           entry.statistics, legendText);
+        drawLabel(entry.label, entry.statistics);
         y -= lineHeight;
         continue;
         }
@@ -987,7 +998,7 @@ namespace Datum
         if (item.showLine())    painter.drawLine({l, r}, item.lineAttributes());
         if (item.showMarkers()) painter.drawMarker(middle, item.markerAttributes());
         }
-      painter.drawText(Point2D(x0 + sample + gap, y), item.label(), legendText);
+      drawLabel(item.label(), String());
       y -= lineHeight;
       }
     }
