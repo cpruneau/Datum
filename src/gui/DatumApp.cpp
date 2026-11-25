@@ -504,7 +504,7 @@ namespace Datum
   MenuBar & bar = _gui.menuBar();
 
   Menu & file = bar.addMenu("File");
-  file.addItem("Open...",        "file.open",       "Ctrl+O",       "Open a Datum file, or the histograms of a ROOT file");
+  file.addItem("Open...",        "file.open",       "Ctrl+O",       "Open a Datum file, the histograms of a ROOT file, or a table of data (.txt, .dat, .csv, ...)");
   file.addItem("Open Table...",  "file.openTable",  "",             "Open a table of data (CSV, tab or blank separated text, "
                                                                        "Datum binary table) in a table pane, to plot its columns");
   file.addItem("Open Folder...", "file.openFolder", "Ctrl+Shift+O", "Show a folder of the file system in the browser");
@@ -855,7 +855,10 @@ namespace Datum
       }
     for (const char * e : { DatumFile::extension(), DatumFile::formerExtension() })   // both, whatever the configuration
       if (std::find(types.begin(), types.end(), String(e)) == types.end()) types.push_back(String(e));
-    _gui.fileDialog().open(FileDialog::kOpenFile, "Open a Datum or ROOT file", _configuration.directory, types, "",
+    // and the tables of data (shown in a table pane, see openTable())
+    for (const char * e : { ".csv", ".tsv", ".tab", ".ssv", ".txt", ".dat", ".dtb" })
+      if (std::find(types.begin(), types.end(), String(e)) == types.end()) types.push_back(String(e));
+    _gui.fileDialog().open(FileDialog::kOpenFile, "Open a Datum or ROOT file, or a table of data", _configuration.directory, types, "",
                            [this](const String & path) { openFile(path); });
     }
   else if (c == "file.openTable")

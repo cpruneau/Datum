@@ -477,7 +477,7 @@ namespace Datum
   file.addItem("New",           "file.newBrowser", "",             "A new file browser, with files and folders of its own");
   file.addItem("New Data File", "data.new",        "Ctrl+Shift+N", "A new data file in the browser used last: an entry with an empty "
                                                                    "top folder; drag objects and folders onto it, save it as a Datum file");
-  file.addItem("Open...",      "file.open",      "Ctrl+Shift+O", "Open a Datum file (or the histograms of a ROOT file) in the browser");
+  file.addItem("Open...",      "file.open",      "Ctrl+Shift+O", "Open a Datum file (or the histograms of a ROOT file) in the browser, or a table of data in a table pane");
   file.addItem("Duplicate",    "data.duplicate", "",             "A new data file holding a copy of the folders and objects of the file selected");
   file.addItem("Rename...",    "data.rename",    "",             "A new name for the folder or histogram selected in a data file made in DatumGui (or its top folder); "
                                                                   "files read from disk keep their names");
