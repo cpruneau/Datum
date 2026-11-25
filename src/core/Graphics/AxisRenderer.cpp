@@ -158,17 +158,18 @@ namespace Datum
       }
     }
 
-  // title, centered beyond the labels and parallel to the axis, then moved by the title offset
+  // title beyond the labels and parallel to the axis (at its start, middle or end), then moved by the title offset
   Rect2D titleRect;
   if (!axis->title().isNull())
     {
-    Point2D middle((a.x()+b.x())/2, (a.y()+b.y())/2);
+    TextAttributes::Justification alignment = axis->titleAlignment();
+    Point2D middle = alignment == TextAttributes::kLeft ? a : (alignment == TextAttributes::kRight ? b : Point2D((a.x()+b.x())/2, (a.y()+b.y())/2));
     // beyond the labels, plus a gap and half the title height (in fractions of H)
     float labelSpan   = axis->showLabels() ? labelExtent : 0.0;
     float titleHeight = axis->titleAttributes().size()*H;
     float distance    = axis->labelOffset() + (labelSpan + 0.3*textHeight + 0.5*titleHeight)/H;
     TextAttributes titleAttributes = axis->titleAttributes();
-    titleAttributes.setJustification(TextAttributes::kCenter);
+    titleAttributes.setJustification(alignment);
     float angle = std::atan2(dy, dx)*180.0/3.14159265358979323846;
     Point2D position = offset(middle, -distance);
     position = Point2D(position.x() + axis->titleOffsetX(), position.y() + axis->titleOffsetY());
@@ -177,7 +178,10 @@ namespace Datum
     float w = painter.textWidth(axis->title(), titleAttributes);
     float c = std::fabs(ux), s = std::fabs(uy);
     float boxW = w*c + titleHeight*s, boxH = w*s + titleHeight*c;
-    titleRect = Rect2D::centered(position, boxW/W, boxH/H);
+    // the middle of the text: half its width along the axis from where it starts (kLeft) or ends (kRight)
+    float along = alignment == TextAttributes::kLeft ? 0.5f*w : (alignment == TextAttributes::kRight ? -0.5f*w : 0.0f);
+    Point2D center(position.x() + along*ux/W, position.y() + along*uy/H);
+    titleRect = Rect2D::centered(center, boxW/W, boxH/H);
     }
   axis->setDrawnRects(titleRect, body);
   }

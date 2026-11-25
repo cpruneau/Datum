@@ -392,6 +392,10 @@ namespace Datum
   if (ImGui::Checkbox("major ticks", &major)) { axis.setShowMajorTicks(major); changed = true; }
   ImGui::SameLine();
   if (ImGui::Checkbox("minor ticks", &minor)) { axis.setShowMinorTicks(minor); changed = true; }
+  int divisions = axis.nMajorTicks();
+  ImGui::SetNextItemWidth(90);
+  if (ImGui::InputInt("divisions", &divisions) && divisions >= 1 && divisions <= 50) { axis.setNMajorTicks(divisions); changed = true; }
+  ImGui::SetItemTooltip("About how many intervals between labelled ticks (round values are chosen)");
 
   section("Labels");
   bool labels = axis.showLabels();
@@ -419,6 +423,11 @@ namespace Datum
   float points = axis.titlePointSize();
   bool changed = textStyleEdit(title, axis.titleAttributes(), points);
   if (changed) { axis.setTitle(title); axis.setTitlePointSize(points); }
+  static const char * placements[] = { "start (left, bottom)", "middle", "end (right, top)" };
+  int placement = int(axis.titleAlignment());
+  ImGui::SetNextItemWidth(170);
+  if (ImGui::Combo("placement", &placement, placements, 3)) { axis.setTitleAlignment(TextAttributes::Justification(placement)); changed = true; }
+  ImGui::SetItemTooltip("Where the title goes along the axis");
   float dx = axis.titleOffsetX(), dy = axis.titleOffsetY();
   if (offsetEdit(dx, dy)) { axis.setTitleOffset(dx, dy); changed = true; }
   return changed;
@@ -446,6 +455,16 @@ namespace Datum
   if (ImGui::Checkbox("show", &show)) { graph.setShowLegend(show); changed = true; }
   float points = graph.legendPointSize();
   if (pointSizeEdit("text size", points)) { graph.setLegendPointSize(points); changed = true; }
+  TextAttributes & text = graph.legendTextAttributes();
+  int font = text.font();
+  if (fontEdit("font", font)) { text.setFont(font); changed = true; }
+  int textColor = text.color();
+  if (colorEdit("text color", textColor)) { text.setColor(textColor, text.alpha()); changed = true; }
+  ImGui::SameLine(0, 20);
+  static const char * justifications[] = { "left", "center", "right" };
+  int justification = int(text.justification());
+  ImGui::SetNextItemWidth(100);
+  if (ImGui::Combo("justification", &justification, justifications, 3)) { text.setJustification(TextAttributes::Justification(justification)); changed = true; }
 
   section("Position");
   bool automatic = graph.isAutoLegendPosition();
@@ -487,6 +506,10 @@ namespace Datum
     ImGui::SameLine();
     int color = graph.legendLine().color();
     if (colorEdit("##border", color)) { graph.legendLine().setColor(color, graph.legendLine().alpha()); changed = true; }
+    ImGui::SameLine(0, 20);
+    float lineWidth = graph.legendLine().width();
+    ImGui::SetNextItemWidth(90);
+    if (ImGui::DragFloat("width##border", &lineWidth, 0.05f, 0.5f, 6.0f, "%.1f")) { graph.legendLine().setWidth(lineWidth); changed = true; }
     }
   return changed;
   }

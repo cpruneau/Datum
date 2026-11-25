@@ -2,9 +2,10 @@
 <DatumGui version="1">
   <Window title="Datum" width="1428" height="900" theme="dark" fontSize="14" viewports="true" detachedWindows="true"/>
   <Canvases columns="1" rows="1" toolbars="true"/>
-  <Graphs columns="1" rows="1" legend="true" logX="false" logY="false" mode="add" keepShapes="true" colorPalette="default" markerPalette="default" linePalette="solid" shadingPalette="viridis"/>
-  <Files directory="/Users/aa7526/Developer/Datum/Datum" extensions=".datum .cap"/>
-  <Browser visible="true" docked="true"/>
+  <Graphs columns="1" rows="1" legend="true" logX="false" logY="false" mode="replace" keepShapes="true" colorPalette="default" markerPalette="default" linePalette="solid" shadingPalette="viridis"/>
+  <Directories data="/Volumes/ClaudeDisc4/OutputFiles" calibration=""/>
+  <Files directory="/Volumes/ClaudeDisc4/OutputFiles/PYTHIA/vsR/PythiaJetStudy" extensions=".datum .cap"/>
+  <Browser visible="false" docked="true"/>
   <Demo enabled="false"/>
   <Latex enabled="true" bin="" preamble="\usepackage{amsmath,amssymb}" rootSyntax="true"/>
 </DatumGui>

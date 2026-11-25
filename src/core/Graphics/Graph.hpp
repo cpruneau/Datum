@@ -718,6 +718,10 @@ namespace Datum
   float legendPointSize() const { return _legendPointSize; }   //!< Size of the legend text in points (0: automatic)
   //! @brief Background and border of the legend (default: none).
   FillAttributes & legendFill() { return _legendFill; }
+  //! @brief Font, color and justification (left, center, right) of the texts of the legend (their size:
+  //! setLegendPointSize()).
+  TextAttributes & legendTextAttributes() { return _legendText; }
+  const TextAttributes & legendTextAttributes() const { return _legendText; }   //!< Texts of the legend
   LineAttributes & legendLine() { return _legendLine; }   //!< Border of the legend
   const FillAttributes & legendFill() const { return _legendFill; }   //!< Background of the legend
   const LineAttributes & legendLine() const { return _legendLine; }   //!< Border of the legend
@@ -845,6 +849,7 @@ namespace Datum
   LineAttributes _frameLine;   //!< outline of the frame
   TextAttributes _titleAttributes;   //!< color and font of the title
   bool _showLegend;   //!< the legend is shown
+  TextAttributes _legendText;   //!< font, color and justification of the texts of the legend
   bool _showFits = true;   //!< the fits of the items are drawn
   bool _showFitStatistics = true;   //!< the legend gives the quality of the fits
   bool _showResiduals = false;   //!< the panel of the residuals is asked for
