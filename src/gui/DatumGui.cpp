@@ -980,6 +980,14 @@ namespace Datum
   return pane;
   }
 
+  SpreadsheetPane * DatumGui::activeTable()
+  {
+  if (!_tableActive) return nullptr;
+  for (const auto & p : _spreadsheetPanes)
+    if (p.get() == _currentTable) return (!_hiddenPanes.count(p.get()) && p->shown()) ? p.get() : nullptr;
+  return nullptr;
+  }
+
   SpreadsheetPane & DatumGui::addSpreadsheetPane()
   {
   char name[32];
@@ -987,6 +995,7 @@ namespace Datum
   _spreadsheetPanes.emplace_back(new SpreadsheetPane(name));
   SpreadsheetPane & pane = *_spreadsheetPanes.back();
   _currentTable = &pane;
+  _tableActive = true;   // a table just opened is the one in use
   std::string beside = paneOfCurrentWindow();
   if (beside.empty()) dockInCurrentWindow(pane.windowTitle().str());
   else _dockBeside.push_back(std::make_pair(pane.windowId(), beside));
@@ -1474,7 +1483,7 @@ namespace Datum
       // follow what the user did with the mouse (docking or undocking the window)
       if (!_layoutRequested) _settings.browserDocked = ImGui::IsWindowDocked();
       if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-        { _activeBrowser = 0; _lastFocus = kFocusBrowser; noteFocus(FileBrowser::mainWindowName()); }
+        { _activeBrowser = 0; _lastFocus = kFocusBrowser; noteFocus(FileBrowser::mainWindowName()); _tableActive = false; }
       _browsers.front()->render();
       }
     else if (!_layoutRequested) _settings.browserDocked = ImGui::IsWindowDocked();
@@ -1510,7 +1519,7 @@ namespace Datum
     if (ImGui::Begin(browser.windowName(), &open))
       {
       if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-        { _activeBrowser = int(k); _lastFocus = kFocusBrowser; noteFocus(browser.windowName()); }
+        { _activeBrowser = int(k); _lastFocus = kFocusBrowser; noteFocus(browser.windowName()); _tableActive = false; }
       browser.render();
       }
     ImGui::End();
@@ -1590,7 +1599,7 @@ namespace Datum
       {
       // the pane whose window gets the focus (click, tab) becomes current
       bool focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
-      if (focused) { _lastFocus = kFocusCanvas; noteFocus(pane.windowId()); }
+      if (focused) { _lastFocus = kFocusCanvas; noteFocus(pane.windowId()); _tableActive = false; }
       if (focused && _focusedPane != k) { _currentPane = k; _focusedPane = k; }
       ImVec2 size = ImGui::GetContentRegionAvail();
       bool clicked = pane.render(size.x, size.y, k == _currentPane, _font);
@@ -1616,7 +1625,7 @@ namespace Datum
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 6));
     bool visible = ImGui::Begin(pane.windowTitle().data(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { noteFocus(pane.windowTitle().data()); _currentData = &pane; }
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { noteFocus(pane.windowTitle().data()); _currentData = &pane; _tableActive = false; }
     if (visible) pane.render();
     ImGui::End();
     if (open) k++;
@@ -1631,7 +1640,8 @@ namespace Datum
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6, 6));
     bool visible = ImGui::Begin(pane.windowTitle().data(), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar);
     ImGui::PopStyleVar();
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { noteFocus(pane.windowTitle().data()); _currentTable = &pane; }
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { noteFocus(pane.windowTitle().data()); _currentTable = &pane; _tableActive = true; }
+    pane.setShown(visible);
     if (visible) pane.render();
     ImGui::End();
     if (open) k++;

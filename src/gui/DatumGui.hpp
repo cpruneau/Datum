@@ -286,6 +286,9 @@ namespace Datum
   //! canvas pane. @return the new pane
   SpreadsheetPane & addSpreadsheetPane();
   int  nSpreadsheetPanes() const { return (int)_spreadsheetPanes.size(); }   //!< Number of table panes
+  //! @brief The table pane in use: visible, and the work pane focused last (not a canvas, a browser or a data pane
+  //! since). @return pane, or null
+  SpreadsheetPane * activeTable();
   SpreadsheetPane & spreadsheetPane(int k) { return *_spreadsheetPanes.at(k); }   //!< Table pane k
   //! @brief Add a canvas pane docked beside a window (splitting its area), and make it current.
   //! @param windowId identifier of the window ("###name") @return the new pane
@@ -476,6 +479,7 @@ namespace Datum
   std::vector<int> _closeWindowRequests;   //!< windows closed by closeWindow(), at the next frame
   std::set<const void *> _hiddenPanes;   //!< browsers (other than the first), table and data panes hidden
   const void * _currentTable = nullptr;  //!< table pane used last
+  bool _tableActive = false;             //!< a table pane is the work pane focused last
   const void * _currentData = nullptr;   //!< data pane used last
   //! @brief Panes of a kind, in order (the first browser included). @param kind kind @return panes
   std::vector<const void *> panesOfKind(PaneKind kind) const;

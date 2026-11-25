@@ -412,6 +412,10 @@ namespace Datum
   //! @brief The Functions menu (shared by the menu bars of the programs): New, Open, Save, Save As, Duplicate, Sum,
   //! Difference, Product, Ratio, Scale. @param bar menu bar
   void addFunctionsMenu(MenuBar & bar);
+  //! @brief The Stat menu (shared by the menu bars of the programs): the items of the right-click menu of the table pane
+  //! in use (plots, correlations, summary statistics, selection, copy, save); enabled only when a table pane is visible
+  //! and is the work pane used last. @param bar menu bar
+  void addStatMenu(MenuBar & bar);
   //! @brief Show a function made by the Functions menu (owned by the application): in the selected graph of the
   //! current canvas, a canvas made if there is none. @param f function @param xMin range @param xMax range
   //! @param yMin range (two variables) @param yMax range
