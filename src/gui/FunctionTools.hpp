@@ -34,7 +34,9 @@ namespace Datum
   //!
   //! - New: a window to define a function (a class of FunctionRegistry or a composite, its parameters, its range and
   //!   its name); Add shows it in the selected graph of the current canvas (a canvas is made if there is none), and
-  //!   the window stays open to add more.
+  //!   the window stays open to add more. Update changes, instead, the function of the selected graph chosen in
+  //!   the window (its class, parameters, range and name), keeping its place and style in the graph.
+  //! - Edit: the same window, filled with a function shown, for Update.
   //! - Duplicate: the same window, filled with a copy of a function shown, to edit before Add.
   //! - Open: the functions of a Datum file (MATH::ParameterizedFunction objects, in any folder), checked to be shown.
   //! - Save, Save As: a function to a Datum file (the function itself, read back by Open), or as a table of its values
@@ -96,6 +98,8 @@ namespace Datum
   void openNew(double xMin, double xMax);
   //! @brief Duplicate: the window filled with a copy of a function. @param shown function and its range
   void openDuplicate(const Shown & shown);
+  //! @brief Edit: the window filled with a function shown, which Update changes. @param shown function and its range
+  void openEdit(const Shown & shown);
   //! @brief Open: the functions of a Datum file, to choose. @param path file @param xMin default range
   //! @param xMax default range
   void openFile(const String & path, double xMin, double xMax);
@@ -107,6 +111,13 @@ namespace Datum
 
   //! Shows a function made by the windows (owned by the application from then on), over a range.
   std::function<void(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax)> onShow;
+  //! Changes the function of item `item` of the selected graph: the function made by the window (owned by the
+  //! application from then on), its range, and its name (empty: the name and label of the item are kept). Returns false
+  //! with `error` set when it cannot be done.
+  std::function<bool(int item, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax,
+                     const String & name, String & error)> onUpdate;
+  //! The functions shown in the selected graph (the choices of Update).
+  std::function<std::vector<Shown>()> shownFunctions;
   //! Called with what to tell (status line).
   std::function<void(const String &)> onStatus;
 
@@ -119,6 +130,8 @@ namespace Datum
   void renderOperation();
   //! @brief Make the function of the editor of a class. @param className class or composite name
   void makePrototype(const String & className, unsigned int nParameters);
+  //! @brief Fill the editor with a function shown. @param shown function and its range @param name name given
+  void load(const Shown & shown, const std::string & name);
 
   // the editor (New, Duplicate)
   bool _editorOpen = false;                                   //!< the window is open
@@ -130,6 +143,7 @@ namespace Datum
   double _xMin = 0, _xMax = 10, _yMin = 0, _yMax = 10;        //!< range
   String _editorMessage;                                      //!< why Add cannot be done
   int _added = 0;                                             //!< functions added (for the default names)
+  int _target = -1;                                           //!< item of the selected graph changed by Update (-1: none)
 
   // the functions of a file (Open)
   bool _fileOpen = false;

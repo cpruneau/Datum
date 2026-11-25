@@ -179,6 +179,8 @@ namespace Datum
   //! the plot file (the selected graph), any other function (a composite) into a canvas below it; otherwise as
   //! DatumApp. @param f function @param xMin range @param xMax range @param yMin range @param yMax range
   void showFunction(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax) override;
+  bool updateFunction(int item, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax,
+                      const String & name, String & error) override;
   //! @brief Enable and check the items of the menus.
   void updateMenuStates() override;
   //! @brief The rebinned copy of a histogram: made and owned by the plot file (GRAPHICS::PlotSpec::rebinned(), written

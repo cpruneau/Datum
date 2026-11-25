@@ -106,6 +106,9 @@ namespace Datum
   const MATH::DataPoints * data()     const { return _data; }   //!< The data points shown (kData), or null
   //! @brief Show other data points (e.g. a new version of the same object); ignored for a function. @param data data
   void setData(const MATH::DataPoints * data) { if (_kind == kData && data) _data = data; }
+  //! @brief Show another function (e.g. the same one with new parameters), keeping the style; ignored for data.
+  //! @param function function (not owned)
+  void setFunction(const MATH::Function * function) { if (_kind == kFunction && function) { _function = function; _grid.reset(); _gridKey.clear(); } }
   //! @brief The object shown (function or data), to compare items. @return pointer
   const void * object() const { return _kind == kFunction ? (const void*)_function : (const void*)_data; }
 

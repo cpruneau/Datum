@@ -697,6 +697,50 @@ namespace Datum
   _gui.setStatus("The function is shown in a canvas of its own: plot files describe functions of registered classes only");
   }
 
+  bool DatumGuiApp::updateFunction(int item, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax,
+                                   double yMin, double yMax, const String & name, String & error)
+  {
+  Tab * t = tab();
+  Path canvas, graph;
+  if (!t || !f || !currentCanvas(canvas, graph) || graph.empty())   // not a graph of the plot file
+    return DatumApp::updateFunction(item, std::move(f), xMin, xMax, yMin, yMax, name, error);
+  PlotDocument & d = *t->document;
+  const XmlElement * g = d.element(graph);
+  if (!g) { error = "The graph is no longer in the plot file"; return false; }
+  // the element of the item: the items of a graph are its Histogram and Function elements, in order
+  Path element;
+  int k = 0;
+  for (unsigned int j=0; j<g->nChildren(); j++)
+    {
+    PlotDocument::Kind kind = PlotDocument::kind(g->child(j));
+    if (kind != PlotDocument::kHistogram && kind != PlotDocument::kFunction) continue;
+    if (k++ != item) continue;
+    if (kind == PlotDocument::kFunction) { element = graph; element.push_back(int(j)); }
+    break;
+    }
+  if (element.empty()) { error = "That function is no longer in the selected graph"; return false; }
+  if (!MATH::FunctionRegistry::isRegistered(*f) || dynamic_cast<const MATH::ParameterizedComposite *>(f.get()))
+    { error = "Plot files describe functions of registered classes only (use Add: the function is shown in a canvas of its own)"; return false; }
+  std::string values;
+  for (unsigned int p=0; p<f->nParameters(); p++)
+    values += (p ? " " : "") + XmlElement::formatNumber(f->parameter(p).value()).str();
+  d.beginEdit();
+  d.setAttribute(element, "class", MATH::FunctionRegistry::typeName(*f));
+  d.setAttribute(element, "parameters", String(values.c_str()));
+  d.setAttribute(element, "xMin", XmlElement::formatNumber(xMin));
+  d.setAttribute(element, "xMax", XmlElement::formatNumber(xMax));
+  if (f->rank() == 2)
+    {
+    d.setAttribute(element, "yMin", XmlElement::formatNumber(yMin));
+    d.setAttribute(element, "yMax", XmlElement::formatNumber(yMax));
+    }
+  if (!name.isEmpty()) { d.setAttribute(element, "name", name); d.setAttribute(element, "label", name); }
+  d.endEdit();
+  t->selected = element;
+  t->hasSelection = true;
+  return true;
+  }
+
   void DatumGuiApp::updateMenuStates()
   {
   DatumApp::updateMenuStates();
