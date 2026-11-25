@@ -103,6 +103,8 @@ namespace Datum
     }
 
   if (!ImGui::BeginTabBar("##fits", ImGuiTabBarFlags_FittingPolicyScroll)) return;
+  _removeItem = -1;
+  _removeFrom = nullptr;
   for (const auto & entry : fits)
     {
     GraphItem & item = graph->items()[std::size_t(entry.first)];
@@ -110,13 +112,26 @@ namespace Datum
     if (!fit) continue;
     std::string label = fit->label.isNull() ? "fit " + std::to_string(entry.second + 1) : fit->label.data();
     label += "###fit" + std::to_string(entry.first) + "_" + std::to_string(entry.second);
-    if (ImGui::BeginTabItem(label.c_str()))
+    bool open = ImGui::BeginTabItem(label.c_str());
+    // right-click the tab: remove the fit
+    if (onRemoveFit && ImGui::BeginPopupContextItem())
+      {
+      if (ImGui::MenuItem("Remove Fit")) { _removeItem = entry.first; _removeFit = entry.second; }
+      ImGui::SetItemTooltip("Remove this fit from the object: it is not kept when the object is saved");
+      ImGui::EndPopup();
+      }
+    if (open)
       {
       renderFit(item, entry.second, beforeChange);
       ImGui::EndTabItem();
       }
     }
   ImGui::EndTabBar();
+  // removed after the tabs are drawn (the indices of the fits that follow change)
+  if (_removeItem == -2 && _removeFrom && onRemoveFit) { onRemoveFit(*_removeFrom, _removeFit); _removeFrom = nullptr; _removeItem = -1; return; }
+  if (_removeItem >= 0 && _removeItem < int(graph->items().size()) && onRemoveFit)
+    onRemoveFit(graph->items()[std::size_t(_removeItem)], _removeFit);
+  _removeItem = -1;
   }
 
   void FitPane::renderFit(GraphItem & item, unsigned int k, const std::function<void()> & beforeChange)
@@ -125,14 +140,23 @@ namespace Datum
   const MATH::FitRecord & fit = *item.fit(k);
   ImGui::PushID(int(k));
 
-  // what was fitted to what; Copy on the right
+  // what was fitted to what; Remove and Copy on the right
   ImGui::Text("%s", functionType(fit).c_str());
   ImGui::SameLine();
   ImGui::TextDisabled("fitted to %s", item.label().isNull() ? "(unnamed)" : item.label().data());
-  float buttonWidth = ImGui::CalcTextSize("Copy").x + 2*ImGui::GetStyle().FramePadding.x;
+  // Remove and Copy on the right
+  const ImGuiStyle & spacing = ImGui::GetStyle();
+  float buttonWidth = ImGui::CalcTextSize("Copy").x + 2*spacing.FramePadding.x;
+  if (onRemoveFit) buttonWidth += ImGui::CalcTextSize("Remove").x + 2*spacing.FramePadding.x + spacing.ItemSpacing.x;
   ImGui::SameLine();
   float available = ImGui::GetContentRegionAvail().x;
   if (available > buttonWidth) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + available - buttonWidth);
+  if (onRemoveFit)
+    {
+    if (ImGui::Button("Remove")) { _removeItem = -2; _removeFit = k; _removeFrom = &item; }
+    ImGui::SetItemTooltip("Remove this fit from the object: it is not kept when the object is saved");
+    ImGui::SameLine();
+    }
   if (ImGui::Button("Copy")) ImGui::SetClipboardText(text(item, fit).data());
   ImGui::SetItemTooltip("Copy the results of the fit (tab-separated) to the clipboard");
 

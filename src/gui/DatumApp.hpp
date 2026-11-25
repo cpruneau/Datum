@@ -245,6 +245,9 @@ namespace Datum
   //! @param data data points of rank 2 @param fit index of a fit of rank 2
   //!
   void showResidualMap(const MATH::DataPoints * data, unsigned int fit);
+  //! @brief Remove fit k from the object an item shows (data points or function): the items showing it, on every
+  //! canvas, forget its settings. The fit is not kept when the object is saved. @param item item @param k fit
+  void removeFit(GRAPHICS::GraphItem & item, unsigned int k);
   //!
   //! @brief Show the projections of a histogram of rank 2 on x and y, with its fits of rank 2 projected
   //! (MATH::projection()), side by side in a new canvas pane, with the panel of the residuals (undoable).

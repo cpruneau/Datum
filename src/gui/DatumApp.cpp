@@ -331,6 +331,7 @@ namespace Datum
     else if (!problems.isNull()) _gui.setStatus(String("Composites not read: ") + problems);
     }
   _gui.fitPane().onResidualMap = [this](const MATH::DataPoints * data, unsigned int fit) { showResidualMap(data, fit); };
+  _gui.fitPane().onRemoveFit = [this](GraphItem & item, unsigned int k) { removeFit(item, k); };
   _gui.fitPane().onProjections = [this](const MATH::DataPoints * data) { showProjections(data); };
   if (_configuration.demo) createDemo();
   for (const auto & argument : _arguments)
@@ -383,6 +384,13 @@ namespace Datum
   pane.onDrop = [this, &pane](int graph, const ObjectReference & object) { showObject(pane, graph, object); };
   pane.onShowData = [this](const MATH::DataPoints * data, const String & label) { showDataTable(data, label); };
   pane.onFit = [this](int item) { _gui.openFitDialog(item); };
+  CanvasPane * fitted = &pane;
+  pane.onRemoveFit = [this, fitted](int graph, int item, unsigned int fit)
+    {
+    if (graph < 0 || graph >= fitted->canvas().nGraphs()) return;
+    Graph & g = fitted->canvas().graph(graph);
+    if (item >= 0 && item < int(g.items().size())) removeFit(g.items()[std::size_t(item)], fit);
+    };
   // Sum, Difference, Product, Ratio, Scale in the context menu of a graph: as in the Operations menu, on that graph
   CanvasPane * operated = &pane;
   pane.onOperation = [this, operated](int graph, int operation)
@@ -1680,6 +1688,23 @@ namespace Datum
       }
     catch (const std::exception & e) { _gui.showMessage("Save Table", String("Cannot save ") + path + String(":\n") + String(e.what())); }
     });
+  }
+
+  void DatumApp::removeFit(GraphItem & item, unsigned int k)
+  {
+  if (k >= item.nFits()) return;
+  const void * object = item.object();
+  String label = item.fit(k) && !item.fit(k)->label.isNull() ? item.fit(k)->label : String("fit");
+  String name = item.label();
+  if (item.kind() == GraphItem::kData && item.data()) const_cast<MATH::DataPoints *>(item.data())->removeFit(k);
+  else if (item.function()) const_cast<MATH::Function *>(item.function())->removeFit(k);
+  else return;
+  // every item showing the object (on any canvas) forgets the settings of that fit
+  for (int p=0; p<_gui.nPanes(); p++)
+    for (int g=0; g<_gui.pane(p).canvas().nGraphs(); g++)
+      for (auto & shown : _gui.pane(p).canvas().graph(g).items())
+        if (shown.object() == object) shown.fitRemoved(k);
+  _gui.setStatus(String("Removed ") + label + String(" from ") + name + String(": it is not kept when the object is saved"));
   }
 
   void DatumApp::showResidualMap(const MATH::DataPoints * data, unsigned int k)

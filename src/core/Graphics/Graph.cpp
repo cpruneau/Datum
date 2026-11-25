@@ -208,6 +208,13 @@ namespace Datum
   _fitHidden[k] = !v;
   }
 
+  void GraphItem::fitRemoved(unsigned int k)
+  {
+  if (k < _fitHidden.size()) _fitHidden.erase(_fitHidden.begin() + long(k));
+  if (k < _fitLines.size()) _fitLines.erase(_fitLines.begin() + long(k));
+  if (k < _fitLineSet.size()) _fitLineSet.erase(_fitLineSet.begin() + long(k));
+  }
+
   LineAttributes GraphItem::fitLineAttributes(unsigned int k) const
   {
   return (k < _fitLineSet.size() && _fitLineSet[k]) ? _fitLines[k] : defaultFitLine(k);
@@ -577,6 +584,39 @@ namespace Datum
   return result;
   }
 
+
+  bool Graph::pickFit(const Point2D & p, float toleranceX, float toleranceY, int & item, unsigned int & fit) const
+  {
+  if (!frameContains(p) || is3D()) return false;
+  const View v = view();
+  double best = 1.0;
+  bool found = false;
+  for (std::size_t i=0; i<_items.size(); i++)
+    {
+    const GraphItem & it = _items[i];
+    if (it.rank() != 1) continue;
+    for (unsigned int k=0; k<it.nFits(); k++)
+      {
+      const MATH::FitRecord * f = drawnFit(it, k);
+      if (!f || f->function->rank() != 1) continue;
+      // the curve near p: points of it at canvas x within the tolerance, distance in units of the tolerance
+      for (int s=-4; s<=4; s++)
+        {
+        double x, y;
+        fromCanvas(v, Point2D(p.x() + 0.25f*float(s)*toleranceX, p.y()), x, y);
+        if (!it.extendFits() && !f->low.empty() && (x < f->low[0] || x > f->high[0])) continue;
+        double value;
+        try { value = f->function->evaluateAt(x); } catch (...) { continue; }
+        if (!std::isfinite(value) || (v.logY && value <= 0)) continue;
+        Point2D q = toCanvas(v, x, value);
+        double dx = (q.x() - p.x())/toleranceX, dy = (q.y() - p.y())/toleranceY;
+        double d = dx*dx + dy*dy;
+        if (d <= best) { best = d; found = true; item = int(i); fit = k; }
+        }
+      }
+    }
+  return found;
+  }
 
   GraphItem & Graph::show(const GraphItem & item, bool replace)
   {

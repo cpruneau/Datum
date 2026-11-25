@@ -294,6 +294,9 @@ namespace Datum
   bool isFitShown(unsigned int k) const { return k >= _fitHidden.size() || !_fitHidden[k]; }
   //! @brief Draw fit k or not. @param k index @param v draw it
   void setFitShown(unsigned int k, bool v);
+  //! @brief Fit k was removed from the object shown: its settings here (shown, line) go, those of the next fits move
+  //! down one index. @param k index of the fit removed
+  void fitRemoved(unsigned int k);
   //! @brief Line of the curve of fit k: the one set, or defaultFitLine(k). @param k index @return line
   LineAttributes fitLineAttributes(unsigned int k) const;
   //! @brief Set the line of the curve of fit k. @param k index @param line line
@@ -731,6 +734,10 @@ namespace Datum
   //! @brief What is at the canvas position p, according to the last drawing: legend, title, axis titles, data
   //! points (within toleranceX, toleranceY of p, canvas units), axes (line, ticks and labels), frame, cell. @return pick
   Pick pick(const Point2D & p, float toleranceX, float toleranceY) const;
+  //! @brief The fit curve drawn near the canvas position p (fits of rank 1, as in the last drawing), within
+  //! toleranceX, toleranceY of p (canvas units). @param p position @param toleranceX tolerance @param toleranceY
+  //! tolerance @param item set to the index of the item @param fit set to the index of its fit @return false if none
+  bool pickFit(const Point2D & p, float toleranceX, float toleranceY, int & item, unsigned int & fit) const;
   //! @}
 
   //! @name Residuals of the fits

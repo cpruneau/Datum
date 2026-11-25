@@ -367,6 +367,28 @@ namespace Datum
     }
   }
 
+  void CanvasPane::renderRemoveFitMenu(int graphIndex)
+  {
+  if (graphIndex < 0 || graphIndex >= _canvas.nGraphs() || !onRemoveFit) return;
+  Graph & graph = _canvas.graph(graphIndex);
+  bool any = false;
+  for (const auto & item : graph.items()) if (item.nFits() > 0) any = true;
+  if (!ImGui::BeginMenu("Remove Fit", any)) return;
+  for (size_t i=0; i<graph.items().size(); i++)
+    {
+    const GraphItem & item = graph.items()[i];
+    for (unsigned int k=0; k<item.nFits(); k++)
+      {
+      const MATH::FitRecord * fit = item.fit(k);
+      String label = fit && !fit->label.isNull() ? fit->label : String("fit ") + String(std::to_string(k + 1));
+      String entry = (item.label().isNull() ? String("(unnamed)") : item.label()) + String(": ") + label
+                     + String("##removeFit") + String(std::to_string(i*1000 + k));
+      if (ImGui::MenuItem(entry.data())) { onRemoveFit(graphIndex, int(i), k); ImGui::EndMenu(); return; }
+      }
+    }
+  ImGui::EndMenu();
+  }
+
   void CanvasPane::renderContextMenu()
   {
   if (!ImGui::BeginPopup("graphContext")) return;
@@ -374,6 +396,18 @@ namespace Datum
   Graph & graph = _canvas.graph(_contextGraph);
   ImGui::TextDisabled("%s", graph.title().isNull() ? "Graph" : graph.title().data());
   ImGui::Separator();
+  // the curve of a fit right-clicked
+  if (onRemoveFit && _contextFitItem >= 0 && _contextFitItem < int(graph.items().size())
+      && _contextFit < graph.items()[std::size_t(_contextFitItem)].nFits())
+    {
+    const GraphItem & item = graph.items()[std::size_t(_contextFitItem)];
+    const MATH::FitRecord * fit = item.fit(_contextFit);
+    String label = fit && !fit->label.isNull() ? fit->label : String("fit ") + String(std::to_string(_contextFit + 1));
+    if (ImGui::MenuItem((String("Remove Fit: ") + label + String(" (") + item.label() + String(")")).data()))
+      onRemoveFit(_contextGraph, _contextFitItem, _contextFit);
+    ImGui::SetItemTooltip("Remove this fit from the object: it is not kept when the object is saved");
+    ImGui::Separator();
+    }
   Graph::Pick pick;
   if (ImGui::MenuItem("Edit Title..."))  { pick.part = Graph::kTitle;  edit(_contextGraph, pick); }
   for (int k=0; k<graph.nAxes(); k++)
@@ -408,6 +442,7 @@ namespace Datum
   renderRebinItemsMenu(_contextGraph);
   renderFitMenu(_contextGraph);
   renderShowDataMenu(_contextGraph);
+  renderRemoveFitMenu(_contextGraph);
   // operations on the histograms of the graph (as in the Operations menu)
   if (onOperation)
     {
@@ -1128,6 +1163,12 @@ namespace Datum
     {
     _selectedGraph = k;
     clicked = true;
+    // on the curve of a fit: the context menu, with Remove Fit for that fit
+    _contextFitItem = -1;
+    if (k >= 0 && (pick.part == Graph::kFrame || pick.part == Graph::kDataPoint || pick.part == Graph::kCell)
+        && _canvas.graph(k).pickFit(p, tolX, tolY, _contextFitItem, _contextFit))
+      pick.part = Graph::kCell;
+    else _contextFitItem = -1;
     switch (pick.part)
       {
       case Graph::kTitle: case Graph::kAxis: case Graph::kAxisTitle: case Graph::kLegend: case Graph::kDataPoint:
