@@ -632,6 +632,7 @@ namespace Datum
 
   addOperationsMenu(bar);
   addFunctionsMenu(bar);
+  addStatMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("DatumGui Help",        "plot.help",      "F1", "How the canvases, the plot files and the browser work together");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "",   "List of the keyboard shortcuts");

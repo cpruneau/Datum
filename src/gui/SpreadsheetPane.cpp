@@ -251,7 +251,18 @@ namespace Datum
   void SpreadsheetPane::renderMenu()
   {
   if (!ImGui::BeginPopup("##sheetMenu")) return;
+  renderMenuItems(false);
+  ImGui::EndPopup();
+  }
+
+  void SpreadsheetPane::renderMenuItems(bool fromMenuBar)
+  {
+  if (!_table) { ImGui::TextDisabled("No table"); return; }
   const MATH::Table2D & t = *_table;
+  if (_selected.size() != t.nColumns()) _selected.assign(t.nColumns(), false);
+  int menuColumn = _menuColumn;
+  if (fromMenuBar) _menuColumn = -1;   // no column under the mouse: the selected columns
+  ImGui::PushID(fromMenuBar ? "bar" : "popup");
   std::vector<unsigned int> y = plottedColumns();
   std::string ys = y.empty() ? std::string("(select columns)") : joined(t, y, 3);
   bool hasY = !y.empty();
@@ -280,6 +291,46 @@ namespace Datum
         }
       }
     else if (ImGui::MenuItem("Do not use as the uncertainty of y")) _errorColumn = -1;
+    ImGui::Separator();
+    }
+  else
+    {
+    // the columns used as x and as uncertainties, chosen by name
+    ImGui::TextDisabled("%s", _label.data());
+    if (ImGui::BeginMenu("X Column"))
+      {
+      if (ImGui::MenuItem("none (row index)", nullptr, _xColumn < 0)) _xColumn = -1;
+      ImGui::Separator();
+      for (unsigned int c=0; c<t.nColumns(); c++)
+        {
+        std::string label = std::string(t.columnName(c).data()) + "##xc" + std::to_string(c);
+        if (ImGui::MenuItem(label.c_str(), nullptr, _xColumn == int(c)))
+          {
+          _xColumn = int(c);
+          _selected[c] = false;
+          if (_errorColumn == _xColumn) _errorColumn = -1;
+          }
+        }
+      ImGui::EndMenu();
+      }
+    ImGui::SetItemTooltip("The column used as x in the plots of Y");
+    if (ImGui::BeginMenu("Uncertainty Column"))
+      {
+      if (ImGui::MenuItem("none", nullptr, _errorColumn < 0)) _errorColumn = -1;
+      ImGui::Separator();
+      for (unsigned int c=0; c<t.nColumns(); c++)
+        {
+        std::string label = std::string(t.columnName(c).data()) + "##ec" + std::to_string(c);
+        if (ImGui::MenuItem(label.c_str(), nullptr, _errorColumn == int(c)))
+          {
+          _errorColumn = int(c);
+          _selected[c] = false;
+          if (_xColumn == _errorColumn) _xColumn = -1;
+          }
+        }
+      ImGui::EndMenu();
+      }
+    ImGui::SetItemTooltip("The column of the uncertainties of y in the plots of Y");
     ImGui::Separator();
     }
 
@@ -359,7 +410,8 @@ namespace Datum
   ImGui::Separator();
   if (ImGui::MenuItem("Copy Table")) ImGui::SetClipboardText(text().data());
   if (ImGui::MenuItem("Save Table As...") && onSaveAs) onSaveAs(*this);
-  ImGui::EndPopup();
+  ImGui::PopID();
+  _menuColumn = menuColumn;
   }
 
   } // namespace GUI

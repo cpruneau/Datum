@@ -107,6 +107,14 @@ namespace Datum
 
   //! @brief Draw the pane in the current ImGui window.
   void render();
+  //! @brief Draw the items of its menu (plots, statistics, selection, copy, save) in the menu being drawn: those of the
+  //! right-click menu; from the menu bar (the Stat menu), the columns used as x and as uncertainties are chosen in
+  //! submenus. @param fromMenuBar drawn in the menu bar, not in the right-click menu
+  void renderMenuItems(bool fromMenuBar);
+  //! @brief Whether its window was visible at the last frame. @return true if so
+  bool shown() const { return _shown; }
+  //! @brief Record whether its window is visible. @param v visible
+  void setShown(bool v) { _shown = v; }
   //! @brief The table as tab-separated text, header row first (the row labels as a first column, if any). @return text
   String text() const;
 
@@ -128,6 +136,7 @@ namespace Datum
   int  _errorColumn = -1;                  //!< column of the uncertainties of y
   int  _menuColumn = -1;                   //!< column under the mouse when the menu opened (-1: none)
   bool _overlay = false;                   //!< plots added to the graph
+  bool _shown = false;                     //!< its window was visible at the last frame
   std::string _canvasWindow;               //!< window of the canvas pane receiving the plots
 
   //! @brief Click on the name of a column: select it (Ctrl/Cmd: toggle, Shift: range). @param column column

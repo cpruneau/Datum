@@ -609,6 +609,7 @@ namespace Datum
   addMenus(bar);
   addOperationsMenu(bar);
   addFunctionsMenu(bar);
+  addStatMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("About Datum", "help.about", "", "Version and components");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "F1", "List of the keyboard shortcuts");
@@ -683,6 +684,12 @@ namespace Datum
   functions.addItem("Ratio...",      "fn.ratio",      "", "(c1 A) / (c2 B) of two functions shown in the selected graph");
   functions.addSeparator();
   functions.addItem("Scale...",      "fn.scale",      "", "c A: a function shown in the selected graph multiplied by a constant");
+  }
+
+  void DatumApp::addStatMenu(MenuBar & bar)
+  {
+  Menu & stat = bar.addMenu("Stat", "Plots and statistics of the table pane in use (as its right-click menu)");
+  stat.addWidget([this]() { if (SpreadsheetPane * p = _gui.activeTable()) p->renderMenuItems(true); });
   }
 
   std::vector<FunctionTools::Shown> DatumApp::currentFunctions()
@@ -780,6 +787,7 @@ namespace Datum
   for (const char * c : {"ops.sum", "ops.difference", "ops.product", "ops.ratio"})
     if (MenuItem * item = bar.findItem(c)) item->setEnabled(shown >= 2);
   if (MenuItem * item = bar.findItem("ops.scale")) item->setEnabled(shown >= 1);
+  if (Menu * stat = bar.findMenu("Stat")) stat->setEnabled(_gui.activeTable() != nullptr);
   if (MenuItem * item = bar.findItem("edit.undo"))  item->setEnabled(!_undo.empty());
   if (MenuItem * item = bar.findItem("edit.redo"))  item->setEnabled(!_redo.empty());
   if (MenuItem * item = bar.findItem("edit.paste")) item->setEnabled(!_clipboard.empty());
