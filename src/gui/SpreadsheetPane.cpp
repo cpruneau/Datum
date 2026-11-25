@@ -54,7 +54,7 @@ namespace Datum
   _fileName = fileName;
   _rowLabels = rowLabels;
   _selected.assign(_table ? _table->nColumns() : 0, false);
-  _anchor = _xColumn = _errorColumn = _menuColumn = -1;
+  _anchor = _xColumn = _errorColumn = _xErrorColumn = _menuColumn = -1;
   }
 
   String SpreadsheetPane::windowTitle() const
@@ -79,8 +79,9 @@ namespace Datum
   std::vector<unsigned int> SpreadsheetPane::plottedColumns() const
   {
   std::vector<unsigned int> columns;
-  for (unsigned int c : selectedColumns()) if (int(c) != _xColumn && int(c) != _errorColumn) columns.push_back(c);
-  if (columns.empty() && _menuColumn >= 0 && _menuColumn != _xColumn) columns.push_back(unsigned(_menuColumn));
+  for (unsigned int c : selectedColumns()) if (int(c) != _xColumn && int(c) != _errorColumn && int(c) != _xErrorColumn) columns.push_back(c);
+  if (columns.empty() && _menuColumn >= 0 && _menuColumn != _xColumn && _menuColumn != _errorColumn && _menuColumn != _xErrorColumn)
+    columns.push_back(unsigned(_menuColumn));
   return columns;
   }
 
@@ -162,6 +163,7 @@ namespace Datum
     std::string line;
     if (!selected.empty()) line += "Selected: " + joined(t, selected);
     if (_xColumn >= 0) line += std::string(line.empty() ? "" : "    ") + "X: " + t.columnName(unsigned(_xColumn)).data();
+    if (_xErrorColumn >= 0) line += std::string("    ± x: ") + t.columnName(unsigned(_xErrorColumn)).data();
     if (_errorColumn >= 0) line += std::string("    ± y: ") + t.columnName(unsigned(_errorColumn)).data();
     ImGui::TextDisabled("%s", line.c_str());
     }
@@ -199,7 +201,8 @@ namespace Datum
       if (int(c) == _xColumn) ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, xColor);
       std::string label = t.columnName(c).data();
       if (int(c) == _xColumn) label += " [x]";
-      if (int(c) == _errorColumn) label += " [\xC2\xB1]";
+      if (int(c) == _xErrorColumn) label += " [\xC2\xB1x]";
+      if (int(c) == _errorColumn) label += " [\xC2\xB1y]";
       label += "##column" + std::to_string(c);
       if (ImGui::Selectable(label.c_str(), bool(_selected[c]))) clickColumn(int(c));
       if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right))
@@ -255,6 +258,56 @@ namespace Datum
   ImGui::EndPopup();
   }
 
+  std::string SpreadsheetPane::columnTag(unsigned int c) const
+  {
+  std::string number = "c" + std::to_string(c), name = _table ? std::string(_table->columnName(c).data()) : number;
+  return name == number ? number : number + " (" + name + ")";
+  }
+
+  void SpreadsheetPane::setRole(unsigned int c, Role role, bool on)
+  {
+  if (c >= _selected.size()) return;
+  int column = int(c);
+  if (!on)
+    {
+    if (role == kRoleX && _xColumn == column) _xColumn = -1;
+    if (role == kRoleY) _selected[c] = false;
+    if (role == kRoleXError && _xErrorColumn == column) _xErrorColumn = -1;
+    if (role == kRoleYError && _errorColumn == column) _errorColumn = -1;
+    return;
+    }
+  // a column has one role
+  if (_xColumn == column) _xColumn = -1;
+  if (_xErrorColumn == column) _xErrorColumn = -1;
+  if (_errorColumn == column) _errorColumn = -1;
+  _selected[c] = false;
+  switch (role)
+    {
+    case kRoleX:      _xColumn = column; break;
+    case kRoleY:      _selected[c] = true; break;
+    case kRoleXError: _xErrorColumn = column; break;
+    case kRoleYError: _errorColumn = column; break;
+    }
+  }
+
+  void SpreadsheetPane::roleItems(unsigned int c)
+  {
+  std::string tag = columnTag(c), number = "c" + std::to_string(c);
+  int column = int(c);
+  struct Item { Role role; bool on; const char * what; const char * tip; };
+  const Item items[] = {
+    { kRoleX,      _xColumn == column,      "x",          "The positions of the points (none: the row index)" },
+    { kRoleY,      c < _selected.size() && _selected[c], "y", "A quantity plotted against x (several columns may be y)" },
+    { kRoleXError, _xErrorColumn == column, "error on x", "The uncertainties of x (horizontal error bars)" },
+    { kRoleYError, _errorColumn == column,  "error on y", "The uncertainties of y (vertical error bars)" } };
+  for (const Item & i : items)
+    {
+    std::string label = (i.on ? "Do not use " + number + " as " : "Use " + tag + " as ") + i.what + "##" + i.what;
+    if (ImGui::MenuItem(label.c_str(), nullptr, i.on)) setRole(c, i.role, !i.on);
+    ImGui::SetItemTooltip("%s", i.tip);
+    }
+  }
+
   void SpreadsheetPane::renderMenuItems(bool fromMenuBar)
   {
   if (!_table) { ImGui::TextDisabled("No table"); return; }
@@ -269,68 +322,26 @@ namespace Datum
 
   if (_menuColumn >= 0)
     {
-    std::string name = t.columnName(unsigned(_menuColumn)).data();
-    ImGui::TextDisabled("Column %s", name.c_str());
-    if (_menuColumn != _xColumn)
-      {
-      if (ImGui::MenuItem(("Use " + name + " as X").c_str()))
-        {
-        _xColumn = _menuColumn;
-        _selected[std::size_t(_menuColumn)] = false;
-        if (_errorColumn == _xColumn) _errorColumn = -1;
-        }
-      }
-    else if (ImGui::MenuItem("Do not use as X")) _xColumn = -1;
-    if (_menuColumn != _errorColumn)
-      {
-      if (ImGui::MenuItem(("Use " + name + " as the uncertainty of y").c_str()))
-        {
-        _errorColumn = _menuColumn;
-        _selected[std::size_t(_menuColumn)] = false;
-        if (_xColumn == _errorColumn) _xColumn = -1;
-        }
-      }
-    else if (ImGui::MenuItem("Do not use as the uncertainty of y")) _errorColumn = -1;
+    // the column under the mouse: its role in the plots
+    unsigned int c = unsigned(_menuColumn);
+    ImGui::TextDisabled("Column %s", columnTag(c).c_str());
+    roleItems(c);
     ImGui::Separator();
     }
   else
     {
-    // the columns used as x and as uncertainties, chosen by name
-    ImGui::TextDisabled("%s", _label.data());
-    if (ImGui::BeginMenu("X Column"))
+    // the role of each column in the plots (c0, c1, ...: the columns by number)
+    ImGui::TextDisabled("%s: columns", _label.data());
+    for (unsigned int c=0; c<t.nColumns(); c++)
       {
-      if (ImGui::MenuItem("none (row index)", nullptr, _xColumn < 0)) _xColumn = -1;
-      ImGui::Separator();
-      for (unsigned int c=0; c<t.nColumns(); c++)
-        {
-        std::string label = std::string(t.columnName(c).data()) + "##xc" + std::to_string(c);
-        if (ImGui::MenuItem(label.c_str(), nullptr, _xColumn == int(c)))
-          {
-          _xColumn = int(c);
-          _selected[c] = false;
-          if (_errorColumn == _xColumn) _errorColumn = -1;
-          }
-        }
-      ImGui::EndMenu();
+      std::string label = columnTag(c);
+      if (int(c) == _xColumn) label += "  [x]";
+      if (c < _selected.size() && _selected[c]) label += "  [y]";
+      if (int(c) == _xErrorColumn) label += "  [error on x]";
+      if (int(c) == _errorColumn) label += "  [error on y]";
+      label += "##role" + std::to_string(c);
+      if (ImGui::BeginMenu(label.c_str())) { roleItems(c); ImGui::EndMenu(); }
       }
-    ImGui::SetItemTooltip("The column used as x in the plots of Y");
-    if (ImGui::BeginMenu("Uncertainty Column"))
-      {
-      if (ImGui::MenuItem("none", nullptr, _errorColumn < 0)) _errorColumn = -1;
-      ImGui::Separator();
-      for (unsigned int c=0; c<t.nColumns(); c++)
-        {
-        std::string label = std::string(t.columnName(c).data()) + "##ec" + std::to_string(c);
-        if (ImGui::MenuItem(label.c_str(), nullptr, _errorColumn == int(c)))
-          {
-          _errorColumn = int(c);
-          _selected[c] = false;
-          if (_xColumn == _errorColumn) _xColumn = -1;
-          }
-        }
-      ImGui::EndMenu();
-      }
-    ImGui::SetItemTooltip("The column of the uncertainties of y in the plots of Y");
     ImGui::Separator();
     }
 
@@ -341,14 +352,14 @@ namespace Datum
     std::string label = "Plot Y vs " + std::string(t.columnName(unsigned(_xColumn)).data());
     if (ImGui::MenuItem(label.c_str(), nullptr, false, hasY))
       {
-      PlotRequest r; r.kind = kXY; r.columns = y; r.x = _xColumn; r.yError = _errorColumn; plot(r);
+      PlotRequest r; r.kind = kXY; r.columns = y; r.x = _xColumn; r.yError = _errorColumn; r.xError = _xErrorColumn; plot(r);
       }
     }
   if (ImGui::BeginMenu("Plot Y vs", hasY))
     {
     if (ImGui::MenuItem("row index"))
       {
-      PlotRequest r; r.kind = kXY; r.columns = y; r.x = -1; r.yError = _errorColumn; plot(r);
+      PlotRequest r; r.kind = kXY; r.columns = y; r.x = -1; r.yError = _errorColumn; r.xError = _xErrorColumn; plot(r);
       }
     ImGui::Separator();
     for (unsigned int c=0; c<t.nColumns(); c++)
@@ -357,7 +368,7 @@ namespace Datum
       std::string label = std::string(t.columnName(c).data()) + "##x" + std::to_string(c);
       if (ImGui::MenuItem(label.c_str()))
         {
-        PlotRequest r; r.kind = kXY; r.columns = y; r.x = int(c); r.yError = _errorColumn; plot(r);
+        PlotRequest r; r.kind = kXY; r.columns = y; r.x = int(c); r.yError = _errorColumn; r.xError = _xErrorColumn; plot(r);
         }
       }
     ImGui::EndMenu();
@@ -406,7 +417,7 @@ namespace Datum
   ImGui::MenuItem("Overlay Plots", nullptr, &_overlay);
   ImGui::SetItemTooltip("Add the plots to the graph (otherwise they replace its contents)");
   if (ImGui::MenuItem("Select All Columns")) std::fill(_selected.begin(), _selected.end(), true);
-  if (ImGui::MenuItem("Clear Selection")) { std::fill(_selected.begin(), _selected.end(), false); _xColumn = _errorColumn = -1; }
+  if (ImGui::MenuItem("Clear Selection")) { std::fill(_selected.begin(), _selected.end(), false); _xColumn = _errorColumn = _xErrorColumn = -1; }
   ImGui::Separator();
   if (ImGui::MenuItem("Copy Table")) ImGui::SetClipboardText(text().data());
   if (ImGui::MenuItem("Save Table As...") && onSaveAs) onSaveAs(*this);
