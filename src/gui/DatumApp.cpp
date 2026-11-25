@@ -350,6 +350,10 @@ namespace Datum
   _functionTools.onShow = [this](std::unique_ptr<MATH::ParameterizedFunction> f, double x0, double x1, double y0, double y1)
     { showFunction(std::move(f), x0, x1, y0, y1); };
   _functionTools.onStatus = [this](const String & message) { _gui.setStatus(message); };
+  _functionTools.onUpdate = [this](int item, std::unique_ptr<MATH::ParameterizedFunction> f, double x0, double x1, double y0, double y1,
+                                   const String & name, String & error)
+    { return updateFunction(item, std::move(f), x0, x1, y0, y1, name, error); };
+  _functionTools.shownFunctions = [this]() { return currentFunctions(); };
   _gui.fitPane().onProjections = [this](const MATH::DataPoints * data) { showProjections(data); };
   if (_configuration.demo) createDemo();
   for (const auto & argument : _arguments)
@@ -658,6 +662,7 @@ namespace Datum
       if (!ImGui::MenuItem(label.c_str())) continue;
       if (kind == "save") saveFunction(shown[k], false);
       else if (kind == "saveAs") saveFunction(shown[k], true);
+      else if (kind == "edit") _functionTools.openEdit(shown[k]);
       else _functionTools.openDuplicate(shown[k]);
       }
     };
@@ -666,6 +671,9 @@ namespace Datum
   Menu & saveAs = functions.addMenu("Save As", "Save a function of the selected graph: a Datum file (the function, read back by Open), "
                                                "or a table of its values (.txt, .csv, .tsv, .dtb, .xlsx)");
   saveAs.addWidget([functionList]() { functionList("saveAs"); });
+  Menu & edit = functions.addMenu("Edit", "A function of the selected graph, in the window of New, to change its parameters, "
+                                          "range or name and Update it in place");
+  edit.addWidget([functionList]() { functionList("edit"); });
   Menu & duplicate = functions.addMenu("Duplicate", "A copy of a function of the selected graph, in the window of New, to edit before Add");
   duplicate.addWidget([functionList]() { functionList("duplicate"); });
   functions.addSeparator();
@@ -707,6 +715,26 @@ namespace Datum
   {
   recordUndo();
   showFunctionIn(_gui.targetPane(), std::move(f), xMin, xMax, yMin, yMax);
+  }
+
+  bool DatumApp::updateFunction(int item, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax,
+                                double yMin, double yMax, const String & name, String & error)
+  {
+  if (!f) return false;
+  if (_gui.nPanes() == 0) { error = "No canvas"; return false; }
+  Graph & graph = _gui.currentPane().currentGraph();
+  if (item < 0 || item >= int(graph.items().size()) || graph.items()[std::size_t(item)].kind() != GraphItem::kFunction)
+    { error = "That function is no longer in the selected graph"; return false; }
+  if (f->rank() > 2) { error = "Functions of more than two variables cannot be drawn"; return false; }
+  recordUndo();
+  GraphItem & shown = graph.items()[std::size_t(item)];
+  MATH::ParameterizedFunction * raw = f.release();
+  _functions.emplace_back(raw);   // the former function stays: Undo shows it again
+  shown.setFunction(raw);
+  shown.setXRange(float(xMin), float(xMax));
+  if (raw->rank() == 2) shown.setYRange(float(yMin), float(yMax));
+  if (!name.isEmpty()) shown.setLabel(name);
+  return true;
   }
 
   void DatumApp::saveFunction(const FunctionTools::Shown & shown, bool ask)

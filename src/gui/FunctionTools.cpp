@@ -227,10 +227,11 @@ namespace Datum
   _editorFocus = true;
   _xMin = xMin; _xMax = xMax; _yMin = xMin; _yMax = xMax;
   _name.clear();
+  _target = -1;
   if (!_prototype || _className.empty()) makePrototype("Normal", 0);
   }
 
-  void FunctionTools::openDuplicate(const Shown & shown)
+  void FunctionTools::load(const Shown & shown, const std::string & name)
   {
   if (!shown.function) return;
   _prototype.reset(shown.function->clone());
@@ -238,9 +239,25 @@ namespace Datum
   _className = MATH::FunctionRegistry::isRegistered(*_prototype) && !dynamic_cast<const ParameterizedComposite *>(_prototype.get())
                ? MATH::FunctionRegistry::typeName(*_prototype).str() : std::string();
   _nParameters = int(_prototype->nParameters());
-  _name = shown.label.str() + " copy";
+  _name = name;
   _xMin = shown.xMin; _xMax = shown.xMax; _yMin = shown.yMin; _yMax = shown.yMax;
   _editorMessage = String();
+  }
+
+  void FunctionTools::openDuplicate(const Shown & shown)
+  {
+  if (!shown.function) return;
+  load(shown, shown.label.str() + " copy");
+  _target = -1;
+  _editorOpen = true;
+  _editorFocus = true;
+  }
+
+  void FunctionTools::openEdit(const Shown & shown)
+  {
+  if (!shown.function) return;
+  load(shown, shown.label.str());
+  _target = shown.item;
   _editorOpen = true;
   _editorFocus = true;
   }
@@ -293,6 +310,25 @@ namespace Datum
   if (_editorFocus) { ImGui::SetNextWindowFocus(); _editorFocus = false; }
   ImGui::SetNextWindowSize(ImVec2(480, 520), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Function", &_editorOpen, ImGuiWindowFlags_NoCollapse)) { ImGui::End(); return; }
+  // the function of the selected graph that Update changes (choosing one fills the window with it)
+  std::vector<Shown> shown = shownFunctions ? shownFunctions() : std::vector<Shown>();
+  const Shown * target = nullptr;
+  for (const Shown & s : shown) if (s.item == _target) target = &s;
+  ImGui::SetNextItemWidth(260);
+  if (ImGui::BeginCombo("to update", target ? target->label.data() : "(none: Add makes a new function)"))
+    {
+    if (ImGui::Selectable("(none: Add makes a new function)", !target)) _target = -1;
+    for (const Shown & s : shown)
+      {
+      ImGui::PushID(s.item);
+      if (ImGui::Selectable(s.label.data(), target && s.item == target->item)) { load(s, s.label.str()); _target = s.item; }
+      ImGui::PopID();
+      }
+    if (shown.empty()) ImGui::TextDisabled("No function in the selected graph");
+    ImGui::EndCombo();
+    }
+  ImGui::SetItemTooltip("A function of the selected graph: choosing it fills the window with it; change its parameters, range "
+                        "or name, then Update changes it in the graph");
   // the class (a copy of a composite keeps its components: its parameters only are edited)
   std::vector<String> classes = MATH::FunctionRegistry::names();
   for (const String & c : MATH::FunctionRegistry::compositeNames()) classes.push_back(c);
@@ -368,6 +404,24 @@ namespace Datum
   ImGui::EndDisabled();
   ImGui::SetItemTooltip("Show the function in the selected graph of the current canvas (a canvas is made if there is none); "
                         "the window stays open to add more");
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!valid || !target || !onUpdate);
+  if (ImGui::Button("Update"))
+    {
+    std::unique_ptr<ParameterizedFunction> f(_prototype->clone());
+    String fname = _name.empty() ? String(target->function->name()) : String(_name.c_str());
+    f->setName(fname);
+    String error, label = target->label;
+    if (onUpdate(_target, std::move(f), _xMin, _xMax, _yMin, _yMax, String(_name.c_str()), error))
+      {
+      _editorMessage = String();
+      if (onStatus) onStatus(String("Updated ") + (_name.empty() ? label : String(_name.c_str())));
+      }
+    else _editorMessage = error;
+    }
+  ImGui::EndDisabled();
+  ImGui::SetItemTooltip("Change the function chosen above (to update) in its graph: its class, parameters, range and name, "
+                        "keeping its place and style");
   ImGui::SameLine();
   if (ImGui::Button("Close")) _editorOpen = false;
   if (!_editorMessage.isNull()) ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.2f, 1), "%s", _editorMessage.data());

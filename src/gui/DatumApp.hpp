@@ -416,6 +416,12 @@ namespace Datum
   //! current canvas, a canvas made if there is none. @param f function @param xMin range @param xMax range
   //! @param yMin range (two variables) @param yMax range
   virtual void showFunction(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax);
+  //! @brief Update of the Functions window: the function of item `item` of the selected graph of the current canvas
+  //! changed to `f` (owned by the application), over a range, keeping the place and style of the item.
+  //! @param item index of the item @param f function @param xMin range @param xMax range @param yMin range
+  //! @param yMax range @param name name and label given (empty: kept) @param error set on failure @return false on failure
+  virtual bool updateFunction(int item, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax,
+                              double yMin, double yMax, const String & name, String & error);
   //! @brief Show a function (owned by the application from then on) in the selected graph of a pane.
   //! @param pane pane @param f function @param xMin range @param xMax range @param yMin range @param yMax range
   void showFunctionIn(CanvasPane & pane, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax);
