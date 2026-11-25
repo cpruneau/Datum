@@ -241,7 +241,7 @@ namespace Datum
                         "save it to a Datum file");
   ImGui::SameLine();
   if (ImGui::Button("Open...") && onCommand) onCommand("file.open");
-  ImGui::SetItemTooltip("Open a Datum file (File > Open)");
+  ImGui::SetItemTooltip("Open a Datum file, or a table of data (.txt, .dat, .csv, ...) (File > Open)");
   ImGui::SameLine();
   // the file or tree holding the entry selected
   const BrowserFile * current = _selected.file >= 0 ? fileById(_selected.file) : nullptr;
