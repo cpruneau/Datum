@@ -1802,7 +1802,7 @@ namespace Datum
       case SpreadsheetPane::kXY:
         for (unsigned int c : columns)
           {
-          MATH::DataPointsVector * points = TablePlots::xy(*table, request.x, c, request.yError);
+          MATH::DataPointsVector * points = TablePlots::xy(*table, request.x, c, request.yError, request.xError);
           _data.emplace_back(points);
           GraphItem & item = graph.show(GraphItem(points, table->columnName(c)), false);
           item.setShowMarkers(true);
