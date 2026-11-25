@@ -69,6 +69,8 @@ namespace Datum
   String linePalette    = "solid";     //!< current line-style palette of the session
   String shadingPalette = "viridis";   //!< current shading palette of the session
   String directory;   //!< folder where the file dialogs start (empty: the current folder)
+  String dataDirectory;          //!< Data I/O default folder: shown by the file browsers at startup (empty: the current folder)
+  String calibrationDirectory;   //!< Calibration I/O default folder: where calibration files are read and written (empty: the current folder)
   std::vector<String> extensions{".datum", ".cap", ".root"};   // .root: only when DatumGui is built with ROOT files   //!< types listed by the Open dialog (only those DatumGui can open are used)
   bool   demo         = false;  //!< show the demonstration objects at startup (otherwise the canvases start empty)
   bool   latex        = true;   //!< typeset the texts with '$' or '\' by LaTeX (see GRAPHICS::LatexRenderer)
@@ -452,6 +454,10 @@ namespace Datum
   void renderWindows();
   //! @brief Draw the Preferences window, if shown.
   void renderPreferences();
+  //! @brief The Data I/O default folder (Preferences > Files), or the current folder if none is set or it is gone.
+  String dataFolder() const;
+  //! @brief The Calibration I/O default folder (Preferences > Files), or the current folder if none is set or it is gone.
+  String calibrationFolder() const;
   //! @brief Draw the About window, if shown.
   void renderAbout();
   //! @brief Draw the Keyboard Shortcuts window (keys of the menus, mouse actions), if shown.
