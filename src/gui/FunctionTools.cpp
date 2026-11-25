@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <typeinfo>
 #include "imgui.h"
 #include "misc/cpp/imgui_stdlib.h"
 #include "DatumFile.hpp"
@@ -244,6 +245,19 @@ namespace Datum
   _editorMessage = String();
   }
 
+  bool FunctionTools::differs(const Shown & shown) const
+  {
+  if (!_prototype || !shown.function) return false;
+  const ParameterizedFunction & f = *shown.function;
+  if (typeid(f) != typeid(*_prototype) || f.nParameters() != _prototype->nParameters() || f.rank() != _prototype->rank()) return true;
+  for (unsigned int k=0; k<f.nParameters(); k++)
+    if (f.parameter(k).value() != _prototype->parameter(k).value()) return true;
+  auto near = [](double a, double b) { return std::fabs(a - b) <= 1e-6*std::max(1.0, std::max(std::fabs(a), std::fabs(b))); };   // ranges are drawn as floats
+  if (!near(shown.xMin, _xMin) || !near(shown.xMax, _xMax)) return true;
+  if (f.rank() == 2 && (!near(shown.yMin, _yMin) || !near(shown.yMax, _yMax))) return true;
+  return !_name.empty() && _name != shown.label.str();
+  }
+
   void FunctionTools::openDuplicate(const Shown & shown)
   {
   if (!shown.function) return;
@@ -312,6 +326,11 @@ namespace Datum
   if (!ImGui::Begin("Function", &_editorOpen, ImGuiWindowFlags_NoCollapse)) { ImGui::End(); return; }
   // the function of the selected graph that Update changes (choosing one fills the window with it)
   std::vector<Shown> shown = shownFunctions ? shownFunctions() : std::vector<Shown>();
+  if (_targetAdded > 0)
+    {
+    _targetAdded--;
+    if (shown.size() > _shownBeforeAdd) { _target = shown.back().item; _targetAdded = 0; }   // the function just added
+    }
   const Shown * target = nullptr;
   for (const Shown & s : shown) if (s.item == _target) target = &s;
   ImGui::SetNextItemWidth(260);
@@ -397,15 +416,19 @@ namespace Datum
     std::unique_ptr<ParameterizedFunction> f(_prototype->clone());
     String fname = _name.empty() ? String((_className.empty() ? std::string("function") : _className) + " " + std::to_string(++_added)) : String(_name.c_str());
     f->setName(fname);
+    _shownBeforeAdd = shown.size();
     if (onShow) onShow(std::move(f), _xMin, _xMax, _yMin, _yMax);
-    if (onStatus) onStatus(String("Added ") + fname + String(" (Functions > New adds another; Functions > Save writes it)"));
-    _name.clear();
+    if (onStatus) onStatus(String("Added ") + fname + String(" (change its parameters or range and Update it; Add adds another)"));
+    _name = fname.str();
+    _target = -1;
+    _targetAdded = 10;   // the graph may show it a few frames later (a plot file is drawn again)
     }
   ImGui::EndDisabled();
   ImGui::SetItemTooltip("Show the function in the selected graph of the current canvas (a canvas is made if there is none); "
                         "the window stays open to add more");
   ImGui::SameLine();
-  ImGui::BeginDisabled(!valid || !target || !onUpdate);
+  bool changed = target && differs(*target);
+  ImGui::BeginDisabled(!valid || !changed || !onUpdate);
   if (ImGui::Button("Update"))
     {
     std::unique_ptr<ParameterizedFunction> f(_prototype->clone());
@@ -420,8 +443,10 @@ namespace Datum
     else _editorMessage = error;
     }
   ImGui::EndDisabled();
-  ImGui::SetItemTooltip("Change the function chosen above (to update) in its graph: its class, parameters, range and name, "
-                        "keeping its place and style");
+  ImGui::SetItemTooltip(!target ? "Choose the function to update above (to update)"
+                        : changed ? "Change the function chosen above (to update) in its graph: its class, parameters, range and name, "
+                                    "keeping its place and style"
+                        : "Nothing to update: change a parameter, the range or the name first");
   ImGui::SameLine();
   if (ImGui::Button("Close")) _editorOpen = false;
   if (!_editorMessage.isNull()) ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.2f, 1), "%s", _editorMessage.data());
