@@ -1,0 +1,58 @@
+# Doxygen configuration of the API reference of the Datum web site. Run from website/ (build_site.sh --api).
+# Settings not given take Doxygen's defaults. Paths are relative to this folder.
+
+PROJECT_NAME           = Datum
+PROJECT_NUMBER         = 1.0
+PROJECT_BRIEF          = "Correlation and fluctuation observables in high-energy collisions"
+OUTPUT_DIRECTORY       = build/doxygen
+CREATE_SUBDIRS         = YES
+
+# the sources of Datum only: not the libraries distributed with it (external), FastJet, the build folders, the tests
+INPUT                  = ../README.md ../src
+USE_MDFILE_AS_MAINPAGE = ../README.md
+FILE_PATTERNS          = *.hpp *.h *.cpp *.cxx *.md
+RECURSIVE              = YES
+EXCLUDE_PATTERNS       = */external/* */fastjet* */build/* */tests/* */Macros/* */CMakeFiles/*
+STRIP_FROM_PATH        = ../src
+STRIP_FROM_INC_PATH    = ../src/core ../src/analysis ../src/models ../src/gui
+
+# the comments of the sources: //! and /** */ blocks, the first sentence being the brief description
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MARKDOWN_SUPPORT       = YES
+EXTRACT_ALL            = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_STATIC         = YES
+EXTRACT_ANON_NSPACES   = NO
+HIDE_UNDOC_MEMBERS     = NO
+SORT_MEMBER_DOCS       = NO
+BUILTIN_STL_SUPPORT    = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_LOGFILE           = build/doxygen/warnings.txt
+QUIET                  = YES
+
+# HTML only, with a tree of the classes on the left and a search box
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES
+HTML_COLORSTYLE        = LIGHT
+GENERATE_LATEX         = NO
+SOURCE_BROWSER         = YES
+REFERENCED_BY_RELATION = NO
+REFERENCES_RELATION    = NO
+
+# diagrams (graphviz): class inheritance and collaboration, include graphs; call graphs are left out (too many)
+HAVE_DOT               = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_MULTI_TARGETS      = YES
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+DOT_GRAPH_MAX_NODES    = 60
