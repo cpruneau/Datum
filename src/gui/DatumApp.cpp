@@ -112,6 +112,11 @@ namespace Datum
       linePalette    = e->attribute("linePalette", linePalette);
       shadingPalette = e->attribute("shadingPalette", shadingPalette);
       }
+    if (const XmlElement * e = root.child("Directories"))
+      {
+      dataDirectory        = e->attribute("data", dataDirectory);
+      calibrationDirectory = e->attribute("calibration", calibrationDirectory);
+      }
     if (const XmlElement * e = root.child("Files"))
       {
       directory = e->attribute("directory", directory);
@@ -171,6 +176,9 @@ namespace Datum
     graphs.setAttribute("markerPalette", markerPalette);
     graphs.setAttribute("linePalette", linePalette);
     graphs.setAttribute("shadingPalette", shadingPalette);
+    XmlElement & directories = root.addChild("Directories");
+    directories.setAttribute("data", dataDirectory);
+    directories.setAttribute("calibration", calibrationDirectory);
     XmlElement & files = root.addChild("Files");
     files.setAttribute("directory", directory);
     String list;
@@ -271,7 +279,7 @@ namespace Datum
   if (!FileSystem::home().isNull()) _configuration.gui.iniFile = FileSystem::join(FileSystem::home(), ".DatumGui.ini");
   if (_configuration.directory.isNull())
     {
-    _configuration.directory = FileSystem::current();
+    _configuration.directory = dataFolder();   // the Data I/O default folder, or the current one
     }
 
   _gui.onNewPane = [this](CanvasPane & pane) { setupPane(pane); };
@@ -302,7 +310,11 @@ namespace Datum
 
   connectBrowser(_gui.browser());
   connectMapsDialog();
-  _gui.onNewBrowser = [this](FileBrowser & browser) { connectBrowser(browser); };
+  _gui.onNewBrowser = [this](FileBrowser & browser)
+    {
+    connectBrowser(browser);
+    if (browser.folders().empty()) browser.addFolder(dataFolder());   // a new browser shows the Data I/O folder
+    };
   _gui.onBrowserCloseRequest = [this](FileBrowser & browser)
     {
     for (const auto & f : _files) if (browser.showsFile(f.id) && asksBeforeClosing(f.id, &browser)) { requestCloseBrowser(browser); return false; }
@@ -2351,125 +2363,218 @@ namespace Datum
   return problem;
   }
 
+  String DatumApp::dataFolder() const
+  {
+  const String & d = _configuration.dataDirectory;
+  return !d.isNull() && !d.str().empty() && FileSystem::isDirectory(d) ? d : FileSystem::current();
+  }
+
+  String DatumApp::calibrationFolder() const
+  {
+  const String & d = _configuration.calibrationDirectory;
+  return !d.isNull() && !d.str().empty() && FileSystem::isDirectory(d) ? d : FileSystem::current();
+  }
+
   void DatumApp::renderPreferences()
   {
   if (!_showPreferences) return;
-  ImGui::SetNextWindowSize(ImVec2(470, 0), ImGuiCond_FirstUseEver);
+  ImGui::SetNextWindowSize(ImVec2(600, 560), ImGuiCond_FirstUseEver);
   if (!ImGui::Begin("Preferences", &_showPreferences, ImGuiWindowFlags_NoCollapse)) { ImGui::End(); return; }
   AppConfiguration & c = _configuration;
-
-  ImGui::SeparatorText("Window");
-  static const char * themes[] = {"light", "dark", "classic"};
-  int theme = c.gui.theme == "dark" ? 1 : (c.gui.theme == "classic" ? 2 : 0);
-  if (ImGui::Combo("Theme", &theme, themes, 3)) { c.gui.theme = themes[theme]; _gui.setTheme(c.gui.theme); }
-  float fontSize = c.gui.fontSize;
-  if (ImGui::SliderFloat("Font size", &fontSize, 10.0f, 28.0f, "%.0f"))
+  // a sub-pane of a tab: a titled, bordered box as tall as its contents
+  auto subPane = [](const char * title, const std::function<void()> & body)
     {
-    c.gui.fontSize = fontSize;
-    ImGui::GetStyle().FontScaleMain = fontSize/_gui.settings().fontSize;
-    }
-  ImGui::InputInt("Width", &c.gui.width);
-  ImGui::InputInt("Height", &c.gui.height);
-  ImGui::Checkbox("Windows can leave the main window (restart)", &c.gui.viewports);
-  ImGui::Checkbox("Each window of a plot file in a window of its own (Windows > Detached Windows)", &c.gui.detachedWindows);
-
-  ImGui::SeparatorText("Canvases");
-  int layout[2] = {_gui.nColumns(), _gui.nRows()};
-  if (ImGui::InputInt2("Columns, rows", layout)) setLayout(layout[0], layout[1]);
-  bool toolbars = _gui.showToolbars();
-  if (ImGui::Checkbox("Toolbars", &toolbars)) { _gui.setShowToolbars(toolbars); c.gui.toolbars = toolbars; }
-
-  ImGui::SeparatorText("New canvases");
-  int graphs[2] = {c.graphColumns, c.graphRows};
-  if (ImGui::InputInt2("Graphs: columns, rows", graphs))
-    {
-    c.graphColumns = graphs[0] < 1 ? 1 : (graphs[0] > 8 ? 8 : graphs[0]);
-    c.graphRows    = graphs[1] < 1 ? 1 : (graphs[1] > 8 ? 8 : graphs[1]);
-    }
-  ImGui::Checkbox("Legend", &c.legend);
-  ImGui::SameLine();
-  ImGui::Checkbox("Log X", &c.logX);
-  ImGui::SameLine();
-  ImGui::Checkbox("Log Y", &c.logY);
-  int mode = c.mode == "replace" ? 1 : 0;
-  ImGui::RadioButton("Add", &mode, 0); ImGui::SameLine(); ImGui::RadioButton("Replace", &mode, 1);
-  c.mode = mode ? "replace" : "add";
-  ImGui::SameLine(0, 20);
-  ImGui::Checkbox("Keep shapes", &c.keepShapes);
-  ImGui::SetItemTooltip("Shapes and texts stay in a graph when its contents are replaced");
-
-  ImGui::SeparatorText("Palettes of the session");
-  {
-  // the current palettes: graphs that do not choose their own follow them (colors and markers of the objects shown
-  // from now on, shading of the new graphs); "Apply to all graphs" restyles the graphs already there
-  GRAPHICS::Palettes & palettes = GRAPHICS::Palettes::session();
-  auto combo = [](const char * label, String & current, const std::vector<String> & names, const char * tip)
-    {
-    bool changed = false;
-    ImGui::SetNextItemWidth(170);
-    if (ImGui::BeginCombo(label, current.data()))
+    ImGui::PushID(title);
+    if (ImGui::BeginChild("##pane", ImVec2(0, 0), ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY))
       {
-      for (const String & n : names)
-        if (ImGui::Selectable(n.data(), n == current)) { current = n; changed = true; }
-      ImGui::EndCombo();
+      ImGui::SeparatorText(title);
+      body();
       }
-    ImGui::SetItemTooltip("%s", tip);
-    return changed;
+    ImGui::EndChild();
+    ImGui::PopID();
+    ImGui::Spacing();
     };
-  if (combo("colors", c.colorPalette, palettes.colorPaletteNames(), "Colors given in turn to the objects of a graph"))
-    palettes.setColorPalette(c.colorPalette);
-  ImGui::SameLine();
-  if (combo("markers", c.markerPalette, palettes.markerPaletteNames(), "Markers given in turn to the objects of a graph"))
-    palettes.setMarkerPalette(c.markerPalette);
-  if (combo("lines", c.linePalette, palettes.linePaletteNames(), "Line styles given in turn to the objects of a graph (solid, dashed, dotted, ...)"))
-    palettes.setLinePalette(c.linePalette);
-  if (combo("shading", c.shadingPalette, palettes.shadingPaletteNames(), "Colors of the maps, contours and 3D views of new graphs"))
-    palettes.setShadingPalette(c.shadingPalette);
-  ImGui::SameLine();
-  if (ImGui::Button("Apply to all graphs"))
+  // a folder chosen: typed, or with Browse... (Clear: the default)
+  auto folderField = [this](const char * label, String & folder, const char * hint, const char * tip)
     {
-    recordUndo();
-    for (int p=0; p<_gui.nPanes(); p++)
-      for (int k=0; k<_gui.pane(p).canvas().nGraphs(); k++)
+    ImGui::PushID(label);
+    std::string text = folder.str();
+    ImGui::SetNextItemWidth(320);
+    if (ImGui::InputTextWithHint("##folder", hint, &text)) folder = String(text.c_str());
+    ImGui::SetItemTooltip("%s", tip);
+    ImGui::SameLine();
+    if (ImGui::Button("Browse..."))
+      {
+      String * target = &folder;
+      String start = !folder.isNull() && FileSystem::isDirectory(folder) ? folder : _configuration.directory;
+      _gui.fileDialog().open(FileDialog::kOpenFolder, label, start, {}, "", [target](const String & chosen) { *target = chosen; });
+      }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) folder = String();
+    if (!folder.isNull() && !folder.str().empty() && !FileSystem::isDirectory(folder))
+      ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.1f, 1.0f), "No such folder: the current folder is used");
+    ImGui::PopID();
+    };
+
+  if (ImGui::BeginTabBar("##preferences"))
+    {
+    if (ImGui::BeginTabItem("General"))
+      {
+      subPane("Window", [&]()
         {
-        GRAPHICS::Graph & g = _gui.pane(p).canvas().graph(k);
-        g.restyleItems();                                    // with its own palettes, or the session's
-        g.setPalette(palettes.shadingPalette());
+      static const char * themes[] = {"light", "dark", "classic"};
+      int theme = c.gui.theme == "dark" ? 1 : (c.gui.theme == "classic" ? 2 : 0);
+      if (ImGui::Combo("Theme", &theme, themes, 3)) { c.gui.theme = themes[theme]; _gui.setTheme(c.gui.theme); }
+      float fontSize = c.gui.fontSize;
+      if (ImGui::SliderFloat("Font size", &fontSize, 10.0f, 28.0f, "%.0f"))
+        {
+        c.gui.fontSize = fontSize;
+        ImGui::GetStyle().FontScaleMain = fontSize/_gui.settings().fontSize;
         }
+      ImGui::InputInt("Width", &c.gui.width);
+      ImGui::InputInt("Height", &c.gui.height);
+      ImGui::Checkbox("Windows can leave the main window (restart)", &c.gui.viewports);
+      ImGui::Checkbox("Each window of a plot file in a window of its own (Windows > Detached Windows)", &c.gui.detachedWindows);
+        });
+      subPane("Startup", [&]()
+        {
+        ImGui::Checkbox("Show the demonstration objects", &c.demo);
+        });
+      ImGui::EndTabItem();
+      }
+    if (ImGui::BeginTabItem("Canvases"))
+      {
+      subPane("Canvases", [&]()
+        {
+      int layout[2] = {_gui.nColumns(), _gui.nRows()};
+      if (ImGui::InputInt2("Columns, rows", layout)) setLayout(layout[0], layout[1]);
+      bool toolbars = _gui.showToolbars();
+      if (ImGui::Checkbox("Toolbars", &toolbars)) { _gui.setShowToolbars(toolbars); c.gui.toolbars = toolbars; }
+        });
+      subPane("New canvases", [&]()
+        {
+      int graphs[2] = {c.graphColumns, c.graphRows};
+      if (ImGui::InputInt2("Graphs: columns, rows", graphs))
+        {
+        c.graphColumns = graphs[0] < 1 ? 1 : (graphs[0] > 8 ? 8 : graphs[0]);
+        c.graphRows    = graphs[1] < 1 ? 1 : (graphs[1] > 8 ? 8 : graphs[1]);
+        }
+      ImGui::Checkbox("Legend", &c.legend);
+      ImGui::SameLine();
+      ImGui::Checkbox("Log X", &c.logX);
+      ImGui::SameLine();
+      ImGui::Checkbox("Log Y", &c.logY);
+      int mode = c.mode == "replace" ? 1 : 0;
+      ImGui::RadioButton("Add", &mode, 0); ImGui::SameLine(); ImGui::RadioButton("Replace", &mode, 1);
+      c.mode = mode ? "replace" : "add";
+      ImGui::SameLine(0, 20);
+      ImGui::Checkbox("Keep shapes", &c.keepShapes);
+      ImGui::SetItemTooltip("Shapes and texts stay in a graph when its contents are replaced");
+        });
+      ImGui::EndTabItem();
+      }
+    if (ImGui::BeginTabItem("Palettes"))
+      {
+      subPane("Palettes of the session", [&]()
+        {
+      {
+      // the current palettes: graphs that do not choose their own follow them (colors and markers of the objects shown
+      // from now on, shading of the new graphs); "Apply to all graphs" restyles the graphs already there
+      GRAPHICS::Palettes & palettes = GRAPHICS::Palettes::session();
+      auto combo = [](const char * label, String & current, const std::vector<String> & names, const char * tip)
+        {
+        bool changed = false;
+        ImGui::SetNextItemWidth(170);
+        if (ImGui::BeginCombo(label, current.data()))
+          {
+          for (const String & n : names)
+            if (ImGui::Selectable(n.data(), n == current)) { current = n; changed = true; }
+          ImGui::EndCombo();
+          }
+        ImGui::SetItemTooltip("%s", tip);
+        return changed;
+        };
+      if (combo("colors", c.colorPalette, palettes.colorPaletteNames(), "Colors given in turn to the objects of a graph"))
+        palettes.setColorPalette(c.colorPalette);
+      ImGui::SameLine();
+      if (combo("markers", c.markerPalette, palettes.markerPaletteNames(), "Markers given in turn to the objects of a graph"))
+        palettes.setMarkerPalette(c.markerPalette);
+      if (combo("lines", c.linePalette, palettes.linePaletteNames(), "Line styles given in turn to the objects of a graph (solid, dashed, dotted, ...)"))
+        palettes.setLinePalette(c.linePalette);
+      if (combo("shading", c.shadingPalette, palettes.shadingPaletteNames(), "Colors of the maps, contours and 3D views of new graphs"))
+        palettes.setShadingPalette(c.shadingPalette);
+      ImGui::SameLine();
+      if (ImGui::Button("Apply to all graphs"))
+        {
+        recordUndo();
+        for (int p=0; p<_gui.nPanes(); p++)
+          for (int k=0; k<_gui.pane(p).canvas().nGraphs(); k++)
+            {
+            GRAPHICS::Graph & g = _gui.pane(p).canvas().graph(k);
+            g.restyleItems();                                    // with its own palettes, or the session's
+            g.setPalette(palettes.shadingPalette());
+            }
+        }
+      ImGui::SetItemTooltip("Give every object of every graph its color and marker from the palettes again, and every graph "
+                            "the shading palette (Edit > Undo to go back)");
+      }
+        });
+      ImGui::EndTabItem();
+      }
+    if (ImGui::BeginTabItem("Files"))
+      {
+      subPane("File browser", [&]()
+        {
+        ImGui::TextUnformatted("Data I/O default folder");
+        folderField("Data I/O default folder", c.dataDirectory, "the folder DatumGui is started from",
+                    "Folder shown by the file browser at startup and by new browsers, where the file dialogs start "
+                    "(empty: the folder DatumGui is started from); applies from the next start, or to new browsers");
+        ImGui::TextDisabled("Used now: %s", dataFolder().data());
+        });
+      subPane("Calibration", [&]()
+        {
+        ImGui::TextUnformatted("Calibration I/O default folder");
+        folderField("Calibration I/O default folder", c.calibrationDirectory, "the folder DatumGui is started from",
+                    "Folder where calibration files (detector maps, efficiencies, ...) are read and written "
+                    "(empty: the folder DatumGui is started from)");
+        ImGui::TextDisabled("Used now: %s", calibrationFolder().data());
+        });
+      ImGui::EndTabItem();
+      }
+    if (ImGui::BeginTabItem("LaTeX"))
+      {
+      subPane("LaTeX", [&]()
+        {
+      GRAPHICS::LatexRenderer & latex = GRAPHICS::LatexRenderer::instance();
+      if (latex.available()) ImGui::TextDisabled("latex and dvisvgm: %s", latex.binDirectory().data());
+      else ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.1f, 1.0f), "latex and dvisvgm not found: texts drawn with the fonts");
+      if (ImGui::Checkbox("Typeset the texts with $ or \\ by LaTeX", &c.latex)) latex.setEnabled(c.latex);
+      if (ImGui::Checkbox("Translate the ROOT syntax (#Delta, p_{T}, ...)", &c.rootSyntax)) latex.setRootSyntax(c.rootSyntax);
+      std::string bin = c.latexBin.str();
+      ImGui::SetNextItemWidth(300);
+      if (ImGui::InputTextWithHint("TeX directory", "looked for", &bin)) c.latexBin = String(bin);
+      ImGui::SetItemTooltip("Directory of latex and dvisvgm, e.g. /Library/TeX/texbin (empty: looked for in the PATH and the usual TeX installations); applied when you leave the field");
+      if (ImGui::IsItemDeactivatedAfterEdit())
+        {
+        if (c.latexBin.isNull()) latex.findTools();
+        String problem = applyLatex();
+        _gui.setStatus(problem.isNull() ? String("LaTeX: ") + latex.binDirectory() : problem);
+        }
+      std::string preamble = c.latexPreamble.str();
+      ImGui::SetNextItemWidth(300);
+      if (ImGui::InputText("Preamble", &preamble)) c.latexPreamble = String(preamble);
+      ImGui::SetItemTooltip("Packages and macros of the LaTeX documents, e.g. \\usepackage{amsmath,amssymb,siunitx}; applied when you leave the field (the texts are typeset again)");
+      if (ImGui::IsItemDeactivatedAfterEdit()) latex.setPreamble(c.latexPreamble);
+      static std::string sample = "$\\sqrt{s_{NN}} = 5.02$ TeV";
+      ImGui::SetNextItemWidth(300);
+      ImGui::InputText("Try a text", &sample);
+      GraphEditor::latexPreview(String(sample));
+      if (!latex.cacheDirectory().isNull()) ImGui::TextDisabled("Cache: %s", latex.cacheDirectory().data());
+        });
+      ImGui::EndTabItem();
+      }
+    ImGui::EndTabBar();
     }
-  ImGui::SetItemTooltip("Give every object of every graph its color and marker from the palettes again, and every graph "
-                        "the shading palette (Edit > Undo to go back)");
-  }
-
-  ImGui::SeparatorText("Startup");
-  ImGui::Checkbox("Show the demonstration objects", &c.demo);
-
-  ImGui::SeparatorText("LaTeX");
-  GRAPHICS::LatexRenderer & latex = GRAPHICS::LatexRenderer::instance();
-  if (latex.available()) ImGui::TextDisabled("latex and dvisvgm: %s", latex.binDirectory().data());
-  else ImGui::TextColored(ImVec4(0.85f, 0.25f, 0.1f, 1.0f), "latex and dvisvgm not found: texts drawn with the fonts");
-  if (ImGui::Checkbox("Typeset the texts with $ or \\ by LaTeX", &c.latex)) latex.setEnabled(c.latex);
-  if (ImGui::Checkbox("Translate the ROOT syntax (#Delta, p_{T}, ...)", &c.rootSyntax)) latex.setRootSyntax(c.rootSyntax);
-  std::string bin = c.latexBin.str();
-  ImGui::SetNextItemWidth(300);
-  if (ImGui::InputTextWithHint("TeX directory", "looked for", &bin)) c.latexBin = String(bin);
-  ImGui::SetItemTooltip("Directory of latex and dvisvgm, e.g. /Library/TeX/texbin (empty: looked for in the PATH and the usual TeX installations); applied when you leave the field");
-  if (ImGui::IsItemDeactivatedAfterEdit())
-    {
-    if (c.latexBin.isNull()) latex.findTools();
-    String problem = applyLatex();
-    _gui.setStatus(problem.isNull() ? String("LaTeX: ") + latex.binDirectory() : problem);
-    }
-  std::string preamble = c.latexPreamble.str();
-  ImGui::SetNextItemWidth(300);
-  if (ImGui::InputText("Preamble", &preamble)) c.latexPreamble = String(preamble);
-  ImGui::SetItemTooltip("Packages and macros of the LaTeX documents, e.g. \\usepackage{amsmath,amssymb,siunitx}; applied when you leave the field (the texts are typeset again)");
-  if (ImGui::IsItemDeactivatedAfterEdit()) latex.setPreamble(c.latexPreamble);
-  static std::string sample = "$\\sqrt{s_{NN}} = 5.02$ TeV";
-  ImGui::SetNextItemWidth(300);
-  ImGui::InputText("Try a text", &sample);
-  GraphEditor::latexPreview(String(sample));
-  if (!latex.cacheDirectory().isNull()) ImGui::TextDisabled("Cache: %s", latex.cacheDirectory().data());
 
   ImGui::Separator();
   String target = _configurationFile;

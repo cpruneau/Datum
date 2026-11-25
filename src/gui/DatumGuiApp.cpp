@@ -859,7 +859,7 @@ namespace Datum
       {
       bool folders = false;
       for (const auto & b : _gui.browsers()) if (!b->folders().empty()) folders = true;
-      if (!folders) openFolder(FileSystem::current());
+      if (!folders) openFolder(dataFolder());   // the Data I/O default folder (Preferences > Files), or the current one
       }
     }
   _gui.setStatus(_mode == kBasic ? "Click or drag histograms or folders from the browser onto the canvas (View > Plot Browser shows the plot file)"
