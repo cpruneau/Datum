@@ -166,6 +166,17 @@ void testPlots()
   MATH::DataPointsVector * xy = TablePlots::xy(t,0,2);
   expect(xy->size()==4 && xy->name().equalTo("count \"n\"_vs_time"), "xy skips missing values");
   delete xy;
+  {
+  // errors on x and y, and their covariance (an invalid one, |cov| > ex ey, is left out)
+  MATH::Table2D e("errors");
+  e.addRow({ 1.0, 0.2, 2.0, 0.5, 0.05 });
+  e.addRow({ 2.0, 0.3, 3.0, 0.4, 1.0 });
+  MATH::DataPointsVector * p = TablePlots::xy(e,0,2,3,1,4);
+  expect(p->size()==2 && near(p->point(0).xError(),0.2,1e-6) && near(p->point(0).yError(),0.5,1e-6), "xy errors on x and y");
+  expect(near(p->point(0).xyCovariance(),0.05,1e-6), "xy covariance of x and y");
+  expect(near(p->point(1).xyCovariance(),0.0,1e-9) && near(p->point(1).xError(),0.3,1e-6), "xy invalid covariance left out");
+  delete p;
+  }
   MATH::DataPointsVector * bars = TablePlots::bars(t,1);
   expect(bars->size()==5 && near(bars->point(0).xError(),0.4,1e-6), "bars at the row index");
   delete bars;

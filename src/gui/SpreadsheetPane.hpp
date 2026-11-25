@@ -64,6 +64,7 @@ namespace Datum
     int  x       = -1;                   //!< column of x (-1: the row index)
     int  yError  = -1;                   //!< column of the uncertainties of y (-1: none)
     int  xError  = -1;                   //!< column of the uncertainties of x (-1: none)
+    int  covariance = -1;                //!< column of the covariances of x and y (-1: none)
     int  method  = 0;                    //!< correlation: Datum::MATH::TableStatistics::Method
     bool overlay = false;                //!< add to the graph rather than replace its contents
   };
@@ -105,6 +106,8 @@ namespace Datum
   void setErrorColumn(int column) { _errorColumn = column; }   //!< Use a column as the uncertainties of y (-1: none)
   int  xErrorColumn() const { return _xErrorColumn; }   //!< Column of the uncertainties of x (-1: none)
   void setXErrorColumn(int column) { _xErrorColumn = column; }   //!< Use a column as the uncertainties of x (-1: none)
+  int  covarianceColumn() const { return _covarianceColumn; }   //!< Column of the covariances of x and y (-1: none)
+  void setCovarianceColumn(int column) { _covarianceColumn = column; }   //!< Use a column as the covariances of x and y (-1: none)
   bool overlay() const { return _overlay; }   //!< Whether plots are added to the graph
   void setOverlay(bool v) { _overlay = v; }   //!< Add plots to the graph, or replace its contents
 
@@ -138,6 +141,7 @@ namespace Datum
   int  _xColumn = -1;                      //!< column used as x
   int  _errorColumn = -1;                  //!< column of the uncertainties of y
   int  _xErrorColumn = -1;                 //!< column of the uncertainties of x
+  int  _covarianceColumn = -1;             //!< column of the covariances of x and y
   int  _menuColumn = -1;                   //!< column under the mouse when the menu opened (-1: none)
   bool _overlay = false;                   //!< plots added to the graph
   bool _shown = false;                     //!< its window was visible at the last frame
@@ -150,10 +154,11 @@ namespace Datum
   //! @brief Draw the right-click menu.
   void renderMenu();
   //! @brief Role of a column in the plots.
-  enum Role { kRoleX, kRoleY, kRoleXError, kRoleYError };
+  enum Role { kRoleX, kRoleY, kRoleXError, kRoleYError, kRoleCovariance };
   //! @brief Give a column a role (it loses any other), or take it away. @param c column @param role role @param on give
   void setRole(unsigned int c, Role role, bool on);
-  //! @brief Menu items "Use c<k> as x / y / error on x / error on y" of a column. @param c column
+  //! @brief Menu items "Use c<k> as X / Y / error on x / error on y / covariance between x and y" of a column.
+  //! @param c column
   void roleItems(unsigned int c);
   //! @brief "c<k>", with the name of the column if it is not that: "c2 (energy)". @param c column @return text
   std::string columnTag(unsigned int c) const;

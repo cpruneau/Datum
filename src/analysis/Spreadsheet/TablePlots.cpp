@@ -15,6 +15,7 @@
 #include <vector>
 #include "TablePlots.hpp"
 #include "DataPointsVector.hpp"
+#include "DataPoint2D.hpp"
 #include "Histogram.hpp"
 #include "MathExceptions.hpp"
 
@@ -31,8 +32,9 @@ void check(const MATH::Table2D & table, int column, const char * source)
 } // namespace
 
 MATH::DataPointsVector * TablePlots::xy(const MATH::Table2D & table, int xColumn, unsigned int yColumn,
-                                        int yErrorColumn, int xErrorColumn)
+                                        int yErrorColumn, int xErrorColumn, int covarianceColumn)
 {
+  check(table,covarianceColumn,"TablePlots::xy()");
   check(table,xColumn,"TablePlots::xy()");
   check(table,int(yColumn),"TablePlots::xy()");
   check(table,yErrorColumn,"TablePlots::xy()");
@@ -50,7 +52,29 @@ MATH::DataPointsVector * TablePlots::xy(const MATH::Table2D & table, int xColumn
     ye.push_back(std::isfinite(ey) ? std::fabs(ey) : 0.0);
     ys.push_back(0.0);
     }
-  auto * points = new MATH::DataPointsVector(x,xe,y,ye,ys);
+  MATH::DataPointsVector * points = nullptr;
+  if (covarianceColumn<0) points = new MATH::DataPointsVector(x,xe,y,ye,ys);
+  else
+    {
+    // points with their error matrices: the covariance of the row of each point
+    std::vector<MATH::DataPoint2D> list;
+    unsigned int k = 0;
+    for (unsigned int i=0; i<table.nRows(); i++)
+      {
+      double vx = xColumn>=0 ? table(i,unsigned(xColumn)) : double(i), vy = table(i,yColumn);
+      if (!std::isfinite(vx) || !std::isfinite(vy)) continue;
+      MATH::DataPoint2D p(float(x[k]), float(xe[k]), float(y[k]), float(ye[k]), 0.0f);
+      double c = table(i,unsigned(covarianceColumn));
+      if (std::isfinite(c) && c!=0.0)
+        {
+        try { p.setErrorMatrix(xe[k]*xe[k], c, ye[k]*ye[k]); }
+        catch (const std::exception &) { }   // not a valid covariance: the errors alone
+        }
+      list.push_back(p);
+      k++;
+      }
+    points = new MATH::DataPointsVector(list);
+    }
   String xName = xColumn>=0 ? table.columnName(unsigned(xColumn)) : String("row"), yName = table.columnName(yColumn);
   points->setName(yName+String("_vs_")+xName);
   points->setTitle(yName+String(" vs ")+xName);

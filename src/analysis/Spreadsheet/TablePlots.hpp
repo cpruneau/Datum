@@ -39,11 +39,13 @@ public:
   //! @brief Points (x,y) of two columns, with optional uncertainties from other columns.
   //! @param table table @param xColumn column of x (-1: the row index, named "row") @param yColumn column of y
   //! @param yErrorColumn column of the uncertainties of y (-1: none) @param xErrorColumn column of the uncertainties
-  //! of x (-1: none) @return points named "<y>_vs_<x>", titled "<y> vs <x>"
+  //! of x (-1: none) @param covarianceColumn column of the covariances of x and y (-1: none; ignored for a point
+  //! where it is not a valid covariance, |cov| > error on x times error on y)
+  //! @return points named "<y>_vs_<x>", titled "<y> vs <x>"
   //! @throws MathException if a column does not exist
   //!
   static MATH::DataPointsVector * xy(const MATH::Table2D & table, int xColumn, unsigned int yColumn,
-                                     int yErrorColumn=-1, int xErrorColumn=-1);
+                                     int yErrorColumn=-1, int xErrorColumn=-1, int covarianceColumn=-1);
 
   //!
   //! @brief Bar chart of a column: one bar per row, at x = the row index or the value of another column.
