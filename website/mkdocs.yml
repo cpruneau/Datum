@@ -1,0 +1,99 @@
+# Web site of Datum (MkDocs, theme Material). Build with ./build_site.sh (see README.md of this folder).
+site_name: Datum
+site_description: >-
+  Datum: a C++ framework for simulating and analysing correlation and fluctuation observables in high-energy
+  collisions, with its own data model and a graphical interface, DatumGui.
+site_author: Claude Pruneau, Victor Gonzalez, Oveis Sheibani
+copyright: >-
+  Copyright &copy; 2019&ndash;2026 Claude Pruneau, Victor Gonzalez, Oveis Sheibani &mdash; GNU LGPL 2.1 or later
+repo_url: https://github.com/cpruneau/Datum
+repo_name: cpruneau/Datum
+edit_uri: ""
+
+# Plain .html pages (manual/datumgui.html), so that the site works from any folder of a web server, or opened
+# from the disk; the Doxygen pages are copied into site/doxygen by build_site.sh.
+use_directory_urls: false
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  icon:
+    logo: material/chart-scatter-plot
+  favicon: images/favicon.svg
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - javascripts/mathjax/tex-mml-chtml.js   # MathJax 3.2.2 (Apache 2.0), part of the site: no CDN needed
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# links to the Doxygen pages (doxygen/...), which are not part of the MkDocs sources
+validation:
+  links:
+    unrecognized_links: info
+    absolute_links: info
+
+nav:
+  - Home: index.md
+  - Download: download.md
+  - Manual:
+      - manual/index.md
+      - Getting started: manual/getting-started.md
+      - Running analyses: manual/workflows.md
+      - Observables: manual/observables.md
+      - Event generators: manual/generators.md
+      - Data and files: manual/data-files.md
+      - DatumGui: manual/datumgui.md
+      - Tables of data: manual/tables.md
+      - Plots in batch and DatumShell: manual/batch-and-shell.md
+  - API reference: api.md
+  - Credits: credits.md
