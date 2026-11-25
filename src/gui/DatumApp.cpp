@@ -332,6 +332,9 @@ namespace Datum
     }
   _gui.fitPane().onResidualMap = [this](const MATH::DataPoints * data, unsigned int fit) { showResidualMap(data, fit); };
   _gui.fitPane().onRemoveFit = [this](GraphItem & item, unsigned int k) { removeFit(item, k); };
+  _functionTools.onShow = [this](std::unique_ptr<MATH::ParameterizedFunction> f, double x0, double x1, double y0, double y1)
+    { showFunction(std::move(f), x0, x1, y0, y1); };
+  _functionTools.onStatus = [this](const String & message) { _gui.setStatus(message); };
   _gui.fitPane().onProjections = [this](const MATH::DataPoints * data) { showProjections(data); };
   if (_configuration.demo) createDemo();
   for (const auto & argument : _arguments)
@@ -391,7 +394,7 @@ namespace Datum
     Graph & g = fitted->canvas().graph(graph);
     if (item >= 0 && item < int(g.items().size())) removeFit(g.items()[std::size_t(item)], fit);
     };
-  // Sum, Difference, Product, Ratio, Scale in the context menu of a graph: as in the Operations menu, on that graph
+  // Sum, Difference, Product, Ratio, Scale in the context menu of a graph: as in the Histograms menu, on that graph
   CanvasPane * operated = &pane;
   pane.onOperation = [this, operated](int graph, int operation)
     {
@@ -586,6 +589,7 @@ namespace Datum
 
   addMenus(bar);
   addOperationsMenu(bar);
+  addFunctionsMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("About Datum", "help.about", "", "Version and components");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "F1", "List of the keyboard shortcuts");
@@ -595,7 +599,7 @@ namespace Datum
 
   void DatumApp::addOperationsMenu(MenuBar & bar)
   {
-  Menu & ops = bar.addMenu("Operations");
+  Menu & ops = bar.addMenu("Histograms");
   ops.addItem("Sum...",        "ops.sum",        "", "c1 A + c2 B + ... of histograms shown in the selected graph (two or more), "
                                                       "shown in a canvas below");
   ops.addItem("Difference...", "ops.difference", "", "c1 A - c2 B of two histograms shown in the selected graph");
@@ -621,9 +625,113 @@ namespace Datum
     });
   }
 
+  void DatumApp::addFunctionsMenu(MenuBar & bar)
+  {
+  Menu & functions = bar.addMenu("Functions");
+  functions.addItem("New...",  "fn.new",  "", "Define a function (class, parameters, range, name) and show it in the selected graph "
+                                              "(a canvas is made if there is none); add as many as wanted");
+  functions.addItem("Open...", "fn.open", "", "The functions of a Datum file: check those to show in the selected graph");
+  // Save, Save As, Duplicate: a function of the selected graph
+  auto functionList = [this](const char * what)
+    {
+    std::vector<FunctionTools::Shown> shown = currentFunctions();
+    if (shown.empty()) { ImGui::TextDisabled("No function in the selected graph"); return; }
+    std::string kind = what;
+    for (std::size_t k=0; k<shown.size(); k++)
+      {
+      std::string label = shown[k].label.str() + "##" + kind + std::to_string(k);
+      if (!ImGui::MenuItem(label.c_str())) continue;
+      if (kind == "save") saveFunction(shown[k], false);
+      else if (kind == "saveAs") saveFunction(shown[k], true);
+      else _functionTools.openDuplicate(shown[k]);
+      }
+    };
+  Menu & save = functions.addMenu("Save", "Save a function of the selected graph again (to the file it was saved to, or one chosen)");
+  save.addWidget([functionList]() { functionList("save"); });
+  Menu & saveAs = functions.addMenu("Save As", "Save a function of the selected graph: a Datum file (the function, read back by Open), "
+                                               "or a table of its values (.txt, .csv, .tsv, .dtb, .xlsx)");
+  saveAs.addWidget([functionList]() { functionList("saveAs"); });
+  Menu & duplicate = functions.addMenu("Duplicate", "A copy of a function of the selected graph, in the window of New, to edit before Add");
+  duplicate.addWidget([functionList]() { functionList("duplicate"); });
+  functions.addSeparator();
+  functions.addItem("Sum...",        "fn.sum",        "", "c1 A + c2 B + ... of functions shown in the selected graph (two or more)");
+  functions.addItem("Difference...", "fn.difference", "", "c1 A - c2 B of two functions shown in the selected graph");
+  functions.addItem("Product...",    "fn.product",    "", "(c1 A)(c2 B) of two functions shown in the selected graph");
+  functions.addItem("Ratio...",      "fn.ratio",      "", "(c1 A) / (c2 B) of two functions shown in the selected graph");
+  functions.addSeparator();
+  functions.addItem("Scale...",      "fn.scale",      "", "c A: a function shown in the selected graph multiplied by a constant");
+  }
+
+  std::vector<FunctionTools::Shown> DatumApp::currentFunctions()
+  {
+  if (_gui.nPanes() == 0) return {};
+  return FunctionTools::functionsIn(_gui.currentPane().currentGraph());
+  }
+
+  void DatumApp::functionRange(double & xMin, double & xMax)
+  {
+  xMin = 0;
+  xMax = 10;
+  if (_gui.nPanes() == 0) return;
+  const Graph & graph = _gui.currentPane().currentGraph();
+  if (graph.items().empty()) return;
+  Graph::View v = graph.view();
+  if (v.xMaximum > v.xMinimum) { xMin = v.xMinimum; xMax = v.xMaximum; }
+  }
+
+  void DatumApp::showFunctionIn(CanvasPane & pane, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax,
+                                double yMin, double yMax)
+  {
+  MATH::ParameterizedFunction * raw = f.release();
+  _functions.emplace_back(raw);
+  if (raw->rank() == 2) pane.show(GraphItem(raw, float(xMin), float(xMax), float(yMin), float(yMax)));
+  else pane.show(GraphItem(raw, float(xMin), float(xMax)));
+  }
+
+  void DatumApp::showFunction(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax)
+  {
+  recordUndo();
+  showFunctionIn(_gui.targetPane(), std::move(f), xMin, xMax, yMin, yMax);
+  }
+
+  void DatumApp::saveFunction(const FunctionTools::Shown & shown, bool ask)
+  {
+  if (!shown.function) return;
+  std::shared_ptr<MATH::ParameterizedFunction> copy(shown.function->clone());   // the function may go before the file is chosen
+  FunctionTools::Shown what = shown;
+  const void * key = shown.function;
+  auto write = [this, copy, what, key](const String & path)
+    {
+    FunctionTools::Shown s = what;
+    s.function = copy.get();
+    String error;
+    if (!FunctionTools::write(*copy, path, s, error)) { _gui.showMessage("Save Function", path + String(":\n") + error); return; }
+    _functionFiles[key] = path;
+    _configuration.directory = FileSystem::parent(path);
+    _gui.setStatus(String("Saved ") + what.label + String(" to ") + path);
+    };
+  auto found = _functionFiles.find(key);
+  if (!ask && found != _functionFiles.end()) { write(found->second); return; }
+  String name = shown.label.isNull() || shown.label.str().empty() ? String("function.datum") : shown.label + String(".datum");
+  _gui.fileDialog().open(FileDialog::kSaveFile, "Save the function (Datum file, or a table: .txt, .csv, .tsv, .dtb, .xlsx)",
+                         _configuration.directory, {".datum", ".txt", ".csv", ".tsv", ".dtb", ".xlsx"}, name,
+                         [write](const String & chosen)
+                         {
+                         String path = std::filesystem::path(chosen.data()).extension().empty() ? chosen + String(".datum") : chosen;
+                         write(path);
+                         });
+  }
+
   void DatumApp::updateMenuStates()
   {
   MenuBar & bar = _gui.menuBar();
+  {
+  // the operations on functions: enough functions in the selected graph
+  std::size_t n = currentFunctions().size();
+  for (const char * c : {"fn.sum", "fn.difference", "fn.product", "fn.ratio"})
+    if (MenuItem * item = bar.findItem(c)) item->setEnabled(n >= 2);
+  if (MenuItem * item = bar.findItem("fn.scale")) item->setEnabled(n >= 1);
+  }
   // the operations: enough histograms in the selected graph of the current canvas
   unsigned int shown = _gui.nPanes() > 0 ? HistogramOperations::histogramsIn(_gui.currentPane(), _gui.currentPane().selectedGraph()) : 0;
   for (const char * c : {"ops.sum", "ops.difference", "ops.product", "ops.ratio"})
@@ -668,6 +776,26 @@ namespace Datum
     if (_gui.nPanes() == 0) return;
     CanvasPane & pane = _gui.currentPane();
     for (const auto & o : operations) if (c == o.first) _operations.open(o.second, pane, pane.selectedGraph());
+    return;
+    }
+  if (c.str().compare(0, 3, "fn.") == 0)
+    {
+    // the Functions menu
+    double xMin = 0, xMax = 10;
+    functionRange(xMin, xMax);
+    static const std::pair<const char *, FunctionTools::Operation> operations[] = {
+      {"fn.sum", FunctionTools::kSum}, {"fn.difference", FunctionTools::kDifference}, {"fn.product", FunctionTools::kProduct},
+      {"fn.ratio", FunctionTools::kRatio}, {"fn.scale", FunctionTools::kScale} };
+    if (c == "fn.new") _functionTools.openNew(xMin, xMax);
+    else if (c == "fn.open")
+      _gui.fileDialog().open(FileDialog::kOpenFile, "Datum file with the functions to show", _configuration.directory, {".datum"}, "",
+                             [this, xMin, xMax](const String & path)
+                             {
+                             _configuration.directory = FileSystem::parent(path);
+                             _functionTools.openFile(path, xMin, xMax);
+                             });
+    else if (_gui.nPanes() > 0)
+      for (const auto & o : operations) if (c == o.first) _functionTools.openOperation(o.second, _gui.currentPane().currentGraph());
     return;
     }
   if (c == "file.open")
@@ -2198,6 +2326,7 @@ namespace Datum
   _extractor.renderDialogs();
   _operations.update();
   _operations.render();
+  _functionTools.render();
   renderTreeClosing();
   if (_showImGuiDemo) ImGui::ShowDemoWindow(&_showImGuiDemo);
   }

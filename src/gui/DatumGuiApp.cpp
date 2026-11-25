@@ -420,10 +420,16 @@ namespace Datum
                     "the segment of the histograms (the region of the maps) between them is shown in a canvas below and\n"
                     "follows the lines when the mouse rests or is released. Right-click the extract > Save Extraction...\n"
                     "(a name per histogram) or Cancel Extraction.");
-  ImGui::BulletText("Operations: Sum, Difference, Product, Ratio, Scale of the histograms of the selected graph. Click\n"
+  ImGui::BulletText("Histograms: Sum, Difference, Product, Ratio, Scale of the histograms of the selected graph. Click\n"
                     "their names in the window (in order: A first), change the coefficients (1 by default), OK: the result\n"
                     "is shown in a canvas below; right-click it > Save Result... or Close Result. The same operations are in the\n"
-                    "context menu of a graph (right-click), and the Operations menu has Compare, Rebin, Fit and Show Data too.");
+                    "context menu of a graph (right-click), and the Histograms menu has Compare, Rebin, Fit and Show Data too.");
+  ImGui::BulletText("Functions: New defines a function (class, parameters, range, name) and shows it in the selected graph\n"
+                    "(a canvas is made if there is none; Add again for more). Open shows functions of a Datum file. Save and\n"
+                    "Save As write a function to a Datum file, or its values as a table (.txt, .csv, .tsv, .dtb, .xlsx).\n"
+                    "Duplicate opens a copy in the window of New, to edit. Sum, Difference, Product, Ratio, Scale combine\n"
+                    "the functions of the selected graph, with coefficients: the result is a function that can be saved and fitted.\n"
+                    "On a canvas of a plot file, functions of a registered class go into the plot file, others in a canvas below.");
   ImGui::BulletText("Shapes drawn on the canvases and fits are shown, not written to the plot file.");
   ImGui::BulletText("PlotHistos plots.xml opens DatumGui on a plot file; PlotHistos --all plots.xml writes its outputs.");
   }
@@ -625,6 +631,7 @@ namespace Datum
   maps.addItem("Detector Maps...", "edit.maps", "", "The particle efficiencies and smearers of a maps file (RunDatum: Import)");
 
   addOperationsMenu(bar);
+  addFunctionsMenu(bar);
   Menu & help = bar.addMenu("Help");
   help.addItem("DatumGui Help",        "plot.help",      "F1", "How the canvases, the plot files and the browser work together");
   help.addItem("Keyboard Shortcuts", "help.shortcuts", "",   "List of the keyboard shortcuts");
@@ -633,6 +640,61 @@ namespace Datum
 #endif
   help.addSeparator();
   help.addItem("ImGui Demo (developers)", "help.imguiDemo", "", "Dear ImGui's demonstration window").setCheckable(true);
+  }
+
+  void DatumGuiApp::showFunction(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax)
+  {
+  Tab * t = tab();
+  Path canvas, graph;
+  bool registered = f && MATH::FunctionRegistry::isRegistered(*f) && !dynamic_cast<const MATH::ParameterizedComposite *>(f.get());
+  // the window of the plot file used, without a canvas of the plot file (a new plot file): a window, a canvas and a
+  // graph made in the file for a function it can describe
+  if (t && f && registered && !currentCanvas(canvas, graph) && _gui.nPanes() > 0
+      && _gui.windowOfPane(_gui.currentPaneIndex()) >= 0 && _gui.currentPane().host() >= 0)
+    {
+    PlotDocument & d = *t->document;
+    d.beginEdit();
+    Path w;
+    if (!currentWindow(w)) w = d.addWindow();
+    canvas = d.addCanvas(w);
+    graph = canvas.empty() ? Path() : d.addGraph(canvas);
+    d.endEdit();
+    }
+  else if (!t || !f || !currentCanvas(canvas, graph))
+    {
+    DatumApp::showFunction(std::move(f), xMin, xMax, yMin, yMax);
+    return;
+    }
+  if (graph.empty()) { DatumApp::showFunction(std::move(f), xMin, xMax, yMin, yMax); return; }
+  PlotDocument & d = *t->document;
+  if (registered)
+    {
+    // a function of the plot file: its class, parameters and range in the selected graph
+    std::string values;
+    for (unsigned int k=0; k<f->nParameters(); k++)
+      values += (k ? " " : "") + XmlElement::formatNumber(f->parameter(k).value()).str();
+    d.beginEdit();
+    Path p = d.addFunction(graph, MATH::FunctionRegistry::typeName(*f), String(values.c_str()), xMin, xMax);
+    if (!p.empty())
+      {
+      if (f->rank() == 2)
+        {
+        d.setAttribute(p, "yMin", XmlElement::formatNumber(yMin));
+        d.setAttribute(p, "yMax", XmlElement::formatNumber(yMax));
+        }
+      String name(f->name());
+      if (!name.isEmpty()) { d.setAttribute(p, "name", name); d.setAttribute(p, "label", name); }
+      t->selected = p;
+      t->hasSelection = true;
+      }
+    d.endEdit();
+    return;
+    }
+  // a composite (not described by plot files): a canvas of its own, below the canvas of the plot file
+  CanvasPane & below = _gui.addPaneBelow(_gui.currentPane().windowId());
+  below.setTitle(String(f->name()));
+  DatumApp::showFunctionIn(below, std::move(f), xMin, xMax, yMin, yMax);
+  _gui.setStatus("The function is shown in a canvas of its own: plot files describe functions of registered classes only");
   }
 
   void DatumGuiApp::updateMenuStates()

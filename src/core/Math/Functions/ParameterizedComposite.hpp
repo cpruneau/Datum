@@ -33,7 +33,13 @@ namespace Datum
   //! A composite is a sum (kSum, the default: all components have the rank of the composite) or a product (kProduct:
   //! each component acts on its own variables, in the order the components were added, and the rank is the sum of
   //! theirs; e.g. f(x) g(y), a function of two variables made of two of one). The integral of a product over a box is
-  //! the product of those of its components.
+  //! the product of those of its components. It can also be a product of functions of the same variables
+  //! (kPointwiseProduct: f(x) = f_0(x) f_1(x) ...) or a ratio of two of them (kRatio: f(x) = f_0(x)/f_1(x)), whose
+  //! derivatives and integrals are numerical.
+  //!
+  //! Each component has a coefficient (1 unless given): f = c_0 f_0 + c_1 f_1 + ... for a sum (a difference: c_1 < 0;
+  //! a scaled function: a sum of one component), (c_0 f_0)(c_1 f_1)... for the products, (c_0 f_0)/(c_1 f_1) for a
+  //! ratio. Coefficients are not parameters: they are not fitted.
   //!
   //! Unlike CompositeFunction (a sum of functions without parameters, which it does not own), a composite owns its
   //! components and can be fitted, copied, stored with a fit in a Datum file, and registered under a name with
@@ -51,7 +57,7 @@ namespace Datum
   public:
 
   //! @brief How the components are combined.
-  enum Operation { kSum, kProduct };
+  enum Operation { kSum, kProduct, kPointwiseProduct, kRatio };
 
   //! @brief Empty composite (rank 1 until a component is added). @param operation sum or product
   explicit ParameterizedComposite(Operation operation=kSum);
@@ -75,6 +81,14 @@ namespace Datum
   //! that of the other components of a sum, or the function cannot be copied
   //!
   void add(const String & label, const ParameterizedFunction & function);
+  //! @brief Add a copy of a function with a coefficient (see add()). @param label label @param function function
+  //! @param coefficient coefficient of the component @throws MathException as add(), or for a third component of a ratio
+  void add(const String & label, const ParameterizedFunction & function, double coefficient);
+  //! @brief Coefficient of component k. @param k index @return coefficient @throws MathException if k is out of range
+  double coefficient(unsigned int k) const;
+  //! @brief Set the coefficient of component k. @param k index @param c coefficient
+  //! @throws MathException if k is out of range
+  void setCoefficient(unsigned int k, double c);
   //! @brief How the components are combined. @return sum or product
   Operation operation() const { return _operation; }
   //! @brief Number of components. @return number
@@ -113,7 +127,7 @@ namespace Datum
   String registryName() const override { return _registryName; }
   //! @brief Set the name under which the composite is registered. @param name name
   void setRegistryName(const String & name) { _registryName = name; }
-  //! @brief Set the operation of an empty composite. @param operation sum or product
+  //! @brief Set the operation of an empty composite. @param operation sum, product, pointwise product or ratio
   //! @throws MathException if the composite has components
   void setOperation(Operation operation);
   //! @brief Write the operation, the registry name and the components (each a whole function record payload).
@@ -137,6 +151,7 @@ namespace Datum
 
   std::vector<std::unique_ptr<ParameterizedFunction>> _components;   //!< components (owned)
   std::vector<String> _labels;   //!< labels of the components
+  std::vector<double> _coefficients;   //!< coefficients of the components
   std::vector<unsigned int> _first;   //!< index of the first parameter of each component
   String _registryName;   //!< name in FunctionRegistry (empty if not registered)
   mutable std::vector<double> _synchronized;   //!< values last given to the components

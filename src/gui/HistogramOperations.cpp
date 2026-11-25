@@ -8,7 +8,7 @@
  *
  * *********************************************************************/
 //! @file HistogramOperations.cpp
-//! @brief HistogramOperations: the Operations menu of DatumGui (sum, difference, product, ratio, scaling of histograms).
+//! @brief HistogramOperations: the Histograms menu of DatumGui (sum, difference, product, ratio, scaling of histograms).
 #include "HistogramOperations.hpp"
 #include <algorithm>
 #include <cctype>

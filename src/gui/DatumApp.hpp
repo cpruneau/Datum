@@ -13,6 +13,7 @@
 #define DATUM__GUI__DatumApp
 #include <deque>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 #include "String.hpp"
@@ -21,6 +22,7 @@
 #include "Projector.hpp"
 #include "Extractor.hpp"
 #include "HistogramOperations.hpp"
+#include "FunctionTools.hpp"
 #include "Graph.hpp"
 #include "Folder.hpp"
 
@@ -336,7 +338,9 @@ namespace Datum
   DatumGui _gui;   //!< the window
   Projector _projector;   //!< projections of the maps onto x or y (context menu of a graph > Project)
   Extractor _extractor;   //!< segments of histograms, regions of maps (context menu of a graph > Extract)
-  HistogramOperations _operations;   //!< menu Operations: sum, difference, product, ratio, scaling of histograms
+  HistogramOperations _operations;   //!< menu Histograms: sum, difference, product, ratio, scaling of histograms
+  FunctionTools _functionTools;      //!< menu Functions: new, open, save, duplicate, operations on functions
+  std::map<const void *, String> _functionFiles;   //!< file each function was saved to last (Functions > Save)
   std::vector<std::unique_ptr<MATH::Function>>   _functions;   //!< functions created by the application (demo)
   std::vector<std::unique_ptr<MATH::DataPoints>> _data;   //!< data points created by the application (demo)
   //! A rebinned copy made by the application (in _data): the copy, its original histogram, the factors
@@ -400,9 +404,27 @@ namespace Datum
   String findConfigurationFile() const;
   //! @brief Create the menus of the menu bar (a program built on the application can make its own).
   virtual void buildMenus();
-  //! @brief Add the menu Operations (sum, difference, product, ratio, scaling of the histograms of the selected graph
+  //! @brief Add the menu Histograms (sum, difference, product, ratio, scaling of the histograms of the selected graph
   //! of the current canvas; see HistogramOperations). @param bar menu bar
   void addOperationsMenu(MenuBar & bar);
+  //! @brief The Functions menu (shared by the menu bars of the programs): New, Open, Save, Save As, Duplicate, Sum,
+  //! Difference, Product, Ratio, Scale. @param bar menu bar
+  void addFunctionsMenu(MenuBar & bar);
+  //! @brief Show a function made by the Functions menu (owned by the application): in the selected graph of the
+  //! current canvas, a canvas made if there is none. @param f function @param xMin range @param xMax range
+  //! @param yMin range (two variables) @param yMax range
+  virtual void showFunction(std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax);
+  //! @brief Show a function (owned by the application from then on) in the selected graph of a pane.
+  //! @param pane pane @param f function @param xMin range @param xMax range @param yMin range @param yMax range
+  void showFunctionIn(CanvasPane & pane, std::unique_ptr<MATH::ParameterizedFunction> f, double xMin, double xMax, double yMin, double yMax);
+  //! @brief Save a function shown: to the file it was saved to (ask false), or to a file chosen (a Datum file, or a
+  //! table of its values). @param shown function @param ask choose the file
+  void saveFunction(const FunctionTools::Shown & shown, bool ask);
+  //! @brief Range for new functions: that of the selected graph if it shows something, otherwise [0, 10].
+  //! @param xMin lower end @param xMax upper end
+  void functionRange(double & xMin, double & xMax);
+  //! @brief The functions shown in the selected graph of the current canvas (none if there is no canvas).
+  std::vector<FunctionTools::Shown> currentFunctions();
   //! @brief Add menus of a program built on the application, before the Help menu (nothing here). @param bar menu bar
   virtual void addMenus(MenuBar & bar) { (void)bar; }
   //! @brief Called once the window is open, the menus made and the files of the command line opened, before the

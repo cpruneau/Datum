@@ -27,6 +27,7 @@ namespace Datum
   _offsets(),
   _components(),
   _labels(),
+  _coefficients(),
   _first(),
   _registryName(),
   _synchronized()
@@ -45,6 +46,7 @@ namespace Datum
   _offsets(source._offsets),
   _components(),
   _labels(source._labels),
+  _coefficients(source._coefficients),
   _first(source._first),
   _registryName(source._registryName),
   _synchronized()
@@ -62,6 +64,7 @@ namespace Datum
   _operation = rhs._operation;
   _offsets = rhs._offsets;
   _labels = rhs._labels;
+  _coefficients = rhs._coefficients;
   _first = rhs._first;
   _registryName = rhs._registryName;
   _synchronized.clear();
@@ -70,11 +73,30 @@ namespace Datum
 
   void ParameterizedComposite::add(const String & label, const ParameterizedFunction & function)
   {
+  add(label, function, 1.0);
+  }
+
+  double ParameterizedComposite::coefficient(unsigned int k) const
+  {
+  if (k >= _coefficients.size()) throw MathException("Component index out of range", __FUNCTION__);
+  return _coefficients[k];
+  }
+
+  void ParameterizedComposite::setCoefficient(unsigned int k, double c)
+  {
+  if (k >= _coefficients.size()) throw MathException("Component index out of range", __FUNCTION__);
+  _coefficients[k] = c;
+  }
+
+  void ParameterizedComposite::add(const String & label, const ParameterizedFunction & function, double coefficient)
+  {
   if (label.isNull()) throw MathException("A component of a composite needs a label", __FUNCTION__);
   for (const auto & existing : _labels)
     if (existing == label) throw MathException(String("The label ") + label + String(" is already used"), __FUNCTION__);
-  if (_operation == kSum && !_components.empty() && function.rank() != rank())
-    throw MathException("The components of a sum must have the same rank", __FUNCTION__);
+  if (_operation != kProduct && !_components.empty() && function.rank() != rank())
+    throw MathException("The components of a sum, a pointwise product or a ratio must have the same rank", __FUNCTION__);
+  if (_operation == kRatio && _components.size() >= 2)
+    throw MathException("A ratio has two components", __FUNCTION__);
   std::unique_ptr<ParameterizedFunction> copy(function.clone());
   if (_operation == kProduct)
     {
@@ -90,6 +112,7 @@ namespace Datum
     addParameter(p);
     }
   _labels.push_back(label);
+  _coefficients.push_back(coefficient);
   _components.push_back(std::move(copy));
   _synchronized.clear();
   }
@@ -127,14 +150,19 @@ namespace Datum
   {
   checkRank(1, __FUNCTION__);
   synchronize();
-  if (_operation == kProduct)
+  if (_operation == kRatio)
+    {
+    if (_components.size() < 2) return _components.empty() ? 0.0 : _coefficients[0]*_components[0]->evaluateAt(x);
+    return (_coefficients[0]*_components[0]->evaluateAt(x))/(_coefficients[1]*_components[1]->evaluateAt(x));
+    }
+  if (_operation == kProduct || _operation == kPointwiseProduct)
     {
     double product = 1;
-    for (const auto & component : _components) product *= component->evaluateAt(x);
+    for (std::size_t k=0; k<_components.size(); k++) product *= _coefficients[k]*_components[k]->evaluateAt(x);
     return product;
     }
   double sum = 0;
-  for (const auto & component : _components) sum += component->evaluateAt(x);
+  for (std::size_t k=0; k<_components.size(); k++) sum += _coefficients[k]*_components[k]->evaluateAt(x);
   return sum;
   }
 
@@ -153,18 +181,29 @@ namespace Datum
     for (unsigned int k=0; k<_components.size(); k++)
       {
       const ParameterizedFunction & c = *_components[k];
-      product *= c.rank() == 1 ? c.evaluateAt(x[_offsets[k]]) : c.evaluateAt(slice(x, k));
+      product *= _coefficients[k]*(c.rank() == 1 ? c.evaluateAt(x[_offsets[k]]) : c.evaluateAt(slice(x, k)));
       }
     return product;
     }
+  if (_operation == kRatio)
+    {
+    if (_components.size() < 2) return _components.empty() ? 0.0 : _coefficients[0]*_components[0]->evaluateAt(x);
+    return (_coefficients[0]*_components[0]->evaluateAt(x))/(_coefficients[1]*_components[1]->evaluateAt(x));
+    }
+  if (_operation == kPointwiseProduct)
+    {
+    double product = 1;
+    for (std::size_t k=0; k<_components.size(); k++) product *= _coefficients[k]*_components[k]->evaluateAt(x);
+    return product;
+    }
   double sum = 0;
-  for (const auto & component : _components) sum += component->evaluateAt(x);
+  for (std::size_t k=0; k<_components.size(); k++) sum += _coefficients[k]*_components[k]->evaluateAt(x);
   return sum;
   }
 
   bool ParameterizedComposite::hasAnalyticalDerivative() const
   {
-  if (rank() != 1 || _components.empty()) return false;
+  if (rank() != 1 || _components.empty() || _operation != kSum) return false;
   for (const auto & component : _components) if (!component->hasAnalyticalDerivative()) return false;
   return true;
   }
@@ -172,18 +211,20 @@ namespace Datum
   double ParameterizedComposite::derivativeAt(double x) const
   {
   checkRank(1, __FUNCTION__);
+  if (_operation != kSum) return Function::derivativeAt(x);   // numerical
   synchronize();
   double sum = 0;
-  for (const auto & component : _components) sum += component->derivativeAt(x);
+  for (std::size_t k=0; k<_components.size(); k++) sum += _coefficients[k]*_components[k]->derivativeAt(x);
   return sum;
   }
 
   double ParameterizedComposite::integralInRange(double low, double high) const
   {
   checkRank(1, __FUNCTION__);
+  if (_operation != kSum) return Function::integralInRange(low, high);   // numerical
   synchronize();
   double sum = 0;
-  for (const auto & component : _components) sum += component->integralInRange(low, high);
+  for (std::size_t k=0; k<_components.size(); k++) sum += _coefficients[k]*_components[k]->integralInRange(low, high);
   return sum;
   }
 
@@ -191,15 +232,17 @@ namespace Datum
   {
   checkRank((unsigned int)(low.size()), __FUNCTION__);
   checkRank((unsigned int)(high.size()), __FUNCTION__);
+  if (_operation == kPointwiseProduct || _operation == kRatio) return Function::integralInRange(low, high);   // numerical
   synchronize();
   if (_operation == kProduct)
     {
     double product = 1;
-    for (unsigned int k=0; k<_components.size(); k++) product *= _components[k]->integralInRange(slice(low, k), slice(high, k));
+    for (unsigned int k=0; k<_components.size(); k++)
+      product *= _coefficients[k]*_components[k]->integralInRange(slice(low, k), slice(high, k));
     return product;
     }
   double sum = 0;
-  for (const auto & component : _components) sum += component->integralInRange(low, high);
+  for (std::size_t k=0; k<_components.size(); k++) sum += _coefficients[k]*_components[k]->integralInRange(low, high);
   return sum;
   }
 
@@ -246,7 +289,7 @@ namespace Datum
 
   void ParameterizedComposite::encodeState(BinaryWriter & w) const
   {
-  w.writeUInt8(uint8_t(_operation == kProduct ? 1 : 0));
+  w.writeUInt8(uint8_t(_operation));   // 0 sum, 1 product, 2 pointwise product, 3 ratio
   w.writeString(_registryName);
   w.writeVarUInt(nComponents());
   for (unsigned int k=0; k<nComponents(); k++)
@@ -259,14 +302,18 @@ namespace Datum
     w.writeVarUInt(block.buffer().size());
     w.writeBytes(block.buffer().data(), block.buffer().size());
     }
+  // the coefficients, after the components (written only if one is not 1: older readers ignore them)
+  bool ones = true;
+  for (double c : _coefficients) if (c != 1.0) ones = false;
+  if (!ones) for (double c : _coefficients) w.writeFloat64(c);
   }
 
   void ParameterizedComposite::decodeState(BinaryReader & r, unsigned int version)
   {
   if (nComponents() != 0) throw Exception("A composite is read into an empty composite only", __FUNCTION__);
   uint8_t operation = r.readUInt8();
-  if (operation > 1) throw Exception("Invalid operation of a composite", __FUNCTION__);
-  setOperation(operation == 1 ? kProduct : kSum);
+  if (operation > 3) throw Exception("Invalid operation of a composite", __FUNCTION__);
+  setOperation(Operation(operation));
   _registryName = r.readString();
   uint64_t n = r.readVarUInt();
   if (n > r.remaining()) throw Exception("More components than data", __FUNCTION__);
@@ -280,6 +327,9 @@ namespace Datum
     std::unique_ptr<ParameterizedFunction> f(decodeNewBinary(block, componentName, version));
     add(componentLabel, *f);
     }
+  // the coefficients, if written (1 otherwise)
+  if (r.remaining() >= 8*std::size_t(n))
+    for (uint64_t k=0; k<n; k++) _coefficients[std::size_t(k)] = r.readFloat64();
   }
 
   } // namespace MATH

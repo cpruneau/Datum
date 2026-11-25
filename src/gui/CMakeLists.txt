@@ -60,6 +60,7 @@ add_library(DatumGuiCore STATIC
   Projector.cpp
   Extractor.cpp
   HistogramOperations.cpp
+  FunctionTools.cpp
   DataPane.cpp
   SpreadsheetPane.cpp
   FitDialog.cpp

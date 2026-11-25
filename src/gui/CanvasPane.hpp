@@ -159,7 +159,7 @@ namespace Datum
   //! @return true if the pane was clicked (it should become the current pane)
   bool render(float width, float height, bool isCurrent, ImFont * font);
 
-  //! @name Tools of a graph (menus of the context menu, also drawn by the Operations menu of DatumGui)
+  //! @name Tools of a graph (menus of the context menu, also drawn by the Histograms menu of DatumGui)
   //! Each draws a sub-menu (disabled when the graph has nothing it applies to) inside an open menu.
   //! @{
   void renderCompareMenu(int graph);      //!< Compare: two histograms of the same rank (difference, ratio, significance)
