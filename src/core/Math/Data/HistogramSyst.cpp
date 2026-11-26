@@ -487,7 +487,7 @@ void HistogramSyst::encodeBinary(BinaryWriter & w) const
 
 void HistogramSyst::decodeBinary(BinaryReader & r, const String & histogramName, unsigned int version)
 {
-  Histogram::decodeBinary(r,histogramName,version>=2 ? 6 : 5);   // the payload of a Histogram record of version 5 (6 from 2)
+  Histogram::decodeBinary(r,histogramName,version>=3 ? 7 : (version>=2 ? 6 : 5));   // the payload of a Histogram record of version 5 (6 from 2, 7 from 3)
   _systPlus.clear();
   _systMinus.clear();
   syncSyst();

@@ -328,7 +328,7 @@ void testHistogramRecords()
   // format version 4: no common systematic
   {
   Histogram u("u","u",3,0.0,3.0);
-  u.fill(1.5);
+  u.fill(1.5,2.0);   // weight 2: written in full (a histogram of counts is written as counts since version 7)
   BinaryWriter w;
   u.encodeBinary(w);
   std::string payload = w.buffer().substr(0,w.buffer().size()-2);   // without the common systematic and variable bins
@@ -336,7 +336,7 @@ void testHistogramRecords()
   Histogram old;
   old.setCommonSyst(0.5);
   old.decodeBinary(r,"u",4);
-  CHECK(r.remaining()==0 && near(old.binValueAt(1),1.0) && !old.hasCommonSyst());
+  CHECK(r.remaining()==0 && near(old.binValueAt(1),2.0) && !old.hasCommonSyst());
   }
   // profiles carry it in their histogram part
   Profile p("p","p",3,0.0,3.0);

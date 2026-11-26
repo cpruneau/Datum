@@ -2148,7 +2148,7 @@ namespace Datum
     if (significance)
       {
       std::vector<double> values = difference->binValues(), errors = difference->binValueUncertainties();
-      std::vector<long> entries = difference->binEntries();
+      std::vector<long> entries(difference->binEntries().begin(), difference->binEntries().end());
       for (size_t k = 0; k < values.size(); k++)
         {
         const bool empty = entries[k] <= 0 || values[k] < -1.0E99 || !(errors[k] > 0.0);

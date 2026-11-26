@@ -569,15 +569,14 @@ namespace Datum
   BinaryReader r(bytes.data(),bytes.size());
   std::string tag;
   unsigned int version;
-  const char * payload;
-  std::size_t length;
-  readBinaryRecord(r,tag,version,payload,length,where);
+  std::string payload;
+  readBinaryRecord(r,tag,version,payload,where);   // inflated if compressed
   auto factory = Folder::registry().find(tag);
   if (factory==Folder::registry().end())
     throw FileException(where,String("Type tag ")+tag.c_str()+" is not registered","FolderLazyItem");
   try
     {
-    _decoded.reset(factory->second(std::string(payload,length),version,where));
+    _decoded.reset(factory->second(payload,version,where));
     }
   catch (FileException &)
     {
@@ -810,14 +809,13 @@ namespace Datum
     BinaryReader entry(r.readSpan(std::size_t(length)),std::size_t(length));
     std::string tag;
     unsigned int version;
-    const char * payload;
-    std::size_t payloadLength;
-    readBinaryRecord(entry,tag,version,payload,payloadLength,entryName);
+    std::string payload;
+    readBinaryRecord(entry,tag,version,payload,entryName);   // inflated if compressed
     if (entry.remaining()!=0) throw Exception(String("Unexpected data after the record of entry ")+entryName,"Folder::decodeBinary()");
     auto factory = registry().find(tag);
     if (factory==registry().end())
       throw Exception(String("Entry ")+entryName+" has type tag "+tag.c_str()+", which is not registered: call Folder::registerType<T>() for its class","Folder::decodeBinary()");
-    addItem(entryName,factory->second(std::string(payload,payloadLength),version,entryName));
+    addItem(entryName,factory->second(payload,version,entryName));
     }
   }
 

@@ -27,6 +27,7 @@ FileSystem.cpp
 FileListing.cpp
 FileSystemEntry.cpp
 Folder.cpp
+Compression.cpp
 Reflection.cpp
 BaseReflection.cpp
 LongParameter.cpp
@@ -50,6 +51,15 @@ XmlReader.cpp
 XmlWriter.cpp)
 
 target_link_libraries(Base ${EXTRA_LIBS} )
+# zlib (part of macOS and of every Linux system) compresses the large records of Datum files (Compression); without
+# it, records are written uncompressed and compressed ones cannot be read
+find_package(ZLIB)
+if (ZLIB_FOUND)
+  target_compile_definitions(Base PRIVATE DATUM_WITH_ZLIB)
+  target_link_libraries(Base ZLIB::ZLIB)
+else()
+  message(WARNING "zlib not found: Datum files are written without compression, and compressed ones cannot be read")
+endif()
 target_include_directories(Base PUBLIC Base ${EXTRA_INCLUDES} )
 
 # optimization for big histogram access within the pair inner loop

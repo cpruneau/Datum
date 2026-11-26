@@ -410,8 +410,8 @@ namespace Datum
     std::vector<double> v0 = h0->binValues();
     std::vector<double> e0 = h0->binValueUncertainties();
     std::vector<double> v1 = h1.binValues();
-    std::vector<long> entries(h0->binEntries());
-    const std::vector<long> & entries1 = h1.binEntries();
+    std::vector<long> entries(h0->binEntries().begin(), h0->binEntries().end());
+    const MATH::Histogram::Counts & entries1 = h1.binEntries();
     std::vector<double> values(v0.size()), errors(v0.size());
     for (std::size_t k=0; k<v0.size(); k++)
       {

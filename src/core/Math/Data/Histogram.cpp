@@ -160,7 +160,8 @@ namespace Datum
     setEmpty(k);
     return;
     }
-  _entries[k]          = entries;
+  if (entries>kMaximumCount) entries = kMaximumCount;   // held at the largest count: the value of the bin is kept
+  _entries[k]          = Count(entries);
   _avgValues[k]        = binValue/double(entries);
   _avgUncertainties[k] = binUncertainty/double(entries);
   }
@@ -588,6 +589,27 @@ namespace Datum
   { setWithValues<long,float,float>(&entries,values,&uncertainties,__FUNCTION__); }
   void Histogram::setWith(const std::vector<long> & entries, const std::vector<double> & values, const std::vector<double> & uncertainties)
   { setWithValues<long,double,double>(&entries,values,&uncertainties,__FUNCTION__); }
+  void Histogram::setWith(const Counts & entries, const std::vector<float> & values)
+  { setWithValues<Count,float,float>(&entries,values,nullptr,__FUNCTION__); }
+  void Histogram::setWith(const Counts & entries, const std::vector<double> & values)
+  { setWithValues<Count,double,double>(&entries,values,nullptr,__FUNCTION__); }
+  void Histogram::setWith(const Counts & entries, const std::vector<float> & values, const std::vector<float> & uncertainties)
+  { setWithValues<Count,float,float>(&entries,values,&uncertainties,__FUNCTION__); }
+  void Histogram::setWith(const Counts & entries, const std::vector<double> & values, const std::vector<double> & uncertainties)
+  { setWithValues<Count,double,double>(&entries,values,&uncertainties,__FUNCTION__); }
+
+  bool Histogram::holdsCounts() const
+  {
+  for (std::size_t k=0; k<_entries.size(); k++)
+    {
+    long n = _entries[k];
+    double a = _avgValues[k], u = _avgUncertainties[k];
+    if (n==0) { if (a!=0.0 || u!=0.0) return false; continue; }
+    if (n<0 || a!=1.0) return false;
+    if (std::fabs(u*std::sqrt(double(n)) - 1.0) > 1.0e-4) return false;
+    }
+  return true;
+  }
 
   //////////////////////////////////////////////////////////////////////////
   // Extraction and projection (all ranges inclusive)
@@ -1379,7 +1401,10 @@ namespace Datum
   for (std::size_t k=0; k<_entries.size(); k++)
     if (_entries[k]!=0 || _avgValues[k]!=0.0 || _avgUncertainties[k]!=0.0) nNonEmpty++;
   bool isDouble = _avgValues.isDouble();
-  w.writeUInt8(isDouble ? 1 : 0);   // format version 2: storage precision
+  // format version 2: storage precision (bit 0); version 7: bit 1 set for a histogram of counts (holdsCounts()), whose
+  // bins are written as their numbers of entries only, their averages (1) and uncertainties (1/sqrt(n)) made again
+  bool counts = nNonEmpty>0 && holdsCounts();
+  w.writeUInt8(uint8_t((isDouble ? 1 : 0) | (counts ? 2 : 0)));
   w.writeVarUInt(nNonEmpty);
   std::size_t next = 0;   // first global index after the previous non-empty bin
   for (std::size_t k=0; k<_entries.size(); k++)
@@ -1387,6 +1412,7 @@ namespace Datum
     if (_entries[k]==0 && _avgValues[k]==0.0 && _avgUncertainties[k]==0.0) continue;
     w.writeVarUInt(k-next);
     w.writeVarInt(_entries[k]);
+    if (counts) { next = k+1; continue; }
     if (isDouble) { w.writeFloat64(_avgValues[k]); w.writeFloat64(_avgUncertainties[k]); }
     else          { w.writeFloat32(float(_avgValues[k])); w.writeFloat32(float(_avgUncertainties[k])); }
     next = k+1;
@@ -1431,12 +1457,13 @@ namespace Datum
     addDimension((unsigned int)n,minimum,maximum,axisTitle);
     }
   _type = type;
-  bool isDouble = false;
+  bool isDouble = false, counts = false;
   if (version>=2)
     {
     uint8_t precisionFlag = r.readUInt8();
-    if (precisionFlag>1) throw Exception("Invalid storage precision","Histogram::decodeBinary()");
-    isDouble = precisionFlag==1;
+    if (precisionFlag>(version>=7 ? 3 : 1)) throw Exception("Invalid storage precision","Histogram::decodeBinary()");
+    isDouble = (precisionFlag & 1)!=0;
+    counts   = (precisionFlag & 2)!=0;
     }
   setPrecision(isDouble ? kDouble : kFloat);
   resizeBins();
@@ -1447,9 +1474,31 @@ namespace Datum
     {
     k += r.readVarUInt();
     if (k >= total) throw Exception("Bin index out of range","Histogram::decodeBinary()");
-    _entries[k]       = long(r.readVarInt());
-    if (isDouble) { _avgValues[k] = r.readFloat64(); _avgUncertainties[k] = r.readFloat64(); }
-    else          { _avgValues[k] = r.readFloat32(); _avgUncertainties[k] = r.readFloat32(); }
+    int64_t n = r.readVarInt();
+    if (counts)
+      {
+      // a histogram of counts: average 1, uncertainty of the average 1/sqrt(n)
+      if (n<=0 || n>kMaximumCount) throw Exception("Invalid number of entries of a bin of counts","Histogram::decodeBinary()");
+      _entries[k] = Count(n);
+      _avgValues[k] = 1.0;
+      _avgUncertainties[k] = 1.0/std::sqrt(double(n));
+      k++;
+      continue;
+      }
+    double average, uncertainty;
+    if (isDouble) { average = r.readFloat64(); uncertainty = r.readFloat64(); }
+    else          { average = r.readFloat32(); uncertainty = r.readFloat32(); }
+    if (n>kMaximumCount || n<-kMaximumCount)
+      {
+      // more entries than a bin holds (a file written with 64-bit counts): the largest count, the value kept
+      double scale = double(n)/double(n>0 ? kMaximumCount : -kMaximumCount);
+      average *= scale;
+      uncertainty *= scale;
+      n = n>0 ? kMaximumCount : -kMaximumCount;
+      }
+    _entries[k] = Count(n);
+    _avgValues[k] = average;
+    _avgUncertainties[k] = uncertainty;
     k++;
     }
   if (version>=3)

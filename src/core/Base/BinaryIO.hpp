@@ -21,6 +21,7 @@
 #include <ostream>
 #include <fstream>
 #include "String.hpp"
+#include "Compression.hpp"
 #include "Exceptions.hpp"
 
 namespace Datum
@@ -255,16 +256,63 @@ inline std::vector<double> readDoubles(BinaryReader & r)
 //! @param payload payload bytes @param where file or object name, for error messages
 inline void writeBinaryRecord(std::ostream & out, const char * tag, unsigned int version, const std::string & payload, const String & where)
 {
+  // a record of an object (not a folder) of Compression::threshold() bytes or more is compressed when that makes it
+  // 10% smaller: the high bit of its version is set, and its payload is the length of the payload, then the deflated
+  // payload (see Compression)
+  std::string packed;
+  const std::string * stored = &payload;
+  if (Compression::enabled() && payload.size()>=Compression::threshold() && version<0x80 && std::string(tag,4)!="DTMO")
+    {
+    std::string deflated;
+    if (Compression::deflate(payload.data(),payload.size(),deflated))
+      {
+      BinaryWriter size;
+      size.writeVarUInt(payload.size());
+      if (double(size.buffer().size()+deflated.size()) < 0.9*double(payload.size()))
+        {
+        packed = size.buffer() + deflated;
+        stored = &packed;
+        version |= 0x80;
+        }
+      }
+    }
   BinaryWriter header;
   header.writeBytes(tag,4);
   header.writeUInt8(uint8_t(version));
-  header.writeVarUInt(payload.size());
+  header.writeVarUInt(stored->size());
   BinaryWriter trailer;
-  trailer.writeUInt32(crc32(payload.data(),payload.size()));
+  trailer.writeUInt32(crc32(stored->data(),stored->size()));
   out.write(header.buffer().data(),std::streamsize(header.buffer().size()));
-  out.write(payload.data(),std::streamsize(payload.size()));
+  out.write(stored->data(),std::streamsize(stored->size()));
   out.write(trailer.buffer().data(),std::streamsize(trailer.buffer().size()));
   if (!out) throw FileException(where,"Error writing binary record","writeBinaryRecord()");
+}
+
+//!
+//! @brief The payload of a record as written by its class: a compressed payload (high bit of the version set) is
+//! inflated, and the bit cleared. @param version format version of the record (high bit cleared on return)
+//! @param payload stored payload, replaced by the payload @param where file or object name, for error messages
+//! @throws FileException if the compressed data is invalid, or Datum was built without zlib
+//!
+inline void expandBinaryPayload(unsigned int & version, std::string & payload, const String & where)
+{
+  if (!(version & 0x80)) return;
+  version &= 0x7F;
+  if (!Compression::available())
+    throw FileException(where,"Compressed binary record: this Datum was built without zlib","expandBinaryPayload()");
+  try
+    {
+    BinaryReader r(payload.data(),payload.size());
+    uint64_t size = r.readVarUInt();
+    if (size > (uint64_t(1)<<40)) throw Exception("Implausible record length","expandBinaryPayload()");
+    std::size_t offset = payload.size() - r.remaining();
+    std::string inflated;
+    if (!Compression::inflate(payload.data()+offset,payload.size()-offset,std::size_t(size),inflated))
+      throw FileException(where,"Corrupted compressed binary record","expandBinaryPayload()");
+    payload.swap(inflated);
+    }
+  catch (FileException &) { throw; }
+  catch (Exception &) { throw FileException(where,"Malformed compressed binary record","expandBinaryPayload()"); }
 }
 
 //! @brief Check the tag of a record and return it: "DTM" + one letter, or "CAP" + the letter in files written before
@@ -314,6 +362,7 @@ inline bool readBinaryRecord(std::istream & in, std::string & tag, unsigned int 
   BinaryReader crcReader(c,4);
   if (crcReader.readUInt32()!=crc32(payload.data(),payload.size()))
     throw FileException(where,"Corrupted binary record (checksum mismatch)","readBinaryRecord()");
+  expandBinaryPayload(version,payload,where);
   return true;
 }
 
@@ -347,6 +396,21 @@ inline void readBinaryRecord(BinaryReader & r, std::string & tag, unsigned int &
     {
     throw FileException(where,"Truncated or malformed binary record","readBinaryRecord()");
     }
+}
+
+//!
+//! @brief Read one record held in memory, its payload copied (and inflated if it was compressed).
+//! @param r reader positioned at the start of the record @param tag output: 4-character tag @param version output:
+//! format version @param payload output: payload @param where file or object name, for error messages
+//! @throws FileException if the data is not a Datum record, or is truncated or corrupted
+//!
+inline void readBinaryRecord(BinaryReader & r, std::string & tag, unsigned int & version, std::string & payload, const String & where)
+{
+  const char * data;
+  std::size_t length;
+  readBinaryRecord(r,tag,version,data,length,where);
+  payload.assign(data,length);
+  expandBinaryPayload(version,payload,where);
 }
 
 //! @brief Name stored at the start of a payload. @param payload payload @return name

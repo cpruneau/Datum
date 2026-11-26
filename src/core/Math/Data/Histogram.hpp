@@ -1,6 +1,7 @@
 #ifndef DATUM_Histogram
 #define DATUM_Histogram
 #include <algorithm>
+#include <cstdint>
 #include <vector>
 #include <cmath>
 #include <ostream>
@@ -135,8 +136,17 @@ namespace Datum
   public DataPoints,
   public Partition
   {
+  public:
+  //! Number of entries of a bin: 32 bits (at most 2^31-1 per bin; more is held at that number, the value of the bin
+  //! being kept).
+  typedef std::int32_t Count;
+  //! Numbers of entries of the bins.
+  typedef std::vector<Count> Counts;
+  //! Largest number of entries of a bin.
+  static constexpr long kMaximumCount = 2147483647L;
+
   protected:
-  std::vector<long>  _entries;        //!< Number of entries of each bin
+  Counts _entries;                    //!< Number of entries of each bin
   BinValues _avgValues;               //!< Average value per entry of each bin (float or double, see precision())
   BinValues _avgUncertainties;        //!< Uncertainty of the average value of each bin (same precision as _avgValues)
 
@@ -898,6 +908,20 @@ namespace Datum
   //! @brief Set all bin entries, values and uncertainties.
   //! @param entries number of entries of each bin @param values value of each bin @param uncertainties uncertainty of each bin value
   void setWith(const std::vector<long> & entries,  const std::vector<double> & values, const std::vector<double> & uncertainties);
+  //! @brief As setWith(const std::vector<long>&, ...), with the entries as binEntries() holds them.
+  void setWith(const Counts & entries, const std::vector<float> & values);
+  //! @brief As setWith(const std::vector<long>&, ...), with the entries as binEntries() holds them.
+  void setWith(const Counts & entries, const std::vector<double> & values);
+  //! @brief As setWith(const std::vector<long>&, ...), with the entries as binEntries() holds them.
+  void setWith(const Counts & entries, const std::vector<float> & values, const std::vector<float> & uncertainties);
+  //! @brief As setWith(const std::vector<long>&, ...), with the entries as binEntries() holds them.
+  void setWith(const Counts & entries, const std::vector<double> & values, const std::vector<double> & uncertainties);
+  //!
+  //! @brief Whether the histogram holds counts: every bin filled with unit weights (average 1, uncertainty of the
+  //! average 1/sqrt(n) to 1e-4), or empty. Such a histogram is stored as its numbers of entries only.
+  //! @return true if so
+  //!
+  bool holdsCounts() const;
 
   //! @}
 
@@ -1260,13 +1284,13 @@ namespace Datum
   //! @{
 
   //! @brief Read-only access to the entries of all bins. @return vector of bin entries
-  const std::vector<long>  & binEntries() const { return _entries; }
+  const Counts & binEntries() const { return _entries; }
   //! @brief Read-only access to the average values of all bins. @return bin averages (float or double storage)
   const BinValues & binAvgValues() const { return _avgValues; }
   //! @brief Read-only access to the uncertainties of the bin averages. @return uncertainties (float or double storage)
   const BinValues & binAvgValueUncertainties() const { return _avgUncertainties; }
   //! @brief Writable access to the entries of all bins. @return vector of bin entries
-  std::vector<long>  & binEntries() { return _entries; }
+  Counts & binEntries() { return _entries; }
   //! @brief Writable access to the average values of all bins (their number must not change). @return bin averages
   BinValues & binAvgValues() { return _avgValues; }
   //! @brief Writable access to the uncertainties of the bin averages (their number must not change). @return uncertainties
@@ -1408,7 +1432,7 @@ namespace Datum
   //! @brief Tag of histogram records in binary files. @return "DTMH"
   static const char * binaryTag() { return "DTMH"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 6; }
+  static unsigned int binaryVersion() { return 7; }
   //! @brief Name stored in binary records. @return name()
   String binaryName() const { return name(); }
   //! @brief Write the binary payload after the name (used by writeBinary()). @param w writer

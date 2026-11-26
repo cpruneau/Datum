@@ -227,7 +227,7 @@ public:
   //! @brief Tag of HistogramSyst records in binary files. @return "DTMY"
   static const char * binaryTag() { return "DTMY"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 2; }
+  static unsigned int binaryVersion() { return 3; }
   //! @brief Write the binary payload after the name. @param w writer
   void encodeBinary(BinaryWriter & w) const;
   //! @brief Rebuild this histogram from a binary payload. @param r reader @param name stored name @param version format

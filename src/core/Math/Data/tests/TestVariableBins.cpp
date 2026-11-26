@@ -179,14 +179,14 @@ void testRecords()
   CHECK(r.binEntriesAtGlobal(4)==5 && near(r.getCommonSystPlus(),0.02) && r.dimensionTitle(0)=="PT (GEV/c)");
   // regular histograms: one more byte (no variable axis), read as before
   Histogram regular("g","g",5,0.0,1.0);
-  regular.fill(0.5);
+  regular.fill(0.5,2.0);   // weight 2: written in full (a histogram of counts is written as counts since version 7)
   BinaryWriter w;
   regular.encodeBinary(w);
   std::string payload = w.buffer().substr(0,w.buffer().size()-1);   // a record of version 5
   BinaryReader reader(payload.data(),payload.size());
   Histogram old;
   old.decodeBinary(reader,"g",5);
-  CHECK(reader.remaining()==0 && old.isRegular(0) && old.binValueAtGlobal(2)==1.0);
+  CHECK(reader.remaining()==0 && old.isRegular(0) && old.binValueAtGlobal(2)==2.0);
   CHECK(roundTrip(regular).isRegular(0));
   // HistogramSyst and Profile
   HistogramSyst s("s","s",kEdges);

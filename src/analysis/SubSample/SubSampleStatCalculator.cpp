@@ -43,7 +43,7 @@ void contents(const Histogram & h, std::vector<double> & values, std::vector<dou
 {
   values = h.binValues();
   errors = h.binValueUncertainties();
-  entries = h.binEntries();
+  entries.assign(h.binEntries().begin(), h.binEntries().end());
   for (auto & v : values) v = unflag(v);
   for (auto & e : errors) e = unflag(e);
 }
@@ -343,7 +343,7 @@ for (const String & path : histogramPaths(*bins[0]))
       const MATH::Profile * p = dynamic_cast<const MATH::Profile*>(&matching(*bins[i], path, n, __FUNCTION__));
       if (!p) throw Exception(String("profile ") + path + String(" is not a profile in a bin"), __FUNCTION__);
       const double w = weights[i];
-      const std::vector<long> e = p->binEntries();
+      const std::vector<long> e(p->binEntries().begin(), p->binEntries().end());
       for (unsigned int k = 0; k < n; k++)
         {
         entries[k] += e[k];

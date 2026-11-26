@@ -319,7 +319,7 @@ int main()
   // ---- records written before the fits were stored are still read
   {
     Histogram plain("plain", "no fit", 5, 0.0, 1.0);
-    plain.fill(0.5);
+    plain.fill(0.5, 2.0);   // weight 2: written in full (a histogram of counts is written as counts since version 7)
     Histogram read;                                                         // the fits section is 2 bytes when empty, then 1 byte of common systematic and 1 of variable bins
     CHECK(readRecord(olderRecord(plain, 3, 4), read) && read.nFits() == 0 && read.binValueAtGlobal(2) == plain.binValueAtGlobal(2));
     DataPointsVector points;                                                // the fits (2 bytes), the common systematic (1) and the empty title (1)
