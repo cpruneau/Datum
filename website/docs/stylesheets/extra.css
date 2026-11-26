@@ -1,5 +1,25 @@
+/* Colours of the Datum logo: green #007D68, ink #1D2327 */
+:root, [data-md-color-scheme="default"] {
+  --md-primary-fg-color:        #007D68;
+  --md-primary-fg-color--light: #2E9C88;
+  --md-primary-fg-color--dark:  #005A4B;
+  --md-accent-fg-color:         #00A98C;
+  --md-typeset-a-color:         #007D68;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:        #005A4B;
+  --md-primary-fg-color--light: #007D68;
+  --md-primary-fg-color--dark:  #00473B;
+  --md-accent-fg-color:         #3FC1A6;
+  --md-typeset-a-color:         #3FC1A6;
+}
+.md-header__button.md-logo img { height: 1.6rem; }
+.md-typeset img.wordmark { width: 300px; max-width: 70%; margin: 0.4em 0 0.8em 0; }
 /* Datum site: screenshots framed, a little more room for tables */
 .md-typeset img.screenshot { border: 1px solid var(--md-default-fg-color--lightest); border-radius: 6px;
                              box-shadow: 0 2px 8px rgba(0,0,0,.15); margin: 0.6em 0; }
 .md-typeset table:not([class]) { font-size: 0.72rem; }
 .md-typeset .grid.cards > ul > li { border-radius: 8px; }
+/* the title of the home page is for screen readers and search only: the wordmark shows it */
+.md-typeset h1.visually-hidden { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden;
+                                 clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

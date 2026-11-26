@@ -18,8 +18,7 @@ site_dir: site
 theme:
   name: material
   language: en
-  icon:
-    logo: material/chart-scatter-plot
+  logo: images/logo.svg
   favicon: images/favicon.svg
   features:
     - navigation.tabs
@@ -33,15 +32,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: deep orange
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: deep orange
+      primary: custom
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Light mode
