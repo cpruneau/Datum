@@ -22,6 +22,17 @@ Datum files (`.datum`) hold folders of objects in a versioned binary format: eac
 type (for example `DTMH` for a histogram), so that later versions of Datum still read the files of earlier ones. Files
 are read lazily: an object is read when it is used. The files written by CAP (`.cap`) are still read.
 
+Files are compact:
+
+- empty bins of histograms are not written; a histogram of counts (unit weights) is written as its numbers of entries
+  only, about one to two bytes per filled bin;
+- records of objects of 4 kB or more are compressed (zlib) when that saves space: a 3-D density of 45,000 filled bins
+  takes 58 kB instead of 465 kB, a ratio of histograms 60% less;
+- data points write only the columns they use (x and y only: 8 bytes per point), and tables each column in the
+  precision it needs; both are read back exactly.
+
+In memory, a histogram bin takes 12 bytes in single precision and 20 in double (at most 2³¹ − 1 entries per bin).
+
 ```cpp
 Datum::DatumFile file("run.datum", Datum::File::kReadOnly);
 file.read();
@@ -49,6 +60,7 @@ Datum files, DatumGui opens `.root` files, and a folder or a file of the browser
 
 ## Classes
 
-`Datum::DatumFile`, `Datum::Folder`, `Datum::MATH::Histogram`, `Datum::MATH::DataPointsVector`,
+`Datum::DatumFile`, `Datum::Folder`, `Datum::Compression`, `Datum::MATH::Histogram`, `Datum::MATH::DataPointColumns`,
+`Datum::MATH::DataPointsVector`, `Datum::MATH::TableConversion`,
 `Datum::MATH::Table2D`, `Datum::MATH::ParameterizedFunction`, `Datum::MATH::FunctionRegistry`
 ([API reference](../api.md)).

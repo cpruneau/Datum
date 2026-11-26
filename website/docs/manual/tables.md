@@ -61,9 +61,23 @@ The plots are drawn in a canvas beside the table, where they are fitted, compare
 The **Stat** menu holds the same items as the context menu, and is active when a table pane is shown and is the pane
 used last.
 
+## Tables, data points and Datum files
+
+- **Save Table to Datum File...** adds the table to a Datum file, new or existing (an object of the same name is
+  replaced); the file is then shown in the browser.
+- **Save as Data Points...** makes data points of the columns by their roles (one set per Y column, with X or the row
+  index, the errors on x and y and the covariance; without roles, they are found from the names of the columns, such
+  as `x`, `x_err`, `y`, `stat`, `cov_xy`, or from their number) and adds them to a Datum file, where they are plotted
+  and fitted like any other data points.
+- In the browser, data points and histograms have **Show as Spreadsheet** (a table pane: `x`, `x_err`, `y`, `stat`,
+  `syst_plus`, `syst_minus`, `cov_xy`; for a histogram, the centre and edges of each bin, its value, uncertainty and
+  entries) and **Export as Table...** (text, CSV, binary table, Excel).
+
 ## In programs and workflows
 
-`Datum::TableReader`, `Datum::TableWriter`, `Datum::MATH::TableStatistics` and `Datum::TablePlots` do the same in C++;
+`Datum::TableReader`, `Datum::TableWriter`, `Datum::MATH::TableStatistics`, `Datum::TablePlots`,
+`Datum::MATH::TableConversion` (tables to data points and back) and `Datum::DataPointsFile` (data points from and to
+text, CSV and Excel files) do the same in C++;
 the task `Datum::SpreadsheetAnalyzer` reads a table, selects columns, processes them, and writes its summary,
 correlations and plots to a Datum file (template `DB/Templates/SpreadsheetAnalyzer.xml`).
 
@@ -73,4 +87,10 @@ Datum::TableReader::Report report = Datum::TableReader().read("measurements.csv"
 std::cout << report.summary() << std::endl;     // e.g. "1200 rows x 6 columns (comma), header"
 auto * points = Datum::TablePlots::xy(table, table.columnIndex("x"), table.columnIndex("y"),
                                       table.columnIndex("ey"), table.columnIndex("ex"));
+
+// data points from a file, the roles of the columns found from their names
+Datum::TableReader::Report read;
+Datum::MATH::TableConversion::Report converted;
+auto data = Datum::DataPointsFile::read("spectrum.csv", read, converted);
+Datum::DataPointsFile::write("spectrum.xlsx", *data);
 ```

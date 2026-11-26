@@ -294,6 +294,17 @@ draw: points $(x, y)$, $x$ being a column or the index of the rows, with the unc
 covariance of $x$ and $y$ of each point taken from other columns; bar charts; the distribution of the values of a
 column, as a histogram; and a correlation matrix, as a map.
 
+\paragraph{Tables and data points.}
+\code{TableConversion} (Math) turns a table into data points (\code{DataPointColumns}) by the roles of its columns:
+the independent variables, their uncertainties, the values, their statistical and (upper and lower) systematic
+uncertainties, and the covariance of $x$ and $y$. The roles are given, or found from the names of the columns
+(\code{x}, \code{x\_err}, \code{y}, \code{stat}, \code{syst\_plus}, \code{syst\_minus}, \code{cov\_xy} and their usual
+variants) or from their number; rows without $x$ or value are left out, and missing or negative uncertainties and
+covariances that are not valid are repaired and counted. Conversely, any data points, and the bins of a histogram
+(centres and edges of the bins, value, uncertainty and number of entries), become a table with named columns.
+\code{DataPointsFile} reads data points from a text or CSV file, and writes data points or histograms as text, CSV,
+binary tables or Excel files.
+
 \paragraph{Analyses.}
 \code{SpreadsheetAnalyzer} is a task (Section~\ref{sec:analysis}) configured, as the others, by an XML file: it
 reads a table, selects columns, applies processing functions (registered by name; dropping the rows with missing

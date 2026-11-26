@@ -78,7 +78,7 @@ A file is a sequence of records, one per object. Each record is
     Field & Size & Content \\
     \midrule
     tag & 4 bytes & \code{DTM} followed by one letter identifying the class (\code{CAP} in the files of CAP) \\
-    version & 1 byte & format version of the payload \\
+    version & 1 byte & format version of the payload; its high bit is set when the payload is compressed \\
     length & varint & number of bytes of the payload \\
     payload & length & the name of the object, then the data of its class \\
     checksum & 4 bytes & CRC-32 of the payload \\
@@ -86,7 +86,7 @@ A file is a sequence of records, one per object. Each record is
   \end{tabular}
 \end{center}
 Integers are written as variable-length integers (LEB128: seven bits per byte, one byte below 128), signed integers
-after a zigzag mapping that keeps small negative numbers short, floating-point numbers as their IEEE~754 bit patterns, and every multi-byte value in little-endian order, byte by byte, so that files are the same on every platform. Strings are written as their length followed by their bytes. Arrays of doubles are written densely or sparsely (only the non-zero values, each with the gap in index since the previous one), whichever is smaller, and are restored exactly. The CRC-32 checksum (the polynomial of zip and png) detects corrupted data, and every read is checked against the bounds of the record, so that a damaged file is refused with an exception rather than read wrongly.  Table~\ref{tab:tags} lists the classes that are stored this way.
+after a zigzag mapping that keeps small negative numbers short, floating-point numbers as their IEEE~754 bit patterns, and every multi-byte value in little-endian order, byte by byte, so that files are the same on every platform. Strings are written as their length followed by their bytes. Arrays of doubles are written densely or sparsely (only the non-zero values, each with the gap in index since the previous one), whichever is smaller, and are restored exactly. The CRC-32 checksum (the polynomial of zip and png) detects corrupted data, and every read is checked against the bounds of the record, so that a damaged file is refused with an exception rather than read wrongly. A record of an object (not of a folder) of 4~kB or more is compressed with zlib when that makes it at least 10\% smaller: its payload is then the length of the payload followed by the deflated payload, and the checksum is that of the bytes stored, so that a file is checked without being decompressed. Records are decompressed when they are read; folders are never compressed, so that their entries are still found, and read lazily, one by one.  Table~\ref{tab:tags} lists the classes that are stored this way.
 
 \begin{widetext}
 \begin{table}[t]
@@ -113,10 +113,24 @@ after a zigzag mapping that keeps small negative numbers short, floating-point n
 \paragraph{Histograms.}
 The payload of a histogram holds its name and title, then its rank and, for each axis, the number of bins, the range
 and the title; then the number of non-empty bins and, for each of them, the gap in global index since the previous
-non-empty bin, the number of entries, the average value and its uncertainty; then the labels of the bins and the fits
-attached to the histogram. Empty bins are not written at all, and a filled bin takes about ten bytes, so that the
-large and sparse histograms of the pair analyses stay small on disk. The content of the histogram is restored
-exactly.
+non-empty bin, the number of entries, the average value and its uncertainty, in the precision of the histogram (single
+or double); then the labels of the bins, the fits attached to the histogram, its common systematic uncertainty and the
+edges of its axes of variable bins. Empty bins are not written at all. A histogram of counts, filled with unit
+weights, whose bins all have an average of one and an uncertainty of the average of $1/\sqrt{n}$, is written as the
+numbers of entries of its bins only, and its averages and uncertainties are made again when it is read (the
+uncertainties then exact, rather than accumulated fill by fill). With the compression of the records, a filled bin
+takes one to two bytes in a histogram of counts, and a few bytes in a histogram of densities or ratios, so that the
+large and sparse histograms of the pair analyses stay small on disk; other histograms are restored exactly. In memory,
+a bin holds its number of entries in 32 bits (at most $2^{31}-1$; a larger number is held at that value, the value of
+the bin being kept) and its average and uncertainty in single or double precision: 12 or 20 bytes.
+
+\paragraph{Data points and tables.}
+Data points stored as columns (\code{DataPointColumns}) write a flag per column, the columns whose values are all zero
+(for instance the uncertainties of points without them) and a lower systematic uncertainty equal to the upper one not
+being written; points with $x$ and $y$ only take eight bytes each. Points of one variable can hold the covariance of
+$x$ and $y$ of each point. A table (\code{Table2D}) is written column by column, each column in single precision when
+all its values are exactly single-precision numbers (counts, integers, values read from text with few digits, missing
+values), and in double precision otherwise, so that tables are read back exactly.
 
 \paragraph{Functions and fits.}
 A function is stored as part of the fits attached to data points, a histogram or another function. A fit record holds
@@ -139,7 +153,7 @@ The checksums of a lazily read file are verified when it is opened, so a corrupt
 
 \paragraph{Versions.}
 Each class writes its records with its current format version and reads every version up to that one: histograms,
-for instance, are at version~4 and still read the earlier versions. Records of classes a program does not know are
+for instance, are at version~7 and still read the earlier versions. Records of classes a program does not know are
 skipped, so that one file can hold objects of many classes. Additions that older code can ignore are placed at the end
 of a block: the regions of a fit (Section~\ref{sec:fitting}) are written after its range, and only when the fit has
 some, so that files written with regions are still read, without them, by earlier versions of \Datum{}.
