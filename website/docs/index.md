@@ -3,7 +3,10 @@ hide:
   - navigation
 ---
 
-# Datum
+# Datum { .visually-hidden }
+
+![Datum](images/datum-logo.svg#only-light){ .wordmark }
+![Datum](images/datum-logo-dark.svg#only-dark){ .wordmark }
 
 **Datum** is a C++17 framework for simulating and analysing **correlation and fluctuation observables** in
 proton&ndash;proton, proton&ndash;nucleus and nucleus&ndash;nucleus collisions, with its own data model, file format
