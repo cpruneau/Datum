@@ -265,3 +265,38 @@ folder of the output directory named after the output file of the workflow (with
 per job (\code{sub\_000}, \code{sub\_001}, \dots, or \code{sub\_000\_pthat00}, \dots{} with $\hat{p}_T$ bins),
 with the workflow file of each job, the files of the combination and the script of the Slurm job array, so that the
 productions of several workflows sharing an output directory do not mix.
+
+% ---------------------------------------------------------------------------------------------------------------
+\subsection{Tables of data}
+\label{sec:tables}
+
+Not all data come as histograms: measurements copied from a publication, the output of another program or a
+spreadsheet are tables of numbers. The \code{Spreadsheet} library (\code{src/analysis/Spreadsheet}) reads, analyses,
+plots and writes such tables, kept as \code{Table2D} objects (Section~\ref{sec:binary}): rows of numbers with named
+columns, stored in Datum files like any other object.
+
+\paragraph{Reading and writing.}
+\code{TableReader} reads text files whose values are separated by blanks, tabs, commas or semicolons, the separator
+being found from the first lines of data. The first line is taken as the names of the columns when one of its fields
+is not a number; columns without a name are called \code{c0}, \code{c1}, \ldots. Quoted fields of CSV files, comment
+lines, and line endings of every system are handled; an empty field, or \code{NA}, is a missing value, kept as NaN,
+and rows that are shorter than the others are completed with missing values. A report gives the numbers of rows,
+columns and missing values, and where the first entry that is not a number is. \code{TableWriter} writes tables as
+text (blank, tab or comma separated), in the binary format of \Datum{}, or as Excel files, which it writes with no
+external library.
+
+\paragraph{Statistics and plots.}
+\code{TableStatistics} (\code{core/Math/Statistics}) gives the summary of each column (number of values, missing
+values, mean, standard deviation, minimum, median, maximum), their covariances, and their correlation coefficients
+of Pearson, Spearman (of the ranks) and Kendall ($\tau_b$), each with its uncertainty and the $p$-value of the
+hypothesis of no correlation, singly or as matrices. \code{TablePlots} turns columns into the objects that graphs
+draw: points $(x, y)$, $x$ being a column or the index of the rows, with the uncertainties on $x$ and $y$ and the
+covariance of $x$ and $y$ of each point taken from other columns; bar charts; the distribution of the values of a
+column, as a histogram; and a correlation matrix, as a map.
+
+\paragraph{Analyses.}
+\code{SpreadsheetAnalyzer} is a task (Section~\ref{sec:analysis}) configured, as the others, by an XML file: it
+reads a table, selects columns, applies processing functions (registered by name; dropping the rows with missing
+values and standardising the columns are provided), and writes the summary, the correlation matrices and the plots
+to a Datum file, and the processed table in any of the formats above.
+

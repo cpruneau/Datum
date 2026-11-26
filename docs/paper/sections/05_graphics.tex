@@ -43,7 +43,13 @@ rounded to nice values ($1$, $2$ or $5\times 10^k$), unless they are set, and ea
 Unlike in ROOT, the scales belong to the graph, not to the canvas. The titles of a graph and of its axes are taken from the first object shown (its title
 and the titles of its dimensions), and the items get their colours and markers from the palettes of the graph, item
 $k$ taking colour and marker $k$. The title, the axis titles and the legend have automatic positions, which can be
-moved, and automatic sizes, which follow the size of the cell. Each drawing records where the parts of the graph
+moved, and automatic sizes, which follow the size of the cell. The title of an axis is placed at its left end,
+its centre or its right end. A new graph takes its styles from defaults of the session (\code{GraphDefaults}): the
+font, size and colour of its title, of the titles and labels of its axes and of its legend, the number of divisions
+of its axes (five), the placement of the axis titles, and the box of its legend (a background, transparent unless
+asked for, a border with its line style, width and colour, and the justification of its text, left, centred or
+right); DatumGui sets these defaults from its preferences, and each remains a setting of the graph, written in plot
+files. Each drawing records where the parts of the graph
 went, so that the graph can tell what lies under a point of the canvas: an axis, the title, the legend, a data point
 or the residual panel; DatumGui uses it for its mouse interactions.
 

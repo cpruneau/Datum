@@ -3,7 +3,8 @@
 \label{sec:capgui}
 
 DatumGui is the graphical interface of \Datum{}: it opens the files written by the jobs, draws their histograms, data
-points and functions, fits them, and makes figures and documents of them. It is built on Dear ImGui~\cite{DearImGui}
+points and functions, fits them, and makes figures and documents of them; it also reads tables of numbers, and plots
+and analyses them (Section~\ref{sec:guitables}). It is built on Dear ImGui~\cite{DearImGui}
 with its GLFW and OpenGL back ends, and uses no ROOT class; it reads ROOT files only when \Datum{} is built with
 ROOT-file support, to import their histograms.
 
@@ -16,11 +17,16 @@ in DatumGui or in batch. The program is started with plot files, Datum files and
 \begin{verbatim}
 DatumGui [--basic|--edit] [plots.xml] [data ...]
 \end{verbatim}}
-\noindent where the data are Datum files and folders, shown in the browser; the BASIC mode starts from a new plot file,
+\noindent where the data are Datum files, tables and folders, shown in the browser; the BASIC mode starts from a new plot file,
 with the current folder in the browser, and the EDIT mode from the plot files given; the tools are the same. \code{PlotEditor} is another name of the program, and
 \code{PlotHistos} draws a plot file without a window (Section~\ref{sec:plotbatch}). The settings of the interface
-(theme, layout, fonts, the folders shown at start) are kept in an XML file, read from the home directory of the user
-or from the configuration directory of \Datum{}, and written back by the Preferences dialog.
+are kept in an XML file, read from the home directory of the user or from the configuration directory of \Datum{},
+and written back by the Preferences dialog. Its tabs group them: General (theme, fonts, layout); Canvases (the grid
+of new canvases and of their graphs, the legend and the logarithmic axes of new graphs, and the default styles of
+graphs, Section~\ref{sec:graphicscore}: fonts, sizes and colours of their texts, number of divisions of the axes,
+placement of the axis titles, box of the legend, which can also be applied to all the graphs shown); Palettes
+(colour, marker and line-style palettes); Files (the folder of the data, shown by the browsers at start and by the
+file dialogs, and the folder of the calibrations); and \LaTeX{} (the typesetting of labels).
 
 DatumGui draws with the graphics library of \Datum{} (Section~\ref{sec:graphics}): \code{ImGuiPainter} implements the
 abstract \code{Painter} for the screen, so that a canvas is drawn by the same code on the screen and, through the SVG,
@@ -45,8 +51,13 @@ class \code{DatumGuiApp}, listens to the menus, decides what each command does, 
 \label{sec:windows}
 
 \paragraph{Panes and windows.}
-The main window holds a menu bar, the data browser, the plot tree, the canvases and a status bar, as panes that can be
-docked side by side, stacked as tabs, or dragged out into windows of their own (Fig.~\ref{fig:capguiwindow}). The canvases are those of a window of
+DatumGui shows any number of windows, each with its own menu bar and status bar, all run by the one application: at
+start, a single window with a file browser; Datum $>$ New Window adds an empty one, and the program ends when its last
+window is closed. A window holds \emph{work panes}, the file browsers, the plot tree and its inspector, the
+canvases, the tables, the data panes and the fit pane, which can be docked side by side, stacked as tabs, dragged by
+their tabs from one window to another, or out into windows of their own, and closed (Fig.~\ref{fig:capguiwindow});
+View shows or hides them, the current one or all of a kind. A plot file is shown in a window of its own, with its
+canvases, the canvases it shows outside of it being windows of their own too. The canvases are those of a window of
 the plot file, arranged in its grid of $n\times m$ (Window $>$ Canvases); a canvas holds one or several graphs,
 arranged in a grid of its own (Window $>$ Graphs in Canvas), and a graph holds any number of objects, overlaid. The
 main window shows the window of the plot file holding the selection or, with View $>$ All Windows, the first window,
@@ -55,7 +66,7 @@ each other window of the file being shown in a window of its own.
 
 \begin{figure*}[t]
   \centering
-  \includegraphics[width=\textwidth]{DatumGuiGraphFitData}
+  \includegraphics[width=\textwidth]{CapGuiGraphFitData}
   \caption{DatumGui with the output of a jet study of Pythia combined from sub-samples. Left: the file browser, with the
   Datum file of the combination expanded: a folder per task, a folder per combination of filters and jet settings
   (\code{ALL\_ALL\_R0p4\_JetFilter0}), and its histograms and profiles, with their types. Centre: a canvas showing the
@@ -68,6 +79,19 @@ each other window of the file being shown in a window of its own.
   \label{fig:capguiwindow}
 \end{figure*}
 
+\paragraph{Menus.}
+The menus of a window act on its panes, and each command on the pane used last. Datum holds the application (About,
+Preferences, windows, Quit); File the data files and trees of the browsers (new, open, duplicate, rename, close, save,
+import and export to ROOT, PDF, \LaTeX{}, PowerPoint and HEPData); Plots the plot files (new, from data, open, save,
+the graphs and functions of the selection, regrouping, and their outputs, Section~\ref{sec:plotfiles}); Windows and
+Canvas the windows and canvases of the plot file (new, open from another plot file, duplicate, rename, format, save,
+and a canvas saved as PDF, SVG, PNG, \LaTeX{}, PowerPoint, or a plot file of its own); Edit the selection (undo, redo,
+cut, copy, paste, duplicate, delete, and clearing a graph or a canvas); View the panes; Maps the detector maps
+(Section~\ref{sec:guimaps}); Histograms the histograms of the selected graph (their sum, difference, product, ratio
+and scaling, each with a coefficient, shown in a canvas below, and their comparison, rebinning, fit and table of
+values); Functions the functions (Section~\ref{sec:guifunctions}); and Stat the table in use
+(Section~\ref{sec:guitables}). The context menus of the canvases offer the same tools on the object under the mouse.
+
 \paragraph{The data browser.}
 The browser shows the data files opened (Datum files, Section~\ref{sec:binary}, read lazily, and ROOT files) and the
 folders of the file system as trees, in which a Datum file opens when it is expanded; a filter selects objects by name,
@@ -75,7 +99,8 @@ and each entry shows the type of the object (one- or two-dimensional histogram, 
 binning and number of entries. An object is added to the plot by clicking on it, which puts it in the selected graph,
 or by dragging it onto a graph of a canvas or onto the plot tree; a folder adds all its objects, one graph each.
 Objects can also be copied, by dragging, into trees made in the session, organised in folders, and saved as a new Datum
-file; a folder or a file can be exported to a ROOT file. The data table pane lists the points of the selected object
+file; a folder or a file can be exported to a ROOT file. Tables of numbers (text and CSV files, Section~\ref{sec:guitables}) are listed with the Datum files, and open in a
+table pane when clicked. The data table pane lists the points of the selected object
 with their coordinates, values and statistical and systematic uncertainties and, when the object has fits, the values
 of the fitted functions and the pulls.
 
@@ -172,7 +197,8 @@ optionally overlaid in one graph) or as one canvas per combination with a graph 
 number of canvases.
 
 \paragraph{Outputs.}
-File $>$ Export writes the window, a canvas or a graph as shown, as an SVG or PDF file, and the outputs of the plot
+Canvas $>$ Save As writes a canvas as shown, as a PDF, SVG or PNG file, a \LaTeX{} figure, a PowerPoint slide or a plot
+file of its own; Windows $>$ Export writes the canvases of a window; and Plots $>$ Export writes the outputs of the plot
 file, each canvas at the size the file gives it: the canvases and graphs that have file names, printed to them; the
 PDF book, one canvas per page; the PowerPoint presentation, one canvas per slide, drawn as native shapes so that it
 can be edited; and the \LaTeX{} document, a Beamer presentation with one frame per canvas or an article with one
@@ -237,7 +263,48 @@ is at a bound, and the correlation matrix of the free parameters, with the stron
 highlighted. The pane also sets how each fit is drawn (line, colour, over the selection or the whole range), whether
 its quality is shown in the legend, and whether a residual panel is drawn below the graph, with the differences
 between the data and the fit, or the pulls. For a fit in two variables, the map of the pulls is drawn in a new
-canvas.
+canvas. Fits that are not wanted, among the several tried on an object, are removed from the fit pane (a button, or
+the context menu of its tab) or from the context menu of their curve; only the fits kept are saved with the object.
+
+% ---------------------------------------------------------------------------------------------------------------
+\subsection{Functions}
+\label{sec:guifunctions}
+
+The Functions menu shows, keeps and combines parameterised functions (Section~\ref{sec:functions}). New opens a window
+in which a function is defined, a class of the registry or a registered composite with its number of parameters,
+their values, its range and its name, and added to the selected graph (a canvas and a graph being made if there is
+none); the window stays open to add more. The same window changes a function already shown: the function is chosen in
+the window, or with Edit, and Update replaces it in its graph, keeping its place and style, as soon as one of its
+parameters, its range or its name differs; the function just added is the one Update changes, so that a function is
+tuned by changing a parameter and updating, as many times as needed. Duplicate fills the window with a copy of a
+function shown, to edit and add. Save and Save As write a function to a Datum file, from which Open reads it back, or
+as a table of its values (text, CSV or Excel). Sum, Difference, Product, Ratio and Scale combine the functions of the
+selected graph, chosen in order, each with a coefficient, into a composite ($c_1 A + c_2 B + \ldots$, $c_1 A - c_2 B$,
+$(c_1 A)(c_2 B)$, $(c_1 A)/(c_2 B)$, $c A$) that is shown, saved, fitted and combined again like any other function.
+In a plot file, the functions of registered classes are elements of the file, and an update changes the element;
+composites, which plot files do not describe, are shown in a canvas of their own.
+
+% ---------------------------------------------------------------------------------------------------------------
+\subsection{Tables of data}
+\label{sec:guitables}
+
+Tables of numbers (Section~\ref{sec:tables}) in text files, \code{.txt}, \code{.dat}, \code{.csv}, \code{.tsv} and
+their kind, or in Datum files, are opened from the browser, by a click, or with File $>$ Open: an optional first row
+of names, then rows of numbers separated by blanks, tabs or commas. A file that is not such a table is not opened: a
+dialog tells why, giving the first entry that is not a number. A table is shown in a table pane, with its names and
+the index of its rows frozen while it scrolls, any number of rows being drawn quickly.
+
+Each column has a role in the plots, given from its context menu or from the Stat menu, which holds the same
+items: \emph{Use c$k$ as X}, \emph{as Y}, \emph{as error on x}, \emph{as error on y}, or \emph{as covariance between
+x and y}, columns being named by their number $k$ and their name; several columns can be Y, and the headers of the
+columns show their roles. The plots are then Y versus X, without or with the errors (the covariances being kept with
+the points), the bar charts of Y, at X or at the index of the rows, and the distribution of the values of Y, a
+histogram; X is the index of the rows when no column is X. They are drawn in a canvas beside the table, where they
+are fitted, compared and saved as any other object, overlaid or replacing what the graph showed. The menus also give
+the correlation matrix of the columns selected, by the coefficient of Pearson, Spearman or Kendall, shown as a new
+table and as a map with its values, and their summary statistics, as a table; a table is copied to the clipboard and
+saved in any of the formats of \code{TableWriter}. The Stat menu is active when a table pane is shown and is the pane
+used last.
 
 % ---------------------------------------------------------------------------------------------------------------
 \subsection{Detector maps}

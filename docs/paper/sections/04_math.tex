@@ -184,7 +184,7 @@ special functions without parameters (gamma, beta and incomplete gamma functions
     \code{FourierFlow} & 1 & $k\left[1 + 2\sum_{n=1}^{n_{\max}} v_n \cos n(x-\psi_n)\right]$ \\
     \code{BezierCurve} & 1 & cubic B\'ezier segments through knots $(x_k, y_k)$ \\
     Distributions (Table~\ref{tab:distributions}) & 1 to $m-1$ & $A\, p(\mathbf{x};\boldsymbol{\theta})$ \\
-    \code{ParameterizedComposite} & any & $\sum_k f_k(\mathbf{x};\mathbf{p}_k)$, or $f(x)\,g(y)$ \\
+    \code{ParameterizedComposite} & any & $\sum_k c_k f_k$, $\prod_k c_k f_k$, $(c_1 f_1)/(c_2 f_2)$, or $f(x)\,g(y)$ \\
     \bottomrule
   \end{tabular}
   \par\smallskip
@@ -196,8 +196,11 @@ special functions without parameters (gamma, beta and incomplete gamma functions
 A \code{ParameterizedComposite} is a sum of parameterised functions, $f = \sum_k f_k(\mathbf{x};\mathbf{p}_k)$, whose
 parameters are those of all its components, named after the label of each component (for example
 \code{signal.mean}), or a product of functions of separate variables, such as $f(x)\,g(y)$, a function of two
-variables made of two of one. Its derivatives and integrals are those of its components, analytical when theirs
-are. A composite can be fitted, copied and stored with its fits like any other function:
+variables made of two of one. A component may carry a constant coefficient $c_k$, and the components of one
+variable can also be multiplied point by point, $f = \prod_k c_k f_k(\mathbf{x};\mathbf{p}_k)$, or divided,
+$f = (c_1 f_1)/(c_2 f_2)$: the sums, differences, products, ratios and scalings of functions made by the Functions
+menu of DatumGui (Section~\ref{sec:guifunctions}) are such composites. Its derivatives and integrals are those of its
+components, analytical when theirs are. A composite can be fitted, copied and stored with its fits like any other function:
 \begin{widetext}
 \begin{verbatim}[language=C++]
 Datum::MATH::ParameterizedComposite model;
