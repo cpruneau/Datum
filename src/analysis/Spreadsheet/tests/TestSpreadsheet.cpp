@@ -166,7 +166,7 @@ void testReaderCases()
 void testPlots()
 {
   MATH::Table2D t = sample();
-  MATH::DataPointsVector * xy = TablePlots::xy(t,0,2);
+  MATH::DataPointColumns * xy = TablePlots::xy(t,0,2);
   expect(xy->size()==4 && xy->name().equalTo("count \"n\"_vs_time"), "xy skips missing values");
   delete xy;
   {
@@ -174,13 +174,13 @@ void testPlots()
   MATH::Table2D e("errors");
   e.addRow({ 1.0, 0.2, 2.0, 0.5, 0.05 });
   e.addRow({ 2.0, 0.3, 3.0, 0.4, 1.0 });
-  MATH::DataPointsVector * p = TablePlots::xy(e,0,2,3,1,4);
+  MATH::DataPointColumns * p = TablePlots::xy(e,0,2,3,1,4);
   expect(p->size()==2 && near(p->point(0).xError(),0.2,1e-6) && near(p->point(0).yError(),0.5,1e-6), "xy errors on x and y");
   expect(near(p->point(0).xyCovariance(),0.05,1e-6), "xy covariance of x and y");
   expect(near(p->point(1).xyCovariance(),0.0,1e-9) && near(p->point(1).xError(),0.3,1e-6), "xy invalid covariance left out");
   delete p;
   }
-  MATH::DataPointsVector * bars = TablePlots::bars(t,1);
+  MATH::DataPointColumns * bars = TablePlots::bars(t,1);
   expect(bars->size()==5 && near(bars->point(0).xError(),0.4,1e-6), "bars at the row index");
   delete bars;
   MATH::Histogram * h = TablePlots::distribution(t,1,4);
@@ -254,8 +254,8 @@ void testTask()
   const MATH::Table2D & t = task.table();
   expect(t.nRows()==4 && t.nColumns()==4 && t.columnName(3).equalTo("sum") && t(3,3)==15, "task processed the table");
   expect(task.results().get<MATH::Table2D>("correlations/Pearson")!=nullptr, "task correlations");
-  expect(task.results().get<MATH::DataPointsVector>("plots/sum_vs_a")!=nullptr, "task xy plot");
-  expect(task.results().get<MATH::DataPointsVector>("plots/c_bars")!=nullptr, "task bars");
+  expect(task.results().get<MATH::DataPointColumns>("plots/sum_vs_a")!=nullptr, "task xy plot");
+  expect(task.results().get<MATH::DataPointColumns>("plots/c_bars")!=nullptr, "task bars");
   DatumFile in("test_task.datum",File::kReadOnly);
   in.read();
   expect(in.get<MATH::Table2D>("summary")!=nullptr && in.get<MATH::Histogram>("plots/a_distribution")!=nullptr, "task output file");

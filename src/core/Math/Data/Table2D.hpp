@@ -225,7 +225,7 @@ namespace Datum
   static const char * binaryTag() { return "DTMB"; }
   //! @brief Format version written (and highest version read): 2 (version 1, without the column names, is still read).
   //! @return version
-  static unsigned int binaryVersion() { return 2; }
+  static unsigned int binaryVersion() { return 3; }
   //! @brief Name stored in binary records. @return name()
   String binaryName() const { return name(); }
   //! @brief Write the binary payload after the name. @param w writer

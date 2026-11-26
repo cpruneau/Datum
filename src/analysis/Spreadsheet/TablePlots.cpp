@@ -15,6 +15,7 @@
 #include <vector>
 #include "TablePlots.hpp"
 #include "DataPointsVector.hpp"
+#include "DataPointColumns.hpp"
 #include "DataPoint2D.hpp"
 #include "Histogram.hpp"
 #include "MathExceptions.hpp"
@@ -31,7 +32,7 @@ void check(const MATH::Table2D & table, int column, const char * source)
 }
 } // namespace
 
-MATH::DataPointsVector * TablePlots::xy(const MATH::Table2D & table, int xColumn, unsigned int yColumn,
+MATH::DataPointColumns * TablePlots::xy(const MATH::Table2D & table, int xColumn, unsigned int yColumn,
                                         int yErrorColumn, int xErrorColumn, int covarianceColumn)
 {
   check(table,covarianceColumn,"TablePlots::xy()");
@@ -52,36 +53,32 @@ MATH::DataPointsVector * TablePlots::xy(const MATH::Table2D & table, int xColumn
     ye.push_back(std::isfinite(ey) ? std::fabs(ey) : 0.0);
     ys.push_back(0.0);
     }
-  MATH::DataPointsVector * points = nullptr;
-  if (covarianceColumn<0) points = new MATH::DataPointsVector(x,xe,y,ye,ys);
-  else
+  // the covariance of each point, kept when it is a valid one (|cov| <= error on x times error on y, in the single
+  // precision of the points)
+  std::vector<double> covariance;
+  if (covarianceColumn>=0)
     {
-    // points with their error matrices: the covariance of the row of each point
-    std::vector<MATH::DataPoint2D> list;
     unsigned int k = 0;
     for (unsigned int i=0; i<table.nRows(); i++)
       {
       double vx = xColumn>=0 ? table(i,unsigned(xColumn)) : double(i), vy = table(i,yColumn);
       if (!std::isfinite(vx) || !std::isfinite(vy)) continue;
-      MATH::DataPoint2D p(float(x[k]), float(xe[k]), float(y[k]), float(ye[k]), 0.0f);
       double c = table(i,unsigned(covarianceColumn));
-      if (std::isfinite(c) && c!=0.0)
-        {
-        try { p.setErrorMatrix(xe[k]*xe[k], c, ye[k]*ye[k]); }
-        catch (const std::exception &) { }   // not a valid covariance: the errors alone
-        }
-      list.push_back(p);
+      double ex = float(xe[k]), ey = float(ye[k]);
+      covariance.push_back(std::isfinite(c) && double(float(c))*float(c) <= ex*ex*ey*ey*(1.0+1.0e-6) ? c : 0.0);
       k++;
       }
-    points = new MATH::DataPointsVector(list);
     }
+  auto * points = new MATH::DataPointColumns();
+  points->setColumns({x},{xe},y,ye,ys);
+  if (!covariance.empty()) points->setCovarianceColumn(covariance);
   String xName = xColumn>=0 ? table.columnName(unsigned(xColumn)) : String("row"), yName = table.columnName(yColumn);
   points->setName(yName+String("_vs_")+xName);
   points->setTitle(yName+String(" vs ")+xName);
   return points;
 }
 
-MATH::DataPointsVector * TablePlots::bars(const MATH::Table2D & table, unsigned int valueColumn, int xColumn, double width,
+MATH::DataPointColumns * TablePlots::bars(const MATH::Table2D & table, unsigned int valueColumn, int xColumn, double width,
                                           double offset)
 {
   check(table,int(valueColumn),"TablePlots::bars()");
@@ -106,7 +103,7 @@ MATH::DataPointsVector * TablePlots::bars(const MATH::Table2D & table, unsigned 
   if (!std::isfinite(spacing)) spacing = 1.0;
   if (offset!=0) for (double & v : x) v += offset*spacing;
   std::vector<double> xe(x.size(),0.5*width*spacing), zero(x.size(),0.0);
-  auto * points = new MATH::DataPointsVector(x,xe,y,zero,zero);
+  auto * points = new MATH::DataPointColumns(x,xe,y,zero,zero);
   String name = table.columnName(valueColumn);
   points->setName(name+String("_bars"));
   points->setTitle(xColumn>=0 ? name+String(" vs ")+table.columnName(unsigned(xColumn)) : name);

@@ -19,6 +19,7 @@ namespace Datum
 namespace MATH
 {
 class DataPointsVector;
+class DataPointColumns;
 class Histogram;
 }
 
@@ -44,8 +45,8 @@ public:
   //! @return points named "<y>_vs_<x>", titled "<y> vs <x>"
   //! @throws MathException if a column does not exist
   //!
-  static MATH::DataPointsVector * xy(const MATH::Table2D & table, int xColumn, unsigned int yColumn,
-                                     int yErrorColumn=-1, int xErrorColumn=-1, int covarianceColumn=-1);
+  static MATH::DataPointColumns * xy(const MATH::Table2D & table, int xColumn, unsigned int yColumn,
+                                    int yErrorColumn=-1, int xErrorColumn=-1, int covarianceColumn=-1);
 
   //!
   //! @brief Bar chart of a column: one bar per row, at x = the row index or the value of another column.
@@ -56,7 +57,7 @@ public:
   //! @return points named "<value>_bars" (x uncertainty: half the width of the bars)
   //! @throws MathException if a column does not exist
   //!
-  static MATH::DataPointsVector * bars(const MATH::Table2D & table, unsigned int valueColumn, int xColumn=-1,
+  static MATH::DataPointColumns * bars(const MATH::Table2D & table, unsigned int valueColumn, int xColumn=-1,
                                        double width=0.8, double offset=0.0);
 
   //!

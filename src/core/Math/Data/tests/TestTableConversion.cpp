@@ -28,6 +28,8 @@
 #include "MathExceptions.hpp"
 #include "Table2D.hpp"
 #include "TableConversion.hpp"
+#include "FitRecord.hpp"
+#include "BinaryIO.hpp"
 
 using namespace Datum;
 using namespace Datum::MATH;
@@ -207,6 +209,56 @@ void testHistogramToTable()
   CHECK(t2.nRows()==6 && t2.nColumns()==9 && t2.columnName(3)=="x1", "rank 2: x0, x0_low, x0_high, x1, ...");
   CHECK(near(t2(5, 0), 0.75) && near(t2(5, 3), 2.5) && near(t2(5, 6), 1.0), "axis 0 varies fastest");
 }
+void testTableStorage()
+{
+  // counts and values with few digits: single precision; a column of +0: nothing; a measured column: double
+  Table2D t("t");
+  for (int i=0; i<1000; i++) t.addRow({ double(i), 0.0, 0.1*i, i%3==0 ? NAN : 0.5*i });
+  t.setColumnNames({"index", "zero", "measured", "half"});
+  std::string bytes = record(t);
+  Table2D back = readBack<Table2D>(bytes);
+  bool same = back.nRows()==1000 && back.nColumns()==4 && back.columnName(2)=="measured";
+  for (unsigned int i=0; i<1000 && same; i++)
+    for (unsigned int j=0; j<4; j++)
+      {
+      double a = t(i,j), b = back(i,j);
+      if (std::isnan(a) ? !std::isnan(b) : a!=b) { same = false; break; }
+      }
+  CHECK(same, "table read back exactly (doubles, floats, zeros, missing values)");
+  // 4 bytes (index, half) + 8 bytes (measured) per row, instead of 32
+  CHECK(bytes.size() < 1000*16 + 200, "columns stored in the precision they need (" + std::to_string(bytes.size()) + " bytes)");
+  CHECK(std::signbit(readBack<Table2D>(record(Table2D("z", { {-0.0} })))(0,0)), "-0 kept");
+  CHECK(readBack<Table2D>(record(Table2D("e"))).nRows()==0, "empty table read back");
+}
+
+void testOldRecords()
+{
+  // a table written by Datum 1.0 (record version 2: every value in double precision, row by row)
+  {
+  BinaryWriter w;
+  w.writeString("old");
+  w.writeVarUInt(2); w.writeVarUInt(2); w.writeUInt8(0);
+  for (double v : {1.5, 2.25, 3.125, 4.1}) w.writeFloat64(v);
+  w.writeVarUInt(2); w.writeString("a"); w.writeString("b");
+  std::ostringstream out;
+  writeBinaryRecord(out, "DTMB", 2, w.buffer(), "old");
+  Table2D t = readBack<Table2D>(out.str());
+  CHECK(t.nRows()==2 && t.nColumns()==2 && t(1,1)==4.1 && t(0,1)==2.25 && t.columnName(1)=="b", "table of record version 2 read");
+  }
+  // data points written by Datum 1.0 (record version 2: every column written, then the fits)
+  {
+  BinaryWriter w;
+  w.writeString("");
+  w.writeVarUInt(1); w.writeVarUInt(2);
+  for (float v : {1.0f, 2.0f,   0.1f, 0.2f,   10.0f, 20.0f,   1.0f, 2.0f,   0.0f, 0.0f}) w.writeFloat32(v);
+  FitList().encodeBinary(w);
+  std::ostringstream out;
+  writeBinaryRecord(out, "DTMK", 2, w.buffer(), "old");
+  DataPointColumns p = readBack<DataPointColumns>(out.str());
+  CHECK(p.size()==2 && p.valueAt(1)==20.0f && near(p.point(1).xError(), 0.2) && p.statErrorAt(0)==1.0f && !p.hasCovariance(),
+        "data points of record version 2 read");
+  }
+}
 } // namespace
 
 int main()
@@ -216,6 +268,8 @@ int main()
   testTableToPoints();
   testPointsToTable();
   testHistogramToTable();
+  testTableStorage();
+  testOldRecords();
   std::printf("TestTableConversion: %d checks, %d failed\n", nChecks, nFailures);
   return nFailures;
 }

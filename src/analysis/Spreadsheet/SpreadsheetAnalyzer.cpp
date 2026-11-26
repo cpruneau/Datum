@@ -18,6 +18,7 @@
 #include <string>
 #include "SpreadsheetAnalyzer.hpp"
 #include "DataPointsVector.hpp"
+#include "DataPointColumns.hpp"
 #include "DatumFile.hpp"
 #include "Exceptions.hpp"
 #include "FileSystem.hpp"
@@ -342,7 +343,7 @@ void SpreadsheetAnalyzer::analyze(const MATH::Table2D & input)
     unsigned int x = columnIndex(_table,String(p[1].c_str()));
     int ye = p.size()>2 && !p[2].empty() ? int(columnIndex(_table,String(p[2].c_str()))) : -1;
     int xe = p.size()>3 && !p[3].empty() ? int(columnIndex(_table,String(p[3].c_str()))) : -1;
-    MATH::DataPointsVector * points = TablePlots::xy(_table,x,y,ye,xe);
+    MATH::DataPointColumns * points = TablePlots::xy(_table,x,y,ye,xe);
     plotFolder()->add(points,points->name());
     }
   for (const std::string & item : items(stringValue("PLOTS:BARS")))
@@ -350,7 +351,7 @@ void SpreadsheetAnalyzer::analyze(const MATH::Table2D & input)
     std::vector<std::string> p = parts(item);
     unsigned int v = columnIndex(_table,String(p[0].c_str()));
     int x = p.size()>1 && !p[1].empty() ? int(columnIndex(_table,String(p[1].c_str()))) : -1;
-    MATH::DataPointsVector * points = TablePlots::bars(_table,v,x);
+    MATH::DataPointColumns * points = TablePlots::bars(_table,v,x);
     plotFolder()->add(points,points->name());
     }
   int bins = intValue("PLOTS:BINS",0);

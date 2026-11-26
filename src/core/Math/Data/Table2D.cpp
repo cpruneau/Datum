@@ -12,6 +12,7 @@
 #include "TxtFile.hpp"
 #include <cerrno>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -374,7 +375,28 @@ namespace Datum
     w.writeFloat64(_xMin); w.writeFloat64(_dx);
     w.writeFloat64(_yMin); w.writeFloat64(_dy);
     }
-  for (double v : _values) w.writeFloat64(v);
+  // version 3: column by column, each with a flag: 0 every value +0 (none written), 1 every value exactly a float
+  // (single precision, 4 bytes each: integers, counts, values read from text with few digits, missing values),
+  // 2 double precision (8 bytes each); the values are read back exactly
+  for (unsigned int j=0; j<_nColumns; j++)
+    {
+    bool zero = true, single = true;
+    for (unsigned int i=0; i<_nRows && (zero || single); i++)
+      {
+      double v = _values[std::size_t(i)*_nColumns+j];
+      uint64_t bits; std::memcpy(&bits,&v,8);
+      if (bits!=0) zero = false;
+      if (!std::isnan(v) && double(float(v))!=v) single = false;
+      if (std::isnan(v)) { float f = float(v); double back = double(f); uint64_t b2; std::memcpy(&b2,&back,8); if (b2!=bits) single = false; }
+      }
+    uint8_t flag = zero ? 0 : (single ? 1 : 2);
+    w.writeUInt8(flag);
+    for (unsigned int i=0; i<_nRows && flag; i++)
+      {
+      double v = _values[std::size_t(i)*_nColumns+j];
+      if (flag==1) w.writeFloat32(float(v)); else w.writeFloat64(v);
+      }
+    }
   // version 2: the column names (none if not given)
   w.writeVarUInt(_columnNames.size());
   for (const auto & name : _columnNames) w.writeString(name);
@@ -396,9 +418,27 @@ namespace Datum
     if (!(dx>0) || !(dy>0)) throw Exception("Invalid grid steps","Table2D::decodeBinary()");
     }
   uint64_t n = nRows*nColumns;
-  if (8*n > r.remaining()) throw Exception("More values than data","Table2D::decodeBinary()");
-  std::vector<double> values(n);
-  for (auto & v : values) v = r.readFloat64();
+  std::vector<double> values;
+  if (version>=3)
+    {
+    // column by column, each with its precision
+    if (nColumns > r.remaining()) throw Exception("More columns than data","Table2D::decodeBinary()");
+    values.assign(n,0.0);
+    for (uint64_t j=0; j<nColumns; j++)
+      {
+      uint8_t flag = r.readUInt8();
+      if (flag>2) throw Exception("Invalid column precision","Table2D::decodeBinary()");
+      if (flag==0) continue;
+      if ((flag==1 ? 4 : 8)*nRows > r.remaining()) throw Exception("More values than data","Table2D::decodeBinary()");
+      for (uint64_t i=0; i<nRows; i++) values[i*nColumns+j] = flag==1 ? double(r.readFloat32()) : r.readFloat64();
+      }
+    }
+  else
+    {
+    if (8*n > r.remaining()) throw Exception("More values than data","Table2D::decodeBinary()");
+    values.resize(n);
+    for (auto & v : values) v = r.readFloat64();
+    }
   std::vector<String> names;
   if (version>=2)
     {

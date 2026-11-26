@@ -1808,7 +1808,7 @@ namespace Datum
       case SpreadsheetPane::kXY:
         for (unsigned int c : columns)
           {
-          MATH::DataPointsVector * points = TablePlots::xy(*table, request.x, c, request.yError, request.xError, request.covariance);
+          MATH::DataPointColumns * points = TablePlots::xy(*table, request.x, c, request.yError, request.xError, request.covariance);
           _data.emplace_back(points);
           GraphItem & item = graph.show(GraphItem(points, table->columnName(c)), false);
           item.setShowMarkers(true);
@@ -1822,7 +1822,7 @@ namespace Datum
         for (std::size_t k=0; k<columns.size(); k++)
           {
           double width = 0.8/n, offset = (double(k) - 0.5*(n - 1))*width;   // the bars of several columns side by side
-          MATH::DataPointsVector * points = TablePlots::bars(*table, columns[k], request.x, width, offset);
+          MATH::DataPointColumns * points = TablePlots::bars(*table, columns[k], request.x, width, offset);
           _data.emplace_back(points);
           GraphItem & item = graph.show(GraphItem(points, table->columnName(columns[k])), false);
           item.setShowBars(true);
