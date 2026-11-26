@@ -500,7 +500,7 @@ namespace Datum
   w.writeString(title());
   }
 
-  void DataPointColumns::decodeBinary(BinaryReader & r, const String & /*name*/, unsigned int version)
+  void DataPointColumns::decodeBinary(BinaryReader & r, const String & name, unsigned int version)
   {
   uint64_t rank = r.readVarUInt();
   uint64_t n    = r.readVarUInt();
@@ -570,6 +570,7 @@ namespace Datum
   _systMinus.swap(systMinus);
   _xyCovariance.swap(covariance);
   setTitle(newTitle);
+  if (!name.isEmpty()) setName(name);   // the name of the record
   }
 
   void DataPointColumns::writeBinary(std::ostream & out) const                     { writeBinaryObject(out,*this); }

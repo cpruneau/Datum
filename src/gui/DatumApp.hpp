@@ -25,6 +25,8 @@
 #include "FunctionTools.hpp"
 #include "Graph.hpp"
 #include "Folder.hpp"
+#include "Table2D.hpp"
+#include "DataPointColumns.hpp"
 
 namespace Datum
 {
@@ -239,6 +241,24 @@ namespace Datum
   void plotTable(SpreadsheetPane & pane, const SpreadsheetPane::PlotRequest & request);
   //! @brief Ask for a file, then save the table of a table pane (its format from the extension). @param pane table pane
   void saveTableAs(SpreadsheetPane & pane);
+  //!
+  //! @brief Ask for a Datum file, then add to it the table of a table pane, or data points made of its columns (one set
+  //! per Y column, with the columns used as X, errors and covariance; the roles found from the names or number of the
+  //! columns if none is given). An object of the same name is replaced; the file is then shown in the browser.
+  //! @param pane table pane @param asDataPoints data points rather than the table
+  //!
+  void saveTableToDatumFile(SpreadsheetPane & pane, bool asDataPoints);
+  //! @brief Show data points or a histogram of a file of the browser in a table pane. @param object the object
+  void showAsTable(const ObjectReference & object);
+  //! @brief Ask for a file, then write data points or a histogram of the browser as a table. @param object the object
+  void exportTable(const ObjectReference & object);
+  //!
+  //! @brief Add objects to a Datum file, made if it does not exist; objects of the same names are replaced.
+  //! @param path file @param tables tables and their names @param points data points and their names (copied)
+  //! @param error set on failure @return false on failure
+  //!
+  static bool addToDatumFile(const String & path, const std::vector<std::pair<String, std::shared_ptr<MATH::Table2D>>> & tables,
+                             const std::vector<std::pair<String, std::shared_ptr<MATH::DataPointColumns>>> & points, String & error);
   //! @}
 
   //! @name Files (continued)

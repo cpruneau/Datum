@@ -128,6 +128,8 @@ namespace Datum
   std::function<bool(const String & path)>                     onOpenTable;   //!< read a table of data (.csv, .txt, .dat, ...) and show it; false if it cannot be read
   std::function<void(const ObjectReference & object)>          onShowObject;  //!< show an object
   std::function<void(const ObjectReference & object)>          onShowData;    //!< show the values of an object as a table
+  std::function<void(const ObjectReference & object)>          onShowAsTable; //!< show data points or a histogram in a table pane
+  std::function<void(const ObjectReference & object)>          onExportTable; //!< write data points or a histogram as a table file
   std::function<void(int file, const String & folderPath)>     onShowFolder;  //!< show all the objects of a folder
   std::function<void(int file)>                                onCloseFile;   //!< close a file
   std::function<void(int file)>                                onReloadFile;  //!< read a file again

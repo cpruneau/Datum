@@ -577,6 +577,13 @@ namespace Datum
       reference.path = String(path);
       onShowData(reference);
       }
+    ObjectReference reference;
+    reference.file = fileId;
+    reference.path = String(path);
+    if (ImGui::MenuItem("Show as Spreadsheet", nullptr, false, showable) && onShowAsTable) onShowAsTable(reference);
+    ImGui::SetItemTooltip("The points or bins in a table pane: plots, statistics, and saving as text, CSV or Excel");
+    if (ImGui::MenuItem("Export as Table...", nullptr, false, showable) && onExportTable) onExportTable(reference);
+    ImGui::SetItemTooltip("Write the points or bins to a table file: CSV, tab or blank separated text, binary table, Excel");
     if (editable) { ImGui::Separator(); editMenu(fileId, path, false); }
     ImGui::EndPopup();
     }

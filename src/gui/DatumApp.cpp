@@ -46,6 +46,9 @@
 #include "TableReader.hpp"
 #include "TableStatistics.hpp"
 #include "TableWriter.hpp"
+#include "TableConversion.hpp"
+#include "DataPointColumns.hpp"
+#include "DataPointsFile.hpp"
 
 #ifndef DATUM_SOURCE_ROOT
 //! Top directory of the Datum sources (set by the build; empty if not).
@@ -1184,6 +1187,8 @@ namespace Datum
   browser.onOpenTable  = [this](const String & path) { return openTable(path); };
   browser.onShowObject = [this](const ObjectReference & object) { showObject(object); };
   browser.onShowData   = [this](const ObjectReference & object) { showData(object); };
+  browser.onShowAsTable = [this](const ObjectReference & object) { showAsTable(object); };
+  browser.onExportTable = [this](const ObjectReference & object) { exportTable(object); };
   browser.onShowFolder = [this](int file, const String & folder) { showFolder(file, folder); };
   browser.onCloseFile  = [this, b](int file) { closeFilesAsking({ file }, b); };
   browser.onReloadFile = [this](int file) { reloadFile(file); };
@@ -1730,6 +1735,7 @@ namespace Datum
   pane.setTable(std::move(table), label, fileName, rowLabels);
   pane.onPlot   = [this](SpreadsheetPane & p, const SpreadsheetPane::PlotRequest & r) { plotTable(p, r); };
   pane.onSaveAs = [this](SpreadsheetPane & p) { saveTableAs(p); };
+  pane.onSaveToDatumFile = [this](SpreadsheetPane & p, bool asDataPoints) { saveTableToDatumFile(p, asDataPoints); };
   return pane;
   }
 
@@ -1877,10 +1883,192 @@ namespace Datum
     try
       {
       TableWriter().write(path, *pane->table());
+      for (const auto & b : _gui.browsers()) b->refresh();   // the folders list the new file
       pane->setFileName(path);
       _gui.setStatus(String("Table saved to ") + path);
       }
     catch (const std::exception & e) { _gui.showMessage("Save Table", String("Cannot save ") + path + String(":\n") + String(e.what())); }
+    });
+  }
+
+  bool DatumApp::addToDatumFile(const String & path, const std::vector<std::pair<String, std::shared_ptr<MATH::Table2D>>> & tables,
+                                const std::vector<std::pair<String, std::shared_ptr<MATH::DataPointColumns>>> & points, String & error)
+  {
+  try
+    {
+    DatumFile file(path);
+    if (FileSystem::isFile(path)) file.read();   // added to the file: what it holds is kept
+    for (const auto & t : tables)
+      {
+      if (file.contains(t.first)) file.remove(t.first);
+      file.add(new MATH::Table2D(*t.second), t.first);            // added with its type, so that it is saved
+      }
+    for (const auto & p : points)
+      {
+      if (file.contains(p.first)) file.remove(p.first);
+      file.add(new MATH::DataPointColumns(*p.second), p.first);
+      }
+    file.write();
+    return true;
+    }
+  catch (const std::exception & e) { error = String(e.what()); return false; }
+  }
+
+  namespace
+  {
+  //! A name usable in a Datum file: no '/' (which separates folders).
+  String objectName(const String & name, const char * fallback)
+  {
+  std::string s = name.str();
+  for (char & c : s) if (c=='/') c = '_';
+  while (!s.empty() && s.front()==' ') s.erase(s.begin());
+  while (!s.empty() && s.back()==' ') s.pop_back();
+  return String(s.empty() ? fallback : s.c_str());
+  }
+  } // namespace
+
+  void DatumApp::saveTableToDatumFile(SpreadsheetPane & sheet, bool asDataPoints)
+  {
+  if (!sheet.table()) return;
+  String paneName = sheet.name();
+  std::filesystem::path suggested(sheet.fileName().isNull() ? std::string(sheet.table()->name().data()) : std::string(sheet.fileName().data()));
+  String directory = suggested.has_parent_path() ? String(suggested.parent_path().string().c_str()) : dataFolder();
+  std::string stem = suggested.stem().string();
+  if (stem.empty()) stem = "tables";
+  const char * title = asDataPoints ? "Save as data points in a Datum file (new, or added to an existing one)"
+                                    : "Save the table in a Datum file (new, or added to an existing one)";
+  _gui.fileDialog().open(FileDialog::kSaveFile, title, directory, { ".datum" }, String((stem + ".datum").c_str()),
+                         [this, paneName, asDataPoints](const String & chosen)
+    {
+    SpreadsheetPane * pane = nullptr;
+    for (int k=0; k<_gui.nSpreadsheetPanes(); k++) if (_gui.spreadsheetPane(k).name() == paneName) pane = &_gui.spreadsheetPane(k);
+    if (!pane || !pane->table()) { _gui.setStatus("That table is no longer open"); return; }
+    const MATH::Table2D & table = *pane->table();
+    String path = chosen;
+    if (std::filesystem::path(path.data()).extension().empty()) path += String(".datum");
+    String tableName = objectName(table.name(), "table");
+    std::vector<std::pair<String, std::shared_ptr<MATH::Table2D>>> tables;
+    std::vector<std::pair<String, std::shared_ptr<MATH::DataPointColumns>>> pointSets;
+    String what;
+    try
+      {
+      if (!asDataPoints)
+        {
+        tables.push_back(std::make_pair(tableName, std::make_shared<MATH::Table2D>(table)));
+        what = String("Table ") + tableName;
+        }
+      else
+        {
+        // the roles of the pane: X (or the row index), Y columns, errors, covariance; otherwise from the names or number
+        MATH::Table2D work(table);
+        MATH::TableColumnRoles roles;
+        std::vector<unsigned int> ys;
+        auto special = [pane](int c) { return c == pane->xColumn() || c == pane->errorColumn() || c == pane->xErrorColumn() || c == pane->covarianceColumn(); };
+        for (unsigned int c : pane->selectedColumns()) if (!special(int(c))) ys.push_back(c);
+        if (ys.empty() && pane->xColumn() < 0)
+          {
+          roles = MATH::TableColumnRoles::guess(work);
+          if (!roles.valid()) throw Exception("Choose the columns used as X and Y (the table has fewer than two columns)", "saveTableToDatumFile");
+          ys.push_back(unsigned(roles.value));
+          }
+        else
+          {
+          if (ys.empty()) throw Exception("Choose the columns used as Y", "saveTableToDatumFile");
+          int x = pane->xColumn();
+          if (x < 0)
+            {
+            std::vector<double> index(work.nRows());
+            for (unsigned int i=0; i<work.nRows(); i++) index[i] = i;
+            work.addColumn(index, "row");
+            x = int(work.nColumns()) - 1;
+            }
+          roles.x = { x };
+          if (pane->xErrorColumn() >= 0) roles.xError = { pane->xErrorColumn() };
+          roles.stat = pane->errorColumn();
+          roles.covariance = pane->covarianceColumn();
+          }
+        std::string reports;
+        for (unsigned int y : ys)
+          {
+          roles.value = int(y);
+          MATH::TableConversion::Report report;
+          String name = objectName(ys.size() == 1 && table.name().isEmpty() ? table.columnName(y) : table.name() + String("_") + table.columnName(y), "points");
+          std::unique_ptr<MATH::DataPointColumns> points = MATH::TableConversion::toDataPoints(work, roles, report, name);
+          points->setTitle(table.columnName(y));
+          reports += std::string(reports.empty() ? "" : "; ") + name.str() + ": " + report.summary().str();
+          pointSets.push_back(std::make_pair(name, std::shared_ptr<MATH::DataPointColumns>(points.release())));
+          }
+        what = String("Data points ") + String(reports.c_str());
+        }
+      }
+    catch (const std::exception & e)
+      {
+      _gui.showMessage("Save as Data Points", String(e.what()));
+      return;
+      }
+    String error;
+    if (!addToDatumFile(path, tables, pointSets, error)) { _gui.showMessage("Save to Datum File", String("Cannot write ") + path + String(":\n") + error); return; }
+    // the file in the browser: read again if it is open (and unchanged there), opened otherwise
+    for (const auto & b : _gui.browsers()) b->refresh();   // the folders list it
+    String normalized = normalizedPath(path);
+    int open = -1;
+    bool modified = false;
+    for (const auto & f : _files) if (!f.editable && f.path == normalized) { open = f.id; modified = f.modified; }
+    if (open >= 0 && !modified) reloadFile(open);
+    else if (open < 0) openFile(path);
+    _gui.setStatus(what + String(" saved to ") + path);
+    });
+  }
+
+  void DatumApp::showAsTable(const ObjectReference & object)
+  {
+  BrowserFile * entry = file(object.file);
+  if (!entry || !entry->file) { _gui.setStatus("That file is no longer open"); return; }
+  const MATH::DataPoints * data = nullptr;
+  try { data = entry->file->get<MATH::DataPoints>(object.path); }
+  catch (const std::exception & e) { _gui.setStatus(object.path + String(": cannot be read: ") + String(e.what())); return; }
+  if (!data) { showData(object); return; }   // a table: shown as it is
+  const MATH::Histogram * histogram = dynamic_cast<const MATH::Histogram *>(data);
+  std::unique_ptr<MATH::Table2D> table(new MATH::Table2D(histogram ? MATH::TableConversion::toTable(*histogram)
+                                                                   : MATH::TableConversion::toTable(*data)));
+  std::string last = object.path.str();
+  if (last.find('/') != std::string::npos) last = last.substr(last.rfind('/') + 1);
+  String label = String(last.c_str());   // the name of the object in its file
+  table->setName(label);
+  if (table->nRows() == 0) { _gui.setStatus(label + String(": nothing to show")); return; }
+  showTable(std::move(table), label, entry->path);
+  }
+
+  void DatumApp::exportTable(const ObjectReference & object)
+  {
+  BrowserFile * entry = file(object.file);
+  if (!entry || !entry->file) { _gui.setStatus("That file is no longer open"); return; }
+  const MATH::DataPoints * data = nullptr;
+  const MATH::Table2D * table = nullptr;
+  try
+    {
+    data = entry->file->get<MATH::DataPoints>(object.path);
+    if (!data) table = entry->file->get<MATH::Table2D>(object.path);
+    }
+  catch (const std::exception & e) { _gui.setStatus(object.path + String(": cannot be read: ") + String(e.what())); return; }
+  if (!data && !table) { _gui.setStatus(object.path + String(": has no values to write as a table")); return; }
+  // a copy: the file may be closed while the dialog is open
+  std::shared_ptr<MATH::Table2D> copy(table ? new MATH::Table2D(*table)
+                                            : new MATH::Table2D(dynamic_cast<const MATH::Histogram *>(data)
+                                                                ? MATH::TableConversion::toTable(*dynamic_cast<const MATH::Histogram *>(data))
+                                                                : MATH::TableConversion::toTable(*data)));
+  std::vector<String> types;
+  for (const String & e : TableFormat::writableExtensions()) if (!(e == String(".datum"))) types.push_back(e);
+  std::string stem = object.path.str();
+  if (stem.find('/') != std::string::npos) stem = stem.substr(stem.rfind('/') + 1);
+  stem = objectName(String(stem.c_str()), "table").str();
+  _gui.fileDialog().open(FileDialog::kSaveFile, "Write as a table (.csv, .tsv, .ssv, .txt, .dat, .dtb, .xlsx)", dataFolder(), types,
+                         String((stem + ".csv").c_str()), [this, copy](const String & chosen)
+    {
+    String path = chosen;
+    if (std::filesystem::path(path.data()).extension().empty()) path += String(".csv");
+    try { TableWriter().write(path, *copy); for (const auto & b : _gui.browsers()) b->refresh(); _gui.setStatus(String("Written to ") + path); }
+    catch (const std::exception & e) { _gui.showMessage("Export as Table", String("Cannot write ") + path + String(":\n") + String(e.what())); }
     });
   }
 

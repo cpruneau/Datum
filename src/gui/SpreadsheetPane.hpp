@@ -128,6 +128,8 @@ namespace Datum
   std::function<void(SpreadsheetPane & pane, const PlotRequest & request)> onPlot;
   //! Called by "Save Table As...": the pane
   std::function<void(SpreadsheetPane & pane)> onSaveAs;
+  //! Called by "Save Table to Datum File..." (asDataPoints false) and "Save as Data Points..." (true): the pane
+  std::function<void(SpreadsheetPane & pane, bool asDataPoints)> onSaveToDatumFile;
 
   protected:
 

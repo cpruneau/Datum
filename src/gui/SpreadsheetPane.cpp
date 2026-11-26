@@ -414,6 +414,12 @@ namespace Datum
   ImGui::Separator();
   if (ImGui::MenuItem("Copy Table")) ImGui::SetClipboardText(text().data());
   if (ImGui::MenuItem("Save Table As...") && onSaveAs) onSaveAs(*this);
+  ImGui::SetItemTooltip("Write the table to a file: CSV, tab or blank separated text, binary table, Excel");
+  if (ImGui::MenuItem("Save Table to Datum File...") && onSaveToDatumFile) onSaveToDatumFile(*this, false);
+  ImGui::SetItemTooltip("Add the table to a Datum file (a new one, or an existing one: an object of the same name is replaced)");
+  if (ImGui::MenuItem("Save as Data Points...") && onSaveToDatumFile) onSaveToDatumFile(*this, true);
+  ImGui::SetItemTooltip("Make data points of the columns used as X, Y (one set per Y column), errors and covariance (or, if none\n"
+                        "is given, of the columns found from their names or number), and add them to a Datum file");
   ImGui::PopID();
   _menuColumn = menuColumn;
   }
