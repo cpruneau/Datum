@@ -104,6 +104,7 @@ Data/Partition.cpp
 Data/Profile.cpp
 Data/HistogramSyst.cpp
 Data/Table2D.cpp
+Data/TableConversion.cpp
 # Search
 Search/AnnealingSearch.cpp
 Search/DivideAndConquerSearch.cpp
@@ -209,6 +210,9 @@ add_executable(TestFunctionStorage Functions/tests/TestFunctionStorage.cpp)
 target_link_libraries(TestFunctionStorage Math Base)
 add_test(NAME FunctionStorage COMMAND TestFunctionStorage)
 
+add_executable(TestTableConversion Data/tests/TestTableConversion.cpp)
+target_link_libraries(TestTableConversion Math Base)
+add_test(NAME TableConversion COMMAND TestTableConversion)
 add_executable(TestRebin Data/tests/TestRebin.cpp)
 target_link_libraries(TestRebin Math Base)
 add_test(NAME Rebin COMMAND TestRebin)

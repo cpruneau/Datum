@@ -15,6 +15,9 @@
 #include <iostream>
 #include <string>
 #include "DataPointsVector.hpp"
+#include "DataPointColumns.hpp"
+#include "DataPointsFile.hpp"
+#include "TableConversion.hpp"
 #include "DatumFile.hpp"
 #include "Histogram.hpp"
 #include "SpreadsheetAnalyzer.hpp"
@@ -188,6 +191,42 @@ void testPlots()
   delete map;
 }
 
+void testDataPointsFile()
+{
+  // data points with errors, asymmetric systematics and covariances: written as CSV, read back as the same points
+  MATH::DataPointColumns points;
+  points.setColumns({{1, 2, 3}}, {{0.1, 0.2, 0.3}}, {10, 20, 30}, {1, 2, 3}, {0.5, 0.5, 0.5}, {0.4, 0.5, 0.6});
+  points.setCovarianceColumn({0.02, 0.0, -0.3});
+  DataPointsFile::write("points.csv", points);
+  TableReader::Report read;
+  MATH::TableConversion::Report converted;
+  std::unique_ptr<MATH::DataPointColumns> back = DataPointsFile::read("points.csv", read, converted);
+  bool same = back->size()==3 && read.header;
+  for (unsigned int k=0; k<3 && same; k++)
+    same = near(back->valueAt(k), points.valueAt(k), 1e-6) && near(back->statErrorAt(k), points.statErrorAt(k), 1e-6)
+           && near(back->point(k).xError(), points.point(k).xError(), 1e-6) && near(back->sysErrorMinusAt(k), points.sysErrorMinusAt(k), 1e-6)
+           && near(back->covarianceAt(k), points.covarianceAt(k), 1e-6);
+  expect(same, "data points written as CSV and read back");
+  // columns given explicitly: y in column 0, x in column 1
+  {
+  std::ofstream out("swapped.txt");
+  out << "20 2\n40 4\n";
+  }
+  MATH::TableColumnRoles roles;
+  roles.x = {1};
+  roles.value = 0;
+  std::unique_ptr<MATH::DataPointColumns> swapped = DataPointsFile::read("swapped.txt", read, converted, roles);
+  expect(swapped->size()==2 && near(swapped->coordinatesAt(1)[0], 4) && near(swapped->valueAt(1), 40), "roles given");
+  // a histogram: one row per bin, with the edges and entries
+  MATH::Histogram h("h", "h", 5, 0.0, 5.0);
+  h.fill(1.5); h.fill(1.5); h.fill(3.2);
+  DataPointsFile::write("histogram.tsv", h);
+  MATH::Table2D table;
+  TableReader().read("histogram.tsv", table);
+  expect(table.nRows()==5 && table.columnIndex("x_low")==1 && table.columnIndex("entries")==5 && near(table(1, 5), 2.0),
+         "histogram written as a table");
+}
+
 void testTask()
 {
   writeText("test_task.csv", "a,b,c\n1,2,3\n2,4,1\n3,6,2\n4,8,,\n5,10,5\n");
@@ -235,6 +274,7 @@ int main()
     testReaderCases();
     testPlots();
     testTask();
+    testDataPointsFile();
     }
   catch (const std::exception & e)
     {

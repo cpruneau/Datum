@@ -62,6 +62,7 @@ namespace Datum
   std::vector<float> _stat;                    //!< statistical uncertainties on the dependent values
   std::vector<float> _syst;                    //!< upper systematic uncertainties on the dependent values
   std::vector<float> _systMinus;               //!< lower systematic uncertainties on the dependent values
+  std::vector<float> _xyCovariance;            //!< rank 1: covariances of x and y (empty when they are all zero)
 
   //! @brief Throw if index is not a valid point index. @param index point index @param source caller name
   //! @throws MathException if index>=size()
@@ -71,6 +72,12 @@ namespace Datum
   void checkVariable(unsigned int variable, const char * source) const;
   //! @brief Overwrite point index with the values of dataPoint (same rank, already checked). @param index point index @param dataPoint point
   void storePoint(unsigned int index, const DataPoint & dataPoint);
+  //! @brief Set the covariance of point index (rank 1), making the covariance column if needed. @param index point
+  //! @param covariance cov(x,y)
+  void storeCovariance(unsigned int index, float covariance);
+  //! @brief The covariance of point index in a point of rank 1, whose uncertainties are kept as they are. @param p point
+  //! @param index point index
+  void applyCovariance(DataPoint2D & p, unsigned int index) const;
 
   public:
 
@@ -215,6 +222,20 @@ namespace Datum
   const std::vector<float> & systColumn() const { return _syst; }
   //! @brief Lower systematic uncertainty column. @return column
   const std::vector<float> & systMinusColumn() const { return _systMinus; }
+  //! @brief Whether the points have covariances of x and y (rank 1). @return true if any was set
+  bool hasCovariance() const { return !_xyCovariance.empty(); }
+  //! @brief Column of the covariances of x and y (rank 1): empty when they are all zero. @return column
+  const std::vector<float> & covarianceColumn() const { return _xyCovariance; }
+  //! @brief Covariance of x and y of point index (rank 1; 0 if none). @param index point index @return cov(x,y)
+  double covarianceAt(unsigned int index) const;
+  //!
+  //! @brief Set the covariances of x and y of the points (rank 1). The covariance of a point must satisfy
+  //! cov(x,y)^2 <= xError^2 stat^2 (the error matrix is positive semi-definite).
+  //! @param covariance one value per point, or empty (no covariance)
+  //! @throws MathException if the rank is not 1, the size differs from size(), or a covariance is not valid (the
+  //! container is then unchanged)
+  //!
+  void setCovarianceColumn(const std::vector<double> & covariance);
 
   //!
   //! @brief Replace all columns; the rank becomes x.size().
@@ -297,7 +318,7 @@ namespace Datum
   //! @brief Tag of DataPointColumns records in binary files. @return "DTMK"
   static const char * binaryTag() { return "DTMK"; }
   //! @brief Format version written (and highest version read). @return version
-  static unsigned int binaryVersion() { return 3; }
+  static unsigned int binaryVersion() { return 4; }
   //! @brief Name stored in binary records. @return ""
   String binaryName() const { return ""; }
   //! @brief Write the binary payload after the name. @param w writer

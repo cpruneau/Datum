@@ -12,6 +12,7 @@ TableFormat.cpp
 TableReader.cpp
 TableWriter.cpp
 TablePlots.cpp
+DataPointsFile.cpp
 SpreadsheetAnalyzer.cpp
 SpreadsheetTasks.cpp)
 
