@@ -11,6 +11,7 @@ BuildDatum.py -- graphical front end to configure and build Datum (formerly Buil
 Usage (from anywhere; the script locates Datum from its own position):
     python3 BuildDatum.py                  # open the GUI
     python3 BuildDatum.py --print-commands # print the commands for the saved settings and exit (no GUI)
+    python3 BuildDatum.py --fix-autotools <source>  # put the autotools file times of a source tree in order
 
 The window has three parts:
   * a toolbar (top): Build, Stop, Save output, Clear, the build directory name, the build type, the number of parallel
@@ -21,6 +22,9 @@ The window has three parts:
   * the output of cmake and make (lower half), which can be saved to a file.
 
 Build steps (each command is printed in the output pane before it runs):
+    FastJet, once: with Jets selected and the FastJet location empty, the FastJet distributed with Datum
+    (<Datum>/fastjet-X.Y.Z) is configured, built and installed in <Datum>/external/fastjet (the first place searched)
+    if it is not installed there yet; later builds of Datum use it without building it again
     cmake -S <Datum>/src -B <Datum>/<build directory> -DDATUM_WITH_<MODULE>=ON|OFF ... [-DDATUM_PYTHIA8_DIR=...]
     make -C <Datum>/<build directory> -j<N>
     make -C <Datum>/<build directory> install        (if "Install" is checked)
@@ -108,8 +112,8 @@ EXTERNALS = {
     "THERMALFIST": dict(label="Thermal-FIST", var="DATUM_THERMALFIST_DIR", file="include/HRGBase.h",
                     bundled=["../Thermal-FIST", "Thermal-FIST*", "external/Thermal-FIST*"],
                     env=["DATUM_THERMALFIST_PATH", "CAP_THERMALFIST_PATH", "THERMALFIST_DIR"], tool=None),
-    "FASTJET": dict(label="FastJet", var="DATUM_FASTJET_DIR", file="include/fastjet/ClusterSequence.hh",
-                    bundled=["../Fastjet/install", "fastjet*", "external/fastjet*"], env=["DATUM_FASTJET_PATH", "CAP_FASTJET_PATH", "FASTJET"],
+    "FASTJET": dict(label="FastJet", var="DATUM_FASTJET_DIR", file="bin/fastjet-config",   # installed only (not in the source tree)
+                    bundled=["external/fastjet", "../Fastjet/install", "fastjet*", "external/fastjet*"], env=["DATUM_FASTJET_PATH", "CAP_FASTJET_PATH", "FASTJET"],
                     tool="fastjet-config"),
 }
 
@@ -254,6 +258,82 @@ def detect_external(key, prefix=""):
     return "", "not found"
 
 
+#: Prefix of the FastJet built and installed by BuildDatum (from the source tree distributed with Datum).
+FASTJET_PREFIX = os.path.join(DATUM_DIR, "external", "fastjet")
+
+
+def fastjet_source():
+    """Source tree of FastJet distributed with Datum (<Datum>/fastjet-X.Y.Z or <Datum>/external/fastjet-X.Y.Z), or None."""
+    for pattern in ("fastjet-[0-9]*", os.path.join("external", "fastjet-[0-9]*")):
+        for path in sorted(glob.glob(os.path.join(DATUM_DIR, pattern)), reverse=True):
+            if os.path.isfile(os.path.join(path, "configure")):
+                return path
+    return None
+
+
+def fastjet_build_needed(s):
+    """True if the build must first build and install the distributed FastJet in external/fastjet: Jets is selected,
+    the FastJet location field is empty, FastJet is not installed there yet and its source tree is present. Once it is
+    installed, the builds of Datum use it without building it again."""
+    return (bool(s["options"].get("DATUM_WITH_JETS")) and not s["prefixes"].get("FASTJET", "").strip()
+            and not fastjet_installed() and fastjet_source() is not None)
+
+
+def fastjet_installed():
+    """True if FastJet is installed in external/fastjet and usable there. On macOS, the libraries must also name
+    themselves in external/fastjet/lib (otool -D): libraries linked for another prefix keep that prefix as their install
+    name, and Datum, linked to them, would then look for them in the other place."""
+    if not os.path.isfile(os.path.join(FASTJET_PREFIX, "bin", "fastjet-config")):
+        return False
+    if sys.platform != "darwin":
+        return True
+    otool = which("otool")
+    library = os.path.join(FASTJET_PREFIX, "lib", "libfastjet.dylib")
+    if not otool or not os.path.exists(library):
+        return os.path.exists(library) or not otool
+    lines = (run_quiet([otool, "-D", library]) or "").splitlines()
+    return len(lines) >= 2 and os.path.realpath(os.path.dirname(lines[-1].strip())) == os.path.realpath(os.path.join(FASTJET_PREFIX, "lib"))
+
+
+def fix_autotools_times(source):
+    """Give the autotools files of a source tree (and of its sub-packages, e.g. SISCone) the order of times make
+    expects: configure.ac and m4/* < aclocal.m4 < configure < Makefile.in, *.h.in. A git checkout gives them arbitrary
+    times, and make then reruns aclocal/automake, which are usually not installed ("aclocal-1.16 is missing")."""
+    base = time.time() - 600
+    fixed = []
+    for directory, dirs, files in os.walk(source):
+        dirs[:] = [d for d in dirs if not d.startswith(".")]
+        if "configure.ac" not in files:
+            continue
+        def touch(path, offset):
+            if os.path.isfile(path):
+                os.utime(path, (base + offset, base + offset))
+        touch(os.path.join(directory, "configure.ac"), 0)
+        touch(os.path.join(directory, "acinclude.m4"), 0)
+        for m4 in glob.glob(os.path.join(directory, "m4", "*")):
+            touch(m4, 0)
+        touch(os.path.join(directory, "aclocal.m4"), 10)
+        touch(os.path.join(directory, "configure"), 20)
+        for sub, subdirs, subfiles in os.walk(directory):
+            for name in subfiles:
+                if name == "Makefile.in" or name.endswith(".h.in"):
+                    touch(os.path.join(sub, name), 30)
+        fixed.append(directory)
+    return fixed
+
+
+def fastjet_commands(s):
+    """Commands building the distributed FastJet and installing it in external/fastjet (see fastjet_build_needed())."""
+    source = fastjet_source()
+    make = which("make") or "make"
+    quote = lambda t: "'" + t.replace("'", "'\\''") + "'"
+    return [("FastJet: fixing the autotools file times", [sys.executable, os.path.abspath(__file__), "--fix-autotools", source]),
+            ("FastJet: configuring", ["/bin/sh", "-c", "cd %s && ./configure --prefix=%s" % (quote(source), quote(FASTJET_PREFIX))]),
+            ("FastJet: removing the previous build (libraries linked for another prefix)", [make, "-C", source, "clean"]),
+            ("FastJet: building", [make, "-C", source, "-j%d" % int(s["jobs"])]),
+            ("FastJet: installing in external/fastjet", [make, "-C", source, "install"])]
+
+
 def valid_build_dir_name(name):
     """Error message for an invalid build directory name, or None."""
     if not name:
@@ -289,6 +369,22 @@ def read_cmake_cache(build_dir):
     return values
 
 
+def library_path_environment(env, lib):
+    """Library search path of the commands (env changed in place): the Datum libraries first.
+
+    On macOS, DYLD_LIBRARY_PATH is set to the Datum libraries only, the value inherited from the shell being dropped:
+    dyld looks for every library by file name in its directories first, even for a library linked with a full path, so
+    another installation listed there (e.g. an older Pythia or FastJet) replaced the one Datum was built with and
+    bin/Datum stopped at startup ("Symbol not found"). The Datum programs and libraries name their dependencies themselves
+    (rpath, full install names), so nothing else is needed. On Linux, LD_LIBRARY_PATH keeps the inherited value after the
+    Datum libraries (the external packages may rely on it)."""
+    if sys.platform == "darwin":
+        env["DYLD_LIBRARY_PATH"] = lib
+    else:
+        env["LD_LIBRARY_PATH"] = lib + (os.pathsep + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    return env
+
+
 def build_environment(s):
     """Environment of the build commands: that of SetupDatum.sh, ROOT, and the install directories."""
     env = dict(os.environ)
@@ -311,8 +407,7 @@ def build_environment(s):
         env["CMAKE_PREFIX_PATH"] = root + (os.pathsep + prefix_path if prefix_path else "")
     path += [p for p in EXTRA_PATHS if p not in path]
     env["PATH"] = os.pathsep.join(path)
-    for var in ("DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"):
-        env[var] = lib + (os.pathsep + env[var] if env.get(var) else "")
+    library_path_environment(env, lib)
     for var in [v for v in env if v.startswith("DATUM_")]:   # their former names (CAP_...), for the scripts of CAP
         env["CAP_" + var[len("DATUM_"):]] = env[var]
     return env
@@ -334,7 +429,8 @@ def build_commands(s):
     for key, ext in EXTERNALS.items():
         # an empty value lets CMake search again (distributed copy, environment, configuration tool)
         configure.append("-D%s=%s" % (ext["var"], s["prefixes"].get(key, "")))
-    commands = [("Configuring with CMake", configure),
+    commands = fastjet_commands(s) if fastjet_build_needed(s) else []
+    commands += [("Configuring with CMake", configure),
                 ("Building", [make, "-C", build_dir, "-j%d" % int(s["jobs"])])]
     if s.get("install"):
         commands.append(("Installing", [make, "-C", build_dir, "install"]))
@@ -553,6 +649,9 @@ def run_gui():
             else:
                 prefix, how = detect_external(key, self.prefix_vars[key].get().strip())
                 note = ""
+                if key == "FASTJET" and not self.prefix_vars[key].get().strip() \
+                        and fastjet_source() and not fastjet_installed():
+                    prefix, how = FASTJET_PREFIX, "will be built from %s with Jets" % os.path.basename(fastjet_source())
             if prefix:
                 text, color = "\u2714 %s (%s)%s" % (prefix, how, note), "dark green"
             else:
@@ -744,6 +843,8 @@ def run_gui():
                 return "ROOT was not found: enter its installation directory (the one containing bin/root-config), or uncheck ROOT."
             missing = []
             for opt, _, _, _, _, key in OPTIONAL_MODULES:
+                if key == "FASTJET" and fastjet_build_needed(s):
+                    continue                             # built and installed in external/fastjet before Datum
                 if key in EXTERNALS and s["options"].get(opt) and not detect_external(key, s["prefixes"].get(key, ""))[0]:
                     missing.append(EXTERNALS[key]["label"])
             if missing:
@@ -872,6 +973,10 @@ def run_gui():
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--fix-autotools":
+        for directory in fix_autotools_times(sys.argv[2]):
+            print("Autotools file times set in order: %s" % directory)
+        return 0
     if "--print-commands" in sys.argv:
         s = load_settings()
         for description, cmd in build_commands(s):

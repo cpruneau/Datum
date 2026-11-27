@@ -5,6 +5,10 @@ bin
 lib
 bin*
 lib*
+# lib* above also matched the autotools sources of the bundled FastJet: keep them in the repository
+!**/m4/libtool.m4
+# FastJet built and installed by BuildDatum.py (from fastjet-X.Y.Z)
+external/fastjet/
 !src/**/Binary*
 !external/yaml-cpp/**/binary.*
 DOC

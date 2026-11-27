@@ -14,6 +14,7 @@
 #include "NameHelpers.hpp"
 #include "EnvironmentVariables.hpp"
 #include "XmlDocument.hpp"
+#include "FileSystem.hpp"
 #include "Reflection.hpp"
 #include <algorithm>
 #include <typeinfo>
@@ -609,6 +610,7 @@ namespace Datum
   {
   std::vector<String> fileNames;
   std::vector<String> names = classNames.empty() ? taskClassNames() : classNames;
+  if (!names.empty()) FileSystem::createDirectory(path);   // the output directory need not exist (throws if it cannot be made)
   for (const String & className : names)
     {
     Task * task = nullptr;

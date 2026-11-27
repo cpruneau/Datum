@@ -689,8 +689,10 @@ def job_environment():
                     "DATUM_MACROS_PATH": os.path.join(DATUM_DIR, "src", "Macros") + "/",
                     "DATUM_PROJECTS_PATH": os.path.join(DATUM_DIR, "projects") + "/",
                     "DATUM_DATABASE_PATH": os.path.join(DATUM_DIR, "DB") + "/"})
-        for var in ("DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"):
-            env[var] = lib + (os.pathsep + env[var] if env.get(var) else "")
+        if sys.platform == "darwin":       # the inherited value is dropped (see BuildDatum.library_path_environment())
+            env["DYLD_LIBRARY_PATH"] = lib
+        else:
+            env["LD_LIBRARY_PATH"] = lib + (os.pathsep + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
         return env
 
 
