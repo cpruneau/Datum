@@ -312,8 +312,9 @@ if(DATUM_WITH_PHSD)
 endif()
 
 if(DATUM_WITH_JETS)
-  datum_resolve_prefix(DATUM_FASTJET_DIR "FastJet" "include/fastjet/ClusterSequence.hh"
-                     BUNDLED "../Fastjet/install" "fastjet*" "external/fastjet*" ENV DATUM_FASTJET_PATH CAP_FASTJET_PATH FASTJET TOOL fastjet-config)
+  # bin/fastjet-config: only an installed FastJet has it (the source tree also holds include/fastjet/ClusterSequence.hh)
+  datum_resolve_prefix(DATUM_FASTJET_DIR "FastJet" "bin/fastjet-config"
+                     BUNDLED "external/fastjet" "../Fastjet/install" "fastjet*" "external/fastjet*" ENV DATUM_FASTJET_PATH CAP_FASTJET_PATH FASTJET TOOL fastjet-config)
   find_library(DATUM_FASTJET_LIBRARY NAMES fastjet PATHS "${DATUM_FASTJET_DIR}/lib" NO_DEFAULT_PATH)
   if(NOT DATUM_FASTJET_LIBRARY)
     message(FATAL_ERROR "FastJet: no libfastjet in ${DATUM_FASTJET_DIR}/lib (is FastJet built and installed?)")
@@ -391,6 +392,7 @@ endif()
 ################################################################################################
 add_executable(Datum Datum.cxx)
 set_target_properties(Datum PROPERTIES OUTPUT_NAME Datum)          # bin/Datum (bin/CAP: a link to it)
+set_target_properties(Datum PROPERTIES INSTALL_RPATH "$ENV{DATUM_LIB_PATH}")   # runs without SetupDatum.sh (DYLD_LIBRARY_PATH)
 target_link_libraries(Datum PUBLIC ${DATUM_LINKED_MODULES})
 datum_install(Datum RUNTIME "${DATUM_INSTALL_BIN_DIR}")
 datum_install_alias(Datum CAP "${DATUM_INSTALL_BIN_DIR}")

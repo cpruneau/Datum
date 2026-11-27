@@ -22,6 +22,8 @@ target_link_libraries(Jets Base Math Particles FASTJET_LIB FASTJET_TOOLS_LIB ${E
 target_include_directories(Jets PUBLIC Jets Particles Base Math ${EXTRA_INCLUDES} )
 target_include_directories(Jets SYSTEM PUBLIC ${DATUM_FASTJET_INCLUDE_PATH})
 
+# libfastjet is found at run time in the FastJet installation (Linux; on macOS its install name is absolute)
+set_target_properties(Jets PROPERTIES INSTALL_RPATH "${DATUM_FASTJET_DIR}/lib")
 datum_install(Jets LIBRARY "$ENV{DATUM_LIB_PATH}")
 
 ################################################################################################
